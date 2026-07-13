@@ -1,0 +1,49 @@
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: #f6f7f9;
+  color: #1f2933;
+  font: 14px/1.5 Arial, sans-serif;
+}
+
+main {
+  box-sizing: border-box;
+  margin: 2rem auto;
+  max-width: 42rem;
+  padding: 1.5rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+
+p {
+  margin: 0 0 0.8rem;
+}
+
+dl {
+  border-top: 1px solid #d5dbe3;
+  display: grid;
+  gap: 0.4rem 1rem;
+  grid-template-columns: max-content 1fr;
+  margin: 1rem 0 0;
+  padding-top: 1rem;
+}
+
+dt {
+  color: #52606d;
+  font-weight: 700;
+}
+
+dd {
+  margin: 0;
+}
+
+pre {
+  white-space: pre-wrap;
+}

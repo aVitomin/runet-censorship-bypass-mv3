@@ -1,0 +1,37 @@
+{
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/coverage": true,
+    "**/.tmp": true,
+    "**/.cache": true,
+    "**/.browser-profile": true,
+    "**/browser-profile": true,
+    "**/*-browser-profile": true
+  },
+  "search.exclude": {
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/coverage/**": true,
+    "**/.tmp/**": true,
+    "**/.cache/**": true,
+    "**/.browser-profile/**": true,
+    "**/browser-profile/**": true,
+    "**/*-browser-profile/**": true,
+    "**/src/extension-common/pages/debug/vendor/**": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/coverage/**": true,
+    "**/.tmp/**": true,
+    "**/.cache/**": true,
+    "**/.browser-profile/**": true,
+    "**/browser-profile/**": true,
+    "**/*-browser-profile/**": true,
+    "**/src/extension-common/pages/options/dist/**": true
+  }
+}

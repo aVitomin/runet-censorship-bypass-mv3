@@ -1,0 +1,17 @@
+{
+  "name": "subjective-good-is-evil",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "postinstall": "opencollective postinstall"
+  },
+  "author": "anticensority+owners@googlegroups.com",
+  "license": "ISC",
+  "dependencies": {
+    "opencollective": "^1.0.3"
+  },
+  "collective": {
+    "type": "opencollective",
+    "url": "https://opencollective.com/anticensority"
+  }
+}

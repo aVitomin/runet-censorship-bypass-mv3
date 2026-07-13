@@ -1,0 +1,17 @@
+node_modules/
+node_modules_linux/
+node_modules_win/
+
+build/
+dist/
+.tmp/
+coverage/
+
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+.DS_Store
+Thumbs.db

@@ -1,0 +1,1203 @@
+{
+  "extName": {
+    "message": "Runet Censorship Bypass"
+  },
+  "extDesc": {
+    "message": "Bypass Runet censorship with PAC-based proxy rules."
+  },
+  "popupTitle": {
+    "message": "Runet Censorship Bypass"
+  },
+  "actionTitleSite": {
+    "message": "Site"
+  },
+  "actionTitleMode": {
+    "message": "Mode"
+  },
+  "actionTitleProxy": {
+    "message": "Proxy"
+  },
+  "actionTitleSystem": {
+    "message": "system"
+  },
+  "providerAntizapretDescription": {
+    "message": "Main PAC script from the Antizapret project."
+  },
+  "providerAnticensorityDescription": {
+    "message": "Alternative PAC script from the extension authors."
+  },
+  "providerOnlyOwnSitesLabel": {
+    "message": "Only my site rules"
+  },
+  "providerOnlyOwnSitesDescription": {
+    "message": "Use only manually configured site rules and proxy candidates."
+  },
+  "popupLoading": {
+    "message": "Loading..."
+  },
+  "popupLoadError": {
+    "message": "Popup failed to load."
+  },
+  "popupPacScript": {
+    "message": "PAC script"
+  },
+  "popupPacProvider": {
+    "message": "PAC provider"
+  },
+  "popupPacProviderHelp": {
+    "message": "PAC decides which sites use proxy by default."
+  },
+  "popupProviderStatus": {
+    "message": "Provider: $PROVIDER$",
+    "placeholders": {
+      "provider": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupNotSelected": {
+    "message": "not selected"
+  },
+  "popupSelectProvider": {
+    "message": "Select provider"
+  },
+  "popupUpdatePac": {
+    "message": "Update PAC"
+  },
+  "popupUpdatePacHelp": {
+    "message": "Download and rebuild PAC without applying proxy."
+  },
+  "popupCurrentSite": {
+    "message": "Current site"
+  },
+  "popupPageCannotBeControlled": {
+    "message": "This page cannot be controlled."
+  },
+  "popupAutoMode": {
+    "message": "Auto"
+  },
+  "popupAutoModeHelp": {
+    "message": "Remove your custom rule. PAC decides."
+  },
+  "popupProxyMode": {
+    "message": "Proxy"
+  },
+  "popupProxyModeHelp": {
+    "message": "Force this site through Tor, WARP, or own proxy."
+  },
+  "popupDirectMode": {
+    "message": "Direct"
+  },
+  "popupDirectModeHelp": {
+    "message": "Force this site to bypass proxy."
+  },
+  "popupScope": {
+    "message": "Scope"
+  },
+  "popupHostOnly": {
+    "message": "This host only"
+  },
+  "popupDomainAndSubdomains": {
+    "message": "Domain and subdomains"
+  },
+  "popupDomainScopeHelp": {
+    "message": "Apply the rule to the base domain and its subdomains, for example *.example.com."
+  },
+  "popupRulePreview": {
+    "message": "Rule: $PATTERN$",
+    "placeholders": {
+      "pattern": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupSubdomainHeuristicNote": {
+    "message": "Subdomain scope uses a simple last-two-label domain heuristic."
+  },
+  "popupQuickProxies": {
+    "message": "Quick proxies"
+  },
+  "popupUsePacScriptProxies": {
+    "message": "Use PAC script proxies"
+  },
+  "popupUsePacScriptProxiesHelp": {
+    "message": "Use proxies from selected PAC provider."
+  },
+  "popupUsePacScriptProxiesHint": {
+    "message": "PAC proxies"
+  },
+  "popupOwnProxiesOnlyForOwnSites": {
+    "message": "Own proxies only for own site rules"
+  },
+  "popupOwnProxiesOnlyForOwnSitesHelp": {
+    "message": "Use own proxies only for your site rules."
+  },
+  "popupOwnProxiesOnlyForOwnSitesHint": {
+    "message": "site rules only"
+  },
+  "popupLocalTor": {
+    "message": "Tor service"
+  },
+  "popupLocalTorHelp": {
+    "message": "Tor service, usually 127.0.0.1:9050."
+  },
+  "popupLocalTorHint": {
+    "message": "127.0.0.1:9050"
+  },
+  "popupTorBrowser": {
+    "message": "Tor Browser"
+  },
+  "popupTorBrowserHelp": {
+    "message": "Requires opened Tor Browser, usually 127.0.0.1:9150."
+  },
+  "popupTorBrowserHint": {
+    "message": "127.0.0.1:9150"
+  },
+  "popupTorModeNote": {
+    "message": "Use one Tor mode at a time."
+  },
+  "popupTorAvailabilityNote": {
+    "message": "Enabling Tor only makes it available for your Proxy rules. Auto mode still follows the PAC provider."
+  },
+  "popupWarpCustomProxy": {
+    "message": "WARP/custom proxy"
+  },
+  "popupWarpHelp": {
+    "message": "Use a configured WARP or custom local proxy as a proxy candidate."
+  },
+  "popupOwnProxies": {
+    "message": "Own proxies"
+  },
+  "popupOwnProxiesCount": {
+    "message": "Own proxies ($COUNT$)",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupOwnProxiesHelp": {
+    "message": "Use proxies configured in Full settings. Passwords are hidden and used only for proxy authentication."
+  },
+  "popupOwnProxiesConfigure": {
+    "message": "Own proxies: configure in full settings."
+  },
+  "popupStatus": {
+    "message": "Status"
+  },
+  "popupProvider": {
+    "message": "Provider"
+  },
+  "popupPac": {
+    "message": "PAC"
+  },
+  "popupUpdated": {
+    "message": "Updated"
+  },
+  "popupProxy": {
+    "message": "Proxy"
+  },
+  "popupCandidate": {
+    "message": "Candidate"
+  },
+  "popupMissing": {
+    "message": "missing"
+  },
+  "popupNotDownloaded": {
+    "message": "not downloaded"
+  },
+  "popupDownloaded": {
+    "message": "downloaded"
+  },
+  "popupDownloadedAndCooked": {
+    "message": "downloaded and cooked"
+  },
+  "popupCookedStale": {
+    "message": "cooked, stale"
+  },
+  "popupNeverUpdated": {
+    "message": "never updated"
+  },
+  "popupApplied": {
+    "message": "applied"
+  },
+  "popupNotApplied": {
+    "message": "not applied"
+  },
+  "popupApplyChanges": {
+    "message": "Apply changes"
+  },
+  "popupApplyChangesHelp": {
+    "message": "Save, rebuild PAC, and apply proxy."
+  },
+  "popupClearProxy": {
+    "message": "Clear proxy"
+  },
+  "popupClearProxyHelp": {
+    "message": "Disable this extension's browser proxy settings. Your rules and PAC cache are kept."
+  },
+  "popupFullSettings": {
+    "message": "Full settings"
+  },
+  "popupApplying": {
+    "message": "Applying..."
+  },
+  "popupUpdating": {
+    "message": "Updating..."
+  },
+  "popupClearing": {
+    "message": "Clearing..."
+  },
+  "popupPacChanged": {
+    "message": "PAC settings changed. Apply changes to activate."
+  },
+  "popupOperationFailed": {
+    "message": "Operation failed."
+  },
+  "popupClearProxyFailed": {
+    "message": "Failed to clear proxy."
+  },
+  "popupProxyCleared": {
+    "message": "Proxy cleared. Browser proxy mode returned to system."
+  },
+  "optionsIntro": {
+    "message": "Manage PAC updates, site rules, proxy candidates, and browser proxy activation."
+  },
+  "optionsGeneral": {
+    "message": "General"
+  },
+  "optionsLanguage": {
+    "message": "Language"
+  },
+  "optionsLanguageAuto": {
+    "message": "Auto / browser language"
+  },
+  "optionsLanguageRu": {
+    "message": "Русский"
+  },
+  "optionsLanguageEn": {
+    "message": "English"
+  },
+  "optionsLanguageReloadNote": {
+    "message": "The page will reload after changing language."
+  },
+  "optionsStatusIdle": {
+    "message": "idle"
+  },
+  "optionsStatusDownloading": {
+    "message": "downloading"
+  },
+  "optionsStatusSuccess": {
+    "message": "success"
+  },
+  "optionsStatusError": {
+    "message": "error"
+  },
+  "optionsStatusNotModified": {
+    "message": "not modified"
+  },
+  "optionsStatusCooking": {
+    "message": "cooking"
+  },
+  "optionsStatusApplying": {
+    "message": "applying"
+  },
+  "optionsStatusClearing": {
+    "message": "clearing"
+  },
+  "optionsStatusCleared": {
+    "message": "cleared"
+  },
+  "optionsStatusScheduled": {
+    "message": "scheduled"
+  },
+  "optionsStatusRunning": {
+    "message": "running"
+  },
+  "optionsStatusSkipped": {
+    "message": "skipped"
+  },
+  "optionsQuickStart": {
+    "message": "Status / Quick Start"
+  },
+  "optionsQuickStartHint": {
+    "message": "After changing site or proxy rules, cook PAC again and apply it."
+  },
+  "optionsPacDownloaded": {
+    "message": "PAC downloaded"
+  },
+  "optionsPacCooked": {
+    "message": "PAC cooked"
+  },
+  "optionsProxyStatus": {
+    "message": "Proxy status"
+  },
+  "optionsPacSettingsChanged": {
+    "message": "PAC settings changed"
+  },
+  "optionsYes": {
+    "message": "yes"
+  },
+  "optionsNo": {
+    "message": "no"
+  },
+  "optionsPacChangedCookApply": {
+    "message": "PAC settings changed. Click Cook PAC, then Apply proxy."
+  },
+  "optionsChangePacProvider": {
+    "message": "Change PAC provider"
+  },
+  "optionsNoProviderSelected": {
+    "message": "No provider selected"
+  },
+  "optionsSaveProvider": {
+    "message": "Save provider"
+  },
+  "optionsSaving": {
+    "message": "Saving..."
+  },
+  "optionsPacProviderSaved": {
+    "message": "PAC provider saved."
+  },
+  "optionsDownloadPac": {
+    "message": "Download PAC"
+  },
+  "optionsDownloading": {
+    "message": "Downloading..."
+  },
+  "optionsCookPac": {
+    "message": "Cook PAC"
+  },
+  "optionsCooking": {
+    "message": "Cooking..."
+  },
+  "optionsCookPacHelp": {
+    "message": "Rebuild PAC with your current rules."
+  },
+  "optionsApplyProxy": {
+    "message": "Apply proxy"
+  },
+  "optionsApplying": {
+    "message": "Applying..."
+  },
+  "optionsApplyProxyHelp": {
+    "message": "Activate the cooked PAC in browser proxy settings."
+  },
+  "optionsPacDownloadStatus": {
+    "message": "PAC download status: $STATUS$.",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsPacCookedApplyNow": {
+    "message": "PAC cooked. You can apply proxy settings now."
+  },
+  "optionsProxyApplyStatus": {
+    "message": "Proxy apply status: $STATUS$.",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsProxyClearStatus": {
+    "message": "Proxy clear status: $STATUS$.",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsAddSiteRule": {
+    "message": "Add site rule"
+  },
+  "optionsAddSiteRuleHint": {
+    "message": "Choose whether a site should use the proxy or open directly."
+  },
+  "optionsToolbarTip": {
+    "message": "Tip: for the current tab, use the toolbar popup."
+  },
+  "optionsSite": {
+    "message": "Site"
+  },
+  "optionsNote": {
+    "message": "Note"
+  },
+  "optionsOptional": {
+    "message": "optional"
+  },
+  "optionsAddProxyRule": {
+    "message": "Add proxy rule"
+  },
+  "optionsAddDirectRule": {
+    "message": "Add direct rule"
+  },
+  "optionsAdding": {
+    "message": "Adding..."
+  },
+  "optionsProxyRuleNoCandidate": {
+    "message": "No proxy is enabled. Enable Tor, WARP, or an own proxy."
+  },
+  "optionsSiteRules": {
+    "message": "Site rules"
+  },
+  "optionsNoSiteRules": {
+    "message": "No site rules yet."
+  },
+  "optionsProxyThisSite": {
+    "message": "Proxy this site"
+  },
+  "optionsOpenDirectly": {
+    "message": "Open directly"
+  },
+  "optionsEnabled": {
+    "message": "Enabled"
+  },
+  "optionsRemove": {
+    "message": "Remove"
+  },
+  "optionsLocalProxyPresets": {
+    "message": "Local proxy presets"
+  },
+  "optionsLocalProxyHint": {
+    "message": "Enable Tor, WARP, or your own proxy before adding proxy rules."
+  },
+  "optionsPasswordNotice": {
+    "message": "Passwords are saved only for proxy authentication and hidden after save."
+  },
+  "optionsSaveProxySettings": {
+    "message": "Save proxy settings"
+  },
+  "optionsAdvancedPacRules": {
+    "message": "Advanced PAC rules"
+  },
+  "optionsAdvancedPacRulesHint": {
+    "message": "Advanced rule changes also require Cook PAC, then Apply proxy."
+  },
+  "optionsWhitelist": {
+    "message": "Whitelist"
+  },
+  "optionsSaveAdvancedPacRules": {
+    "message": "Save advanced PAC rules"
+  },
+  "optionsAdvancedJsonEditor": {
+    "message": "Advanced JSON editor"
+  },
+  "optionsSavePacModifiersJson": {
+    "message": "Save PAC modifiers JSON"
+  },
+  "optionsPacJsonInvalid": {
+    "message": "PAC modifiers JSON is invalid."
+  },
+  "optionsType": {
+    "message": "Type"
+  },
+  "optionsHost": {
+    "message": "Host"
+  },
+  "optionsPort": {
+    "message": "Port"
+  },
+  "optionsUseForOnion": {
+    "message": "Use for .onion"
+  },
+  "optionsUseAsDirectReplacement": {
+    "message": "Use as DIRECT replacement candidate"
+  },
+  "optionsProxyString": {
+    "message": "Proxy string"
+  },
+  "optionsAddProxyRow": {
+    "message": "Add proxy row"
+  },
+  "optionsUsername": {
+    "message": "Username"
+  },
+  "optionsPassword": {
+    "message": "Password"
+  },
+  "optionsDirectReplacement": {
+    "message": "DIRECT replacement"
+  },
+  "optionsAddExceptionRule": {
+    "message": "Add exception rule"
+  },
+  "optionsAddWhitelistRow": {
+    "message": "Add whitelist row"
+  },
+  "optionsPattern": {
+    "message": "Pattern"
+  },
+  "optionsDirectPolicy": {
+    "message": "DIRECT policy"
+  },
+  "optionsReplaceDirectWithProxy": {
+    "message": "Replace DIRECT with selected proxy candidates"
+  },
+  "optionsRemoveDirectFallbacks": {
+    "message": "Remove DIRECT fallbacks"
+  },
+  "optionsPeriodicUpdates": {
+    "message": "Periodic PAC updates"
+  },
+  "optionsLegacyMigration": {
+    "message": "Legacy MV2 migration"
+  },
+  "optionsNotifications": {
+    "message": "Notifications"
+  },
+  "optionsTorModeNote": {
+    "message": "Use one Tor mode at a time."
+  },
+  "optionsLocalTorHelp": {
+    "message": "Use a separately running Tor daemon/service, usually SOCKS5 127.0.0.1:9050."
+  },
+  "optionsTorBrowserHelp": {
+    "message": "Use the Tor proxy started by Tor Browser, usually SOCKS5 127.0.0.1:9150. Tor Browser must be open."
+  },
+  "optionsPacProxyMode": {
+    "message": "PAC and own proxy behavior"
+  },
+  "optionsPacProxyModeHelp": {
+    "message": "Choose whether provider PAC proxies are used and whether own proxies are limited to your site rules."
+  },
+  "popupPacDownloadedAndCookedMessage": {
+    "message": "PAC downloaded and cooked."
+  },
+  "popupSettingsApplied": {
+    "message": "Settings applied."
+  },
+  "popupNoProxyCandidate": {
+    "message": "No proxy is enabled. Enable Tor, WARP, or an own proxy."
+  },
+  "popupSelectPacProviderFirst": {
+    "message": "Select a PAC provider first."
+  },
+  "popupPeriodicUpdateRunning": {
+    "message": "Periodic PAC update is already running."
+  },
+  "popupPacOperationRunning": {
+    "message": "Another PAC operation is already running."
+  },
+  "popupMv2RulesWarning": {
+    "message": "This advanced legacy rule is listed under About / Limitations."
+  },
+  "popupCredentialsRedactedWarning": {
+    "message": "Proxy passwords are hidden in PAC and used only for authentication."
+  },
+  "popupTorMustRunWarning": {
+    "message": "Tor must be running locally."
+  },
+  "popupWarpLocalProxyWarning": {
+    "message": "WARP is treated as a local proxy."
+  },
+  "popupDirectReplacementNoCandidateWarning": {
+    "message": "DIRECT replacement needs an enabled proxy candidate."
+  },
+  "popupNoPacOrOwnProxyWarning": {
+    "message": "PAC provider proxies are disabled and no own proxy is enabled."
+  },
+  "optionsNone": {
+    "message": "none"
+  },
+  "optionsDiagnostics": {
+    "message": "Diagnostics"
+  },
+  "optionsDiagnosticsHint": {
+    "message": "Technical state, previews, periodic update, and auth logs."
+  },
+  "optionsMaintenance": {
+    "message": "Maintenance"
+  },
+  "optionsMaintenanceHint": {
+    "message": "Use this only if you upgraded from the old MV2 version and want to copy old settings. This does not delete old data and does not apply proxy settings."
+  },
+  "optionsRcStatus": {
+    "message": "Technical status"
+  },
+  "optionsMv3Credits": {
+    "message": "MV3 migration: @aVitomin with Codex"
+  },
+  "optionsMv2RulesWarning": {
+    "message": "This advanced legacy rule is listed under About / Limitations."
+  },
+  "optionsAbout": {
+    "message": "About"
+  },
+  "optionsAboutHint": {
+    "message": "Version details, credits, and non-intrusive compatibility notes."
+  },
+  "optionsLimitations": {
+    "message": "Known limitations"
+  },
+  "optionsLimitationDns": {
+    "message": "Not restored: DNS monkey-patching / DNS leak PAC overrides. Disabled for safety and predictability."
+  },
+  "optionsLimitationRawReplaceDirect": {
+    "message": "Not restored: arbitrary raw replaceDirectWith PAC strings. Disabled to avoid injecting executable PAC code."
+  },
+  "optionsLimitationSecureFiltering": {
+    "message": "Not restored for RC: secure-provider-proxy filtering and HTTPS-only proxying."
+  },
+  "optionsLimitationWeightedRules": {
+    "message": "Partial: full legacy weighted exception edge cases are not restored."
+  },
+  "optionsLimitationExternalProxyQa": {
+    "message": "Pending QA: external authenticated proxy and HTTPS CONNECT."
+  },
+  "optionsLimitationTorQa": {
+    "message": "Pending QA: real Tor traffic requires Tor installed and running."
+  },
+  "optionsRestoredMv2Behavior": {
+    "message": "Restored compatibility"
+  },
+  "optionsRestoredPacProxySwitch": {
+    "message": "PAC provider proxy switch is restored: provider proxies can be enabled or disabled."
+  },
+  "optionsRestoredOwnSitesOnly": {
+    "message": "Own proxies only for own site rules is restored and enabled by default."
+  },
+  "optionsRestoredOnionTor": {
+    "message": ".onion routing through enabled Tor candidates is restored."
+  },
+  "optionsRestoredDirectPolicy": {
+    "message": "DIRECT replacement and no-DIRECT policy are available as advanced opt-in settings."
+  },
+  "optionsCredentialsRedactedWarning": {
+    "message": "Proxy passwords are hidden in PAC and used only for authentication."
+  },
+  "optionsTorMustRunWarning": {
+    "message": "Tor must be running locally."
+  },
+  "optionsWarpLocalProxyWarning": {
+    "message": "WARP is treated as a local proxy."
+  },
+  "optionsDirectReplacementNoCandidateWarning": {
+    "message": "DIRECT replacement needs an enabled proxy candidate."
+  },
+  "optionsNoPacOrOwnProxyWarning": {
+    "message": "PAC provider proxies are disabled and no own proxy is enabled."
+  },
+  "optionsEnterSite": {
+    "message": "Enter a site, domain, or URL."
+  },
+  "optionsEnterValidSite": {
+    "message": "Enter a valid domain, host, wildcard, or URL."
+  },
+  "optionsUnsupportedSiteRuleAction": {
+    "message": "Unsupported site rule action."
+  },
+  "optionsDuplicateSiteRule": {
+    "message": "This site already has a rule."
+  },
+  "optionsPeriodicUpdatesHint": {
+    "message": "The selected PAC provider is checked every hour and refreshed when 12 hours have elapsed. A newly cooked PAC is applied only when this extension already controls proxy settings."
+  },
+  "optionsPeriodicAuthHint": {
+    "message": "External authenticated proxy QA is still pending."
+  },
+  "optionsEnablePeriodicUpdates": {
+    "message": "Automatically update PAC every 12 hours"
+  },
+  "optionsIntervalMinutes": {
+    "message": "Interval minutes"
+  },
+  "optionsSavePeriodicUpdates": {
+    "message": "Save periodic updates"
+  },
+  "optionsPeriodicSettingsSaved": {
+    "message": "Periodic update settings saved."
+  },
+  "optionsRunUpdateNow": {
+    "message": "Run update now"
+  },
+  "optionsRunning": {
+    "message": "Running..."
+  },
+  "optionsPeriodicUpdateFailed": {
+    "message": "Periodic update failed: $MESSAGE$",
+    "placeholders": {
+      "message": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsPeriodicUpdateStatus": {
+    "message": "Periodic update status: $STATUS$.",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsClearPeriodicEvents": {
+    "message": "Clear periodic update events"
+  },
+  "optionsPeriodicEventsCleared": {
+    "message": "Periodic update events cleared."
+  },
+  "optionsInterval": {
+    "message": "Interval"
+  },
+  "optionsLastStarted": {
+    "message": "Last started"
+  },
+  "optionsLastFinished": {
+    "message": "Last finished"
+  },
+  "optionsNextRun": {
+    "message": "Next run"
+  },
+  "optionsConsecutiveFailures": {
+    "message": "Consecutive failures"
+  },
+  "optionsAlarmScheduled": {
+    "message": "Alarm scheduled"
+  },
+  "optionsAlarmPeriod": {
+    "message": "Alarm period"
+  },
+  "optionsLastResult": {
+    "message": "Last result"
+  },
+  "optionsLastError": {
+    "message": "Last error"
+  },
+  "optionsPeriodicEvents": {
+    "message": "Periodic update events"
+  },
+  "optionsNoPeriodicEvents": {
+    "message": "No periodic update events."
+  },
+  "optionsTime": {
+    "message": "Time"
+  },
+  "optionsTrigger": {
+    "message": "Trigger"
+  },
+  "optionsMessage": {
+    "message": "Message"
+  },
+  "optionsError": {
+    "message": "Error"
+  },
+  "optionsLegacyMigrationHint": {
+    "message": "Use this only if you upgraded from the old MV2 version and want to copy old settings. This does not delete old data and does not apply proxy settings."
+  },
+  "optionsScanLegacySettings": {
+    "message": "Scan legacy MV2 settings"
+  },
+  "optionsScanning": {
+    "message": "Scanning..."
+  },
+  "optionsLegacyAuditCompleted": {
+    "message": "Legacy MV2 migration audit completed."
+  },
+  "optionsLoadMigrationPlan": {
+    "message": "Load migration plan"
+  },
+  "optionsLoading": {
+    "message": "Loading..."
+  },
+  "optionsLegacyPlanLoaded": {
+    "message": "Legacy MV2 migration plan loaded."
+  },
+  "optionsClearMigrationAudit": {
+    "message": "Clear migration audit"
+  },
+  "optionsLegacyAuditCleared": {
+    "message": "Legacy MV2 migration audit cleared."
+  },
+  "optionsAuditStatus": {
+    "message": "Audit status"
+  },
+  "optionsApplyStatus": {
+    "message": "Apply status"
+  },
+  "optionsLastAudit": {
+    "message": "Last audit"
+  },
+  "optionsLastApply": {
+    "message": "Last apply"
+  },
+  "optionsDetectedLegacyData": {
+    "message": "Detected legacy data"
+  },
+  "optionsInstallType": {
+    "message": "Install type"
+  },
+  "optionsChromeStorageKeys": {
+    "message": "Chrome storage keys"
+  },
+  "optionsLocalStorageKeys": {
+    "message": "localStorage keys"
+  },
+  "optionsProposedSettings": {
+    "message": "Proposed settings"
+  },
+  "optionsCannotMigrate": {
+    "message": "Cannot migrate"
+  },
+  "optionsConflicts": {
+    "message": "Conflicts"
+  },
+  "optionsWarnings": {
+    "message": "Warnings"
+  },
+  "optionsAuditError": {
+    "message": "Audit error"
+  },
+  "optionsAppliedFields": {
+    "message": "Applied fields"
+  },
+  "optionsSkippedFields": {
+    "message": "Skipped fields"
+  },
+  "optionsApplyConflicts": {
+    "message": "Apply conflicts"
+  },
+  "optionsLastApplySummary": {
+    "message": "Last apply summary"
+  },
+  "optionsAuditWarnings": {
+    "message": "Audit warnings"
+  },
+  "optionsDryRunMigrationPlan": {
+    "message": "Dry-run migration plan"
+  },
+  "optionsDetected": {
+    "message": "Detected"
+  },
+  "optionsChromeStorageChecked": {
+    "message": "Chrome storage checked"
+  },
+  "optionsLocalStorageChecked": {
+    "message": "localStorage checked"
+  },
+  "optionsSettingsAvailableForMigration": {
+    "message": "Settings available for migration"
+  },
+  "optionsSettingsCannotMigrateSafely": {
+    "message": "Settings that cannot be migrated safely"
+  },
+  "optionsConflictsWithCurrentMv3": {
+    "message": "Conflicts with current MV3 state"
+  },
+  "optionsApplySelectedLegacySettings": {
+    "message": "Apply selected legacy settings"
+  },
+  "optionsPacUpdatePeriod": {
+    "message": "PAC update period"
+  },
+  "optionsPacModifiers": {
+    "message": "PAC modifiers"
+  },
+  "optionsNotificationPrefs": {
+    "message": "Notification preferences"
+  },
+  "optionsStrategy": {
+    "message": "Strategy"
+  },
+  "optionsFillMissingOnly": {
+    "message": "Fill missing only"
+  },
+  "optionsOverwriteSelectedMv3": {
+    "message": "Overwrite selected MV3 settings"
+  },
+  "optionsMigrationConfirmation": {
+    "message": "I understand this will copy selected legacy MV2 settings into MV3 settings. It will not delete old MV2 data and will not apply proxy settings."
+  },
+  "optionsApplySelectedMigration": {
+    "message": "Apply selected migration"
+  },
+  "optionsMigrationApplyFailed": {
+    "message": "Migration apply failed: $MESSAGE$",
+    "placeholders": {
+      "message": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsMigrationApplyStatus": {
+    "message": "Migration apply status: $STATUS$.",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSaveNotifications": {
+    "message": "Save notifications"
+  },
+  "optionsNotificationPrefsSaved": {
+    "message": "Notification preferences saved."
+  },
+  "optionsNotifyPacError": {
+    "message": "PAC errors"
+  },
+  "optionsNotifyExtensionError": {
+    "message": "Extension errors"
+  },
+  "optionsNotifyNoControl": {
+    "message": "Proxy control lost"
+  },
+  "optionsLoadStateFailed": {
+    "message": "Failed to load extension state."
+  },
+  "optionsSiteRuleNotFound": {
+    "message": "Site rule was not found."
+  },
+  "popupCustomProviderLabel": {
+    "message": "Custom: $LABEL$",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsPacProviders": {
+    "message": "PAC providers"
+  },
+  "optionsPacProvidersHint": {
+    "message": "Built-in providers are read-only. Add trusted custom PAC URLs when you need another provider."
+  },
+  "optionsSelectedProviderValue": {
+    "message": "Selected provider: $PROVIDER$",
+    "placeholders": {
+      "provider": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsBuiltInProviders": {
+    "message": "Built-in providers"
+  },
+  "optionsCustomProviders": {
+    "message": "Custom providers"
+  },
+  "optionsNoCustomProviders": {
+    "message": "No custom PAC providers configured."
+  },
+  "optionsReadOnlyProvider": {
+    "message": "Built-in, read-only"
+  },
+  "optionsProviderName": {
+    "message": "Provider name"
+  },
+  "optionsProviderDescription": {
+    "message": "Description"
+  },
+  "optionsPacUrls": {
+    "message": "PAC URLs"
+  },
+  "optionsPacUrlsHint": {
+    "message": "One URL per line. Use HTTPS, or localhost HTTP for local testing."
+  },
+  "optionsProviderDuplicateUrls": {
+    "message": "Duplicate URLs are removed automatically. Only add PAC URLs you trust."
+  },
+  "optionsAddCustomProvider": {
+    "message": "Add custom provider"
+  },
+  "optionsUpdateCustomProvider": {
+    "message": "Save provider"
+  },
+  "optionsEditCustomProvider": {
+    "message": "Edit"
+  },
+  "optionsDeleteCustomProvider": {
+    "message": "Delete provider"
+  },
+  "optionsSelectProvider": {
+    "message": "Select"
+  },
+  "optionsSelected": {
+    "message": "Selected"
+  },
+  "optionsDisabled": {
+    "message": "Disabled"
+  },
+  "optionsCustomProviderEnabled": {
+    "message": "Enabled"
+  },
+  "optionsCustomProviderAdded": {
+    "message": "Custom PAC provider added. Select it, then update PAC."
+  },
+  "optionsCustomProviderUpdated": {
+    "message": "Custom PAC provider updated."
+  },
+  "optionsCustomProviderUpdatedRefresh": {
+    "message": "Provider URLs changed. Update PAC, cook it, and apply proxy again."
+  },
+  "optionsCustomProviderDeleted": {
+    "message": "Custom PAC provider deleted. Cached artifacts were kept."
+  },
+  "optionsSelectedProviderCleared": {
+    "message": "The selected custom provider was disabled. Select another provider. An already applied proxy remains active until you clear or replace it."
+  },
+  "optionsSelectedProviderDeleted": {
+    "message": "The selected custom provider was deleted. Select another provider. Cached artifacts were kept; an already applied proxy remains active until you clear or replace it."
+  },
+  "optionsConfirmDeleteCustomProvider": {
+    "message": "Delete custom provider $PROVIDER$?",
+    "placeholders": {
+      "provider": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsDeleting": {
+    "message": "Deleting..."
+  },
+  "optionsProviderLabelRequired": {
+    "message": "Enter a provider name."
+  },
+  "optionsProviderLabelTooLong": {
+    "message": "Provider name is too long."
+  },
+  "optionsProviderDescriptionTooLong": {
+    "message": "Provider description is too long."
+  },
+  "optionsProviderUrlRequired": {
+    "message": "Add at least one PAC URL."
+  },
+  "optionsProviderInvalidUrl": {
+    "message": "One of the PAC URLs is invalid."
+  },
+  "optionsProviderInvalidScheme": {
+    "message": "PAC URLs must use HTTPS. Localhost HTTP is allowed for testing."
+  },
+  "optionsProviderUrlCredentials": {
+    "message": "PAC URLs must not contain a username or password."
+  },
+  "optionsProviderTooManyUrls": {
+    "message": "A custom provider may contain at most 10 PAC URLs."
+  },
+  "optionsProviderNotFound": {
+    "message": "Custom PAC provider was not found."
+  },
+  "optionsProviderBuiltInReadOnly": {
+    "message": "Built-in PAC providers cannot be edited or deleted."
+  },
+  "popupAutoUpdate": {
+    "message": "Auto-update"
+  },
+  "popupAutoUpdateEveryHours": {
+    "message": "Every $HOURS$ hours",
+    "placeholders": {
+      "hours": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupPacUpdateFailed": {
+    "message": "PAC update failed"
+  },
+  "popupProxyHealth": {
+    "message": "Proxy health"
+  },
+  "popupProxyHealthUnknown": {
+    "message": "Not checked"
+  },
+  "popupProxyHealthChecking": {
+    "message": "Checking..."
+  },
+  "popupProxyHealthOk": {
+    "message": "Working"
+  },
+  "popupProxyHealthError": {
+    "message": "Error"
+  },
+  "popupCheckProxy": {
+    "message": "Check proxy"
+  },
+  "popupCheckProxyAgain": {
+    "message": "Check again"
+  },
+  "popupProxyCheckSucceeded": {
+    "message": "Proxy connectivity check succeeded."
+  },
+  "popupProxyCheckRequiresProxyRule": {
+    "message": "Enable Proxy mode for the current site before checking."
+  },
+  "popupProxyCheckNotApplied": {
+    "message": "Apply proxy settings before checking."
+  },
+  "popupProxyCheckInconclusive": {
+    "message": "The check was inconclusive. No proxy-specific browser error was reported."
+  },
+  "popupMinutesAgo": {
+    "message": "$COUNT$ min ago",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupHoursAgo": {
+    "message": "$COUNT$ h ago",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupDaysAgo": {
+    "message": "$COUNT$ d ago",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "proxyHealthNotificationTitle": {
+    "message": "Proxy error"
+  },
+  "proxyHealthTorBrowserError": {
+    "message": "Could not connect to Tor Browser. Make sure Tor Browser is running and 127.0.0.1:9150 is available."
+  },
+  "proxyHealthLocalTorError": {
+    "message": "Could not connect to the Tor service. Make sure Tor is running and 127.0.0.1:9050 is available."
+  },
+  "proxyHealthGenericError": {
+    "message": "Could not connect through the configured proxy."
+  },
+  "proxyHealthTorBrowserNotification": {
+    "message": "Tor Browser is unavailable. Start Tor Browser and try again."
+  },
+  "proxyHealthLocalTorNotification": {
+    "message": "The Tor service is unavailable. Start Tor and try again."
+  },
+  "proxyHealthTorBrowserShort": {
+    "message": "Tor Browser is unavailable"
+  },
+  "proxyHealthLocalTorShort": {
+    "message": "Tor service is unavailable"
+  },
+  "proxyHealthGenericShort": {
+    "message": "Configured proxy is unavailable"
+  },
+  "optionsReliability": {
+    "message": "Reliability"
+  },
+  "optionsReliabilityHint": {
+    "message": "PAC refresh and proxy connectivity status. Automatic refresh never enables a cleared proxy."
+  },
+  "optionsAutoUpdateEveryTwelveHours": {
+    "message": "Automatically update PAC every 12 hours"
+  },
+  "optionsLastSuccessfulPacUpdate": {
+    "message": "Last successful PAC update"
+  },
+  "optionsNextAutomaticPacUpdate": {
+    "message": "Next automatic update"
+  },
+  "periodicUpdateNotificationTitle": {
+    "message": "PAC update failed"
+  },
+  "periodicUpdateNotificationBody": {
+    "message": "The automatic PAC update failed. Open settings for details."
+  }
+}

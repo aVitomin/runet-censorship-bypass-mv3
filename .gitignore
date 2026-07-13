@@ -1,0 +1,28 @@
+node_modules
+npm-debug.log
+.swp
+*.swo
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Generated extension output and release artifacts.
+build/
+dist/
+coverage/
+
+# Local tools, caches, logs, and browser profiles.
+.tmp/
+.cache/
+.npm/
+.pnpm-store/
+*.log
+.browser-profile/
+browser-profile/
+*-browser-profile/
+
+# Local environment files are never a place to keep repository secrets.
+.env
+.env.*
+!.env.example
