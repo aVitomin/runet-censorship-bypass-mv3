@@ -11,6 +11,12 @@
     proxyHealthError: '#D93025',
     off: '#64748b',
   });
+  const ICON_PATHS = Object.freeze({
+    applied: 'icons/default-128.png',
+    inactive: 'icons/default-grayscale-128.png',
+  });
+  const MAX_CACHED_TABS = 256;
+  const actionStateByApi = new WeakMap();
 
   function getBadgeStatus(status = {}) {
 
@@ -167,34 +173,339 @@
 
   }
 
-  async function updateStatus(status = {}) {
+  function getIconPath(status = {}) {
 
-    if (typeof chrome === 'undefined' || !chrome.action) {
+    return status.proxyApplied === true ?
+      ICON_PATHS.applied :
+      ICON_PATHS.inactive;
+
+  }
+
+  async function updateStatus(status = {}, options = {}) {
+
+    const actionApi = options.actionApi ||
+      (typeof chrome !== 'undefined' && chrome.action);
+    if (!actionApi) {
       return {ok: false, status: 'unavailable'};
     }
     const badge = getBadgeStatus(status);
-    await callAction('setBadgeText', {text: badge.text});
-    await callAction('setBadgeBackgroundColor', {color: badge.color});
-    await callAction('setTitle', {title: formatTitle(status)});
+    const tabId = Number.isInteger(options.tabId) ? options.tabId : null;
+    const cacheKey = tabId === null ? 'global' : tabId;
+    let cache = actionStateByApi.get(actionApi);
+    if (!cache) {
+      cache = new Map();
+      actionStateByApi.set(actionApi, cache);
+    }
+    const previous = cache.get(cacheKey) || {};
+    const presentation = {
+      iconPath: getIconPath(status),
+      badgeText: badge.text,
+      badgeColor: badge.color,
+      title: formatTitle(status),
+    };
+    const tabParams = tabId === null ? {} : {tabId};
+    const changes = [
+      ['iconPath', 'setIcon', Object.assign({path: presentation.iconPath}, tabParams)],
+      ['badgeText', 'setBadgeText', Object.assign({text: presentation.badgeText}, tabParams)],
+      [
+        'badgeColor',
+        'setBadgeBackgroundColor',
+        Object.assign({color: presentation.badgeColor}, tabParams),
+      ],
+      ['title', 'setTitle', Object.assign({title: presentation.title}, tabParams)],
+    ].filter(([key]) => previous[key] !== presentation[key]);
+    const results = await Promise.all(changes.map(([, method, params]) =>
+      callAction(actionApi, method, params),
+    ));
+    const ok = results.every(Boolean);
+    if (ok) {
+      cache.delete(cacheKey);
+      cache.set(cacheKey, presentation);
+      while (cache.size > MAX_CACHED_TABS) {
+        cache.delete(cache.keys().next().value);
+      }
+    }
     return {
-      ok: true,
+      ok,
       badge,
+      iconPath: presentation.iconPath,
+      changed: changes.map(([, method]) => method),
     };
 
   }
 
-  function callAction(method, params) {
+  function forgetStatus(tabId, options = {}) {
+
+    const actionApi = options.actionApi ||
+      (typeof chrome !== 'undefined' && chrome.action);
+    const cache = actionApi && actionStateByApi.get(actionApi);
+    if (cache) {
+      cache.delete(Number.isInteger(tabId) ? tabId : 'global');
+    }
+
+  }
+
+  function callAction(actionApi, method, params) {
 
     return new Promise((resolve) => {
-      if (!chrome.action || typeof chrome.action[method] !== 'function') {
+      if (!actionApi || typeof actionApi[method] !== 'function') {
         resolve(false);
         return;
       }
       try {
-        chrome.action[method](params, () => resolve(true));
+        actionApi[method](params, () => resolve(true));
       } catch (err) {
         resolve(false);
       }
+    });
+
+  }
+
+  function createRefreshCoordinator(options = {}) {
+
+    const chromeApi = options.chromeApi ||
+      (typeof chrome !== 'undefined' ? chrome : null);
+    if (
+      !chromeApi ||
+      typeof options.loadState !== 'function' ||
+      typeof options.createStatus !== 'function'
+    ) {
+      throw new TypeError('Action refresh dependencies are required.');
+    }
+    const tabs = chromeApi.tabs || {};
+    const windows = chromeApi.windows || {};
+    let started = false;
+    let activeTabId = null;
+    let activeWindowId = null;
+    let latestToken = null;
+    let pendingParams = null;
+    let scheduledRefresh = null;
+
+    function requestRefresh(params = {}) {
+
+      latestToken = {};
+      pendingParams = mergeRefreshParams(pendingParams, params);
+      if (!scheduledRefresh) {
+        scheduledRefresh = Promise.resolve().then(() => {
+          const nextParams = pendingParams;
+          const token = latestToken;
+          pendingParams = null;
+          scheduledRefresh = null;
+          return performRefresh(nextParams, token);
+        });
+      }
+      return scheduledRefresh;
+
+    }
+
+    function mergeRefreshParams(previous, latest) {
+
+      return Object.assign({}, latest, {
+        overrides: Object.assign(
+            {},
+            previous && previous.overrides,
+            latest && latest.overrides,
+        ),
+      });
+
+    }
+
+    async function performRefresh(params, token) {
+
+      const tab = await resolveTargetTab(params);
+      if (token !== latestToken) {
+        return {ok: false, status: 'stale'};
+      }
+      if (!tab || !Number.isInteger(tab.id) || tab.active === false) {
+        return {ok: false, status: 'no-active-tab'};
+      }
+      if (
+        Number.isInteger(activeWindowId) &&
+        Number.isInteger(tab.windowId) &&
+        tab.windowId !== activeWindowId
+      ) {
+        return {ok: false, status: 'background-window'};
+      }
+      activeTabId = tab.id;
+      if (Number.isInteger(tab.windowId)) {
+        activeWindowId = tab.windowId;
+      }
+      const state = Object.prototype.hasOwnProperty.call(params, 'state') ?
+        params.state :
+        await options.loadState();
+      if (token !== latestToken) {
+        return {ok: false, status: 'stale'};
+      }
+      const status = await options.createStatus(tab.url || '', state);
+      if (token !== latestToken) {
+        return {ok: false, status: 'stale'};
+      }
+      return updateStatus(
+          Object.assign({}, status, params.overrides),
+          {actionApi: chromeApi.action, tabId: tab.id},
+      );
+
+    }
+
+    async function resolveTargetTab(params) {
+
+      if (params.tab && Number.isInteger(params.tab.id)) {
+        return params.tab;
+      }
+      if (Number.isInteger(params.tabId)) {
+        return getTab(params.tabId);
+      }
+      if (Number.isInteger(activeTabId)) {
+        const knownTab = await getTab(activeTabId);
+        if (
+          knownTab &&
+          knownTab.active !== false &&
+          (
+            !Number.isInteger(activeWindowId) ||
+            knownTab.windowId === activeWindowId
+          )
+        ) {
+          return knownTab;
+        }
+      }
+      return queryActiveTab(params.windowId);
+
+    }
+
+    function getTab(tabId) {
+
+      return new Promise((resolve) => {
+        if (typeof tabs.get !== 'function') {
+          resolve(null);
+          return;
+        }
+        try {
+          tabs.get(tabId, (tab) => {
+            resolve(getRuntimeError() ? null : tab || null);
+          });
+        } catch (err) {
+          resolve(null);
+        }
+      });
+
+    }
+
+    function queryActiveTab(windowId) {
+
+      return new Promise((resolve) => {
+        if (typeof tabs.query !== 'function') {
+          resolve(null);
+          return;
+        }
+        const query = {active: true};
+        if (Number.isInteger(windowId)) {
+          query.windowId = windowId;
+        } else {
+          query.lastFocusedWindow = true;
+        }
+        try {
+          tabs.query(query, (matches) => {
+            resolve(getRuntimeError() ? null : matches && matches[0] || null);
+          });
+        } catch (err) {
+          resolve(null);
+        }
+      });
+
+    }
+
+    function getRuntimeError() {
+
+      return chromeApi.runtime && chromeApi.runtime.lastError || null;
+
+    }
+
+    function addListener(event, listener) {
+
+      if (!event || typeof event.addListener !== 'function') {
+        return;
+      }
+      event.addListener(listener);
+    }
+
+    function refreshFromEvent(params) {
+
+      requestRefresh(params).catch(() => undefined);
+
+    }
+
+    function start() {
+
+      if (started) {
+        return;
+      }
+      started = true;
+      addListener(tabs.onActivated, (activeInfo) => {
+        if (!activeInfo || !Number.isInteger(activeInfo.tabId)) {
+          return;
+        }
+        if (
+          Number.isInteger(activeWindowId) &&
+          Number.isInteger(activeInfo.windowId) &&
+          activeInfo.windowId !== activeWindowId
+        ) {
+          return;
+        }
+        activeTabId = activeInfo.tabId;
+        if (Number.isInteger(activeInfo.windowId)) {
+          activeWindowId = activeInfo.windowId;
+        }
+        refreshFromEvent({tabId: activeInfo.tabId});
+      });
+      addListener(tabs.onUpdated, (tabId, changeInfo, tab) => {
+        const ifRelevant = changeInfo && (
+          Object.prototype.hasOwnProperty.call(changeInfo, 'url') ||
+          changeInfo.status === 'complete'
+        );
+        if (!ifRelevant || tabId !== activeTabId) {
+          return;
+        }
+        const nextTab = Object.assign({}, tab, {
+          id: tabId,
+          url: changeInfo.url || tab && tab.url || '',
+        });
+        refreshFromEvent({tab: nextTab});
+      });
+      addListener(tabs.onRemoved, (tabId, removeInfo) => {
+        forgetStatus(tabId, {actionApi: chromeApi.action});
+        if (tabId !== activeTabId) {
+          return;
+        }
+        activeTabId = null;
+        refreshFromEvent({windowId: removeInfo && removeInfo.windowId});
+      });
+      addListener(tabs.onReplaced, (addedTabId, removedTabId) => {
+        forgetStatus(removedTabId, {actionApi: chromeApi.action});
+        if (removedTabId !== activeTabId) {
+          return;
+        }
+        activeTabId = addedTabId;
+        refreshFromEvent({tabId: addedTabId});
+      });
+      addListener(windows.onFocusChanged, (windowId) => {
+        const noWindow = Number.isInteger(chromeApi.windows.WINDOW_ID_NONE) ?
+          chromeApi.windows.WINDOW_ID_NONE :
+          -1;
+        activeTabId = null;
+        if (windowId === noWindow) {
+          activeWindowId = null;
+          latestToken = {};
+          return;
+        }
+        activeWindowId = windowId;
+        refreshFromEvent({windowId});
+      });
+
+    }
+
+    return Object.freeze({
+      requestRefresh,
+      start,
     });
 
   }
@@ -291,6 +602,10 @@
       proxyBadgeMapsToP: proxyBadge.text === 'P',
       directBadgeMapsToD: directBadge.text === 'D',
       autoBadgeMapsToA: autoBadge.text === 'A',
+      appliedProxyUsesColorIcon:
+        getIconPath({proxyApplied: true}) === ICON_PATHS.applied,
+      inactiveProxyUsesGrayscaleIcon:
+        getIconPath({proxyApplied: false}) === ICON_PATHS.inactive,
       titleOmitsManifestVersionBranding:
         !formatTitle({mode: 'auto'}).includes(manifestVersionBrand),
       staleBadgeOverridesMode: staleBadge.text === '*',
@@ -321,9 +636,12 @@
 
   exports.mv3ActionStatus = Object.freeze({
     getBadgeStatus,
+    getIconPath,
     formatTitle,
     sanitizeMessage,
     updateStatus,
+    forgetStatus,
+    createRefreshCoordinator,
     notify,
     selfTest,
   });

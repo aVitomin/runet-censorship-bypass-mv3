@@ -62,6 +62,14 @@ let proxyHealthCheckPromise = null;
 const proxyErrorDebounce = new Map();
 const NO_PROXY_CANDIDATE_MESSAGE =
   'No proxy is enabled. Enable Tor, WARP, or an own proxy.';
+const actionStatusRefresh = mv3ActionStatus.createRefreshCoordinator({
+  chromeApi: chrome,
+  loadState: () => mv3State.loadState(),
+  createStatus: (tabUrl, state) => createPopupState(tabUrl, state),
+});
+actionStatusRefresh.start();
+const actionStatusRecoveryPromise = recoverActionStatusOnWorkerStart()
+    .catch(() => requestActionStatusRefresh({}));
 
 function openFullOptionsPage() {
 
@@ -295,15 +303,16 @@ const RPC_METHODS = Object.freeze({
       await mv3State.resetProxyHealth();
     }
     const state = await mv3State.loadState();
-    await updateActionStatusFromStoredState({});
+    await requestActionStatusRefresh({state});
     return state;
 
   },
 
   async getPopupState(params = {}) {
 
+    await actionStatusRecoveryPromise.catch(() => undefined);
     const state = await mv3State.loadState();
-    return createPopupStateAndUpdateAction(params.tabUrl, state);
+    return createPopupState(params.tabUrl, state);
 
   },
 
@@ -457,7 +466,9 @@ const RPC_METHODS = Object.freeze({
 
   async clearPacCache() {
 
-    return clearPacCacheAndArtifacts();
+    const result = await clearPacCacheAndArtifacts();
+    await updateActionStatusFromStoredState({});
+    return result;
 
   },
 
@@ -505,7 +516,9 @@ const RPC_METHODS = Object.freeze({
 
   async clearCookedPacCache() {
 
-    return clearCookedPacCacheAndArtifacts();
+    const result = await clearCookedPacCacheAndArtifacts();
+    await updateActionStatusFromStoredState({});
+    return result;
 
   },
 
@@ -529,9 +542,11 @@ const RPC_METHODS = Object.freeze({
 
   },
 
-  refreshProxyControl() {
+  async refreshProxyControl() {
 
-    return refreshProxyControlAndPersist();
+    const refreshed = await refreshProxyControlAndPersistWithState();
+    await requestActionStatusRefresh({state: refreshed.state});
+    return refreshed.proxyControl;
 
   },
 
@@ -847,6 +862,13 @@ function initializeAutomaticPacUpdates(trigger) {
           `Failed to initialize PAC auto-update (${trigger}).`,
           err,
       ));
+
+}
+
+async function recoverActionStatusOnWorkerStart() {
+
+  const refreshed = await refreshProxyControlAndPersistWithState();
+  return requestActionStatusRefresh({state: refreshed.state});
 
 }
 
@@ -1311,6 +1333,12 @@ async function createPopupState(tabUrl, state) {
 
   const stale = await getCookedPacStaleness(state);
   const proxyApply = state.proxyApply || {};
+  const proxyControl = state.proxyControl || {};
+  const ifLivePacControlled = Boolean(
+      proxyControl.controlledByThisExtension === true &&
+      proxyControl.rawValue &&
+      proxyControl.rawValue.mode === 'pac_script',
+  );
   const autoUpdate = getPacAutoUpdateSummary(state);
   return {
     uiLanguage: state.uiLanguage || 'auto',
@@ -1346,7 +1374,7 @@ async function createPopupState(tabUrl, state) {
     pacDownloadStatus: state.pacDownload && state.pacDownload.status ||
       'idle',
     pacCookStatus: state.pacCook && state.pacCook.status || 'idle',
-    proxyApplied: proxyApply.status === 'applied',
+    proxyApplied: proxyApply.status === 'applied' && ifLivePacControlled,
     proxyApplyStatus: proxyApply.status || 'idle',
     proxyHealth: state.proxyHealth,
     autoUpdate,
@@ -1360,17 +1388,20 @@ async function createPopupState(tabUrl, state) {
 async function createPopupStateAndUpdateAction(tabUrl, state, overrides = {}) {
 
   const popupState = await createPopupState(tabUrl, state);
-  await mv3ActionStatus.updateStatus(Object.assign({}, popupState, overrides));
+  await requestActionStatusRefresh({state, overrides});
   return popupState;
 
 }
 
 async function updateActionStatusFromStoredState(overrides = {}) {
 
-  const state = await mv3State.loadState();
-  const popupState = await createPopupState('', state);
-  await mv3ActionStatus.updateStatus(Object.assign({}, popupState, overrides));
-  return popupState;
+  return requestActionStatusRefresh({overrides});
+
+}
+
+function requestActionStatusRefresh(params = {}) {
+
+  return actionStatusRefresh.requestRefresh(params);
 
 }
 
@@ -2463,15 +2494,27 @@ function getProxyAuthStatusFromState(state) {
 
 async function refreshProxyControlAndPersist() {
 
+  return (await refreshProxyControlAndPersistWithState()).proxyControl;
+
+}
+
+async function refreshProxyControlAndPersistWithState() {
+
   const proxyControl = await mv3ProxySettings.getProxyControlState();
-  return mv3State.setProxyControlState(proxyControl);
+  const state = await mv3State.saveStatePatch({proxyControl});
+  return {
+    proxyControl: state.proxyControl,
+    state,
+  };
 
 }
 
 async function handleProxySettingsChanged() {
 
   const previous = await mv3State.loadState();
-  const proxyControl = await refreshProxyControlAndPersist();
+  const refreshed = await refreshProxyControlAndPersistWithState();
+  const proxyControl = refreshed.proxyControl;
+  let state = refreshed.state;
   if (
     previous.proxyControl &&
     previous.proxyControl.canControl &&
@@ -2489,8 +2532,9 @@ async function handleProxySettingsChanged() {
     proxyControl.rawValue.mode !== 'pac_script'
   ) {
     await mv3State.resetProxyHealth();
+    state = await mv3State.loadState();
   }
-  return updateActionStatusFromStoredState({});
+  return requestActionStatusRefresh({state});
 
 }
 
