@@ -29,6 +29,24 @@ function createProviderPac(proxyResult) {
 }
 
 const RAW_PROVIDER_PAC = createProviderPac(PROVIDER_PROXY_RESULT);
+const RAW_INVALID_RESULT_PAC = [
+  'function FindProxyForURL(url, host) {',
+  '  return "INVALID";',
+  '}',
+].join('\n');
+const RAW_THROWING_PAC = [
+  'function FindProxyForURL(url, host) {',
+  '  throw new Error("synthetic provider failure");',
+  '}',
+].join('\n');
+const RAW_INITIALIZATION_THROW_PAC = [
+  'throw new Error("synthetic initialization failure");',
+  'function FindProxyForURL(url, host) { return "DIRECT"; }',
+].join('\n');
+const RAW_SYNTAX_ERROR_PAC = [
+  'function FindProxyForURL(url, host) { return "DIRECT"; }',
+  ')',
+].join('\n');
 
 async function cook(pacMods, rawPacData = RAW_PROVIDER_PAC) {
 
@@ -248,6 +266,78 @@ Mocha.describe('MV3 PAC routing regressions', function() {
         ].join('; '));
         Chai.expect(routed).not.to.include('DIRECT');
         Chai.expect(routed).not.to.include('provider.example');
+
+      });
+
+  Mocha.it('keeps explicit Proxy ahead of failing provider result paths',
+      async function() {
+
+        for (const rawPacData of [
+          createProviderPac(''),
+          RAW_INVALID_RESULT_PAC,
+          RAW_THROWING_PAC,
+        ]) {
+          const result = await cook({
+            ownProxies: [ownProxy('own.example', 443)],
+            exceptions: [{pattern: 'proxy.example', action: 'PROXY'}],
+          }, rawPacData);
+
+          Chai.expect(result.ok).to.equal(true);
+          Chai.expect(evaluatePac(result.cookedPacData, 'proxy.example'))
+              .to.equal('HTTPS own.example:443');
+        }
+
+      });
+
+  Mocha.it('characterizes malformed Auto results without simulating Chromium fallback',
+      async function() {
+
+        const invalid = await cook({}, RAW_INVALID_RESULT_PAC);
+        const throwing = await cook({}, RAW_THROWING_PAC);
+
+        Chai.expect(evaluatePac(invalid.cookedPacData, 'auto.example'))
+            .to.equal('INVALID');
+        Chai.expect(() => evaluatePac(throwing.cookedPacData, 'auto.example'))
+            .to.throw('synthetic provider failure');
+
+      });
+
+  Mocha.it('cannot install the explicit wrapper after PAC initialization fails',
+      async function() {
+
+        const result = await cook({
+          ownProxies: [ownProxy('own.example', 443)],
+          exceptions: [{pattern: 'proxy.example', action: 'PROXY'}],
+        }, RAW_INITIALIZATION_THROW_PAC);
+
+        Chai.expect(result.ok).to.equal(true);
+        Chai.expect(() => evaluatePac(result.cookedPacData, 'proxy.example'))
+            .to.throw('synthetic initialization failure');
+
+      });
+
+  Mocha.it('accepts non-empty PAC text without pre-parsing its syntax',
+      async function() {
+
+        const syntaxError = await cook({}, RAW_SYNTAX_ERROR_PAC);
+
+        Chai.expect(syntaxError.ok).to.equal(true);
+        Chai.expect(() => evaluatePac(syntaxError.cookedPacData, 'auto.example'))
+            .to.throw();
+
+      });
+
+  Mocha.it('characterizes malformed WARP candidate output for browser QA',
+      async function() {
+
+        const result = await cook({
+          warp: {enabled: true, proxyString: 'INVALID'},
+          exceptions: [{pattern: 'proxy.example', action: 'PROXY'}],
+        });
+
+        Chai.expect(result.ok).to.equal(true);
+        Chai.expect(evaluatePac(result.cookedPacData, 'proxy.example'))
+            .to.equal('INVALID');
 
       });
 

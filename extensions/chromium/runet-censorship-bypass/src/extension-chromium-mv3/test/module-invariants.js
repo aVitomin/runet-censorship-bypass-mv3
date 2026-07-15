@@ -216,6 +216,65 @@ Mocha.describe('MV3 background module invariants', function() {
 
   });
 
+  Mocha.it('applies non-empty PAC text with the current non-mandatory policy',
+      async function() {
+
+        const originalChrome = global.chrome;
+        const setCalls = [];
+        global.chrome = {
+          runtime: {lastError: null},
+          proxy: {
+            settings: {
+              get(options, callback) {
+
+                callback({levelOfControl: 'controllable_by_this_extension'});
+
+              },
+              set(details, callback) {
+
+                setCalls.push(details);
+                callback();
+
+              },
+            },
+          },
+        };
+
+        try {
+          let emptyError;
+          try {
+            await global.mv3ProxySettings.applyPacScript({cookedPacData: '  '});
+          } catch (err) {
+            emptyError = err;
+          }
+          Chai.expect(emptyError).to.have.property('code', 'VALIDATION_ERROR');
+          Chai.expect(setCalls).to.be.empty;
+
+          const malformedPac = 'function FindProxyForURL(url, host) {';
+          await global.mv3ProxySettings.applyPacScript({
+            cookedPacData: malformedPac,
+          });
+
+          Chai.expect(setCalls).to.deep.equal([{
+            value: {
+              mode: 'pac_script',
+              pacScript: {
+                mandatory: false,
+                data: malformedPac,
+              },
+            },
+            scope: 'regular',
+          }]);
+        } finally {
+          if (originalChrome === undefined) {
+            delete global.chrome;
+          } else {
+            global.chrome = originalChrome;
+          }
+        }
+
+      });
+
   Mocha.it('makes a selected migration idempotent and leaves its plan intact', function() {
 
     const password = ['migration', 'credential'].join('-');
