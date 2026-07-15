@@ -81,6 +81,10 @@ const miniSrc = './src/extension-mini/**/*';
 const fullSrc = './src/extension-full/**/*';
 const chromiumMv3Src = './src/extension-chromium-mv3/**/*';
 const firefoxSrc = './src/extension-firefox/**/*';
+const chromiumMv3TldtsSrc = [
+  './node_modules/tldts/dist/index.umd.min.js',
+  './node_modules/tldts/LICENSE',
+];
 
 const joinSrc = (...args) => [...args, ...excluded];
 
@@ -145,9 +149,20 @@ const copyChromiumMv3 = function(cb) {
 
 };
 
+const copyChromiumMv3Tldts = function(cb) {
+
+  gulp.src(chromiumMv3TldtsSrc, {base: './node_modules/tldts'})
+    .pipe(gulp.dest(`${chromiumMv3Dst}/background/vendor/tldts`))
+    .on('end', cb);
+
+};
+
 const buildAll = gulp.series(clean, gulp.parallel(copyMini, copyFull, copyBeta));
 const buildBeta = copyBeta;
-const buildChromiumMv3 = gulp.series(cleanChromiumMv3, copyChromiumMv3);
+const buildChromiumMv3 = gulp.series(
+    cleanChromiumMv3,
+    gulp.parallel(copyChromiumMv3, copyChromiumMv3Tldts),
+);
 
 module.exports = {
   default: buildAll,

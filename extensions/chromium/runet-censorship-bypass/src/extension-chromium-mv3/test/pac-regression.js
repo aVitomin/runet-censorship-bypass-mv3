@@ -29,6 +29,11 @@ function createProviderPac(proxyResult) {
 }
 
 const RAW_PROVIDER_PAC = createProviderPac(PROVIDER_PROXY_RESULT);
+const RAW_ALWAYS_PROXY_PAC = [
+  'function FindProxyForURL() {',
+  `  return ${JSON.stringify(PROVIDER_PROXY_RESULT)};`,
+  '}',
+].join('\n');
 const RAW_INVALID_RESULT_PAC = [
   'function FindProxyForURL(url, host) {',
   '  return "INVALID";',
@@ -109,6 +114,222 @@ Mocha.describe('MV3 PAC routing regressions', function() {
         .to.equal('HTTPS own.example:443');
 
   });
+
+  Mocha.it('derives current-site scope at public suffix boundaries', function() {
+
+    const cases = [
+      {
+        url: 'https://sub.example.com/path',
+        exact: 'sub.example.com',
+        wildcard: '*.example.com',
+        available: true,
+      },
+      {
+        url: 'https://a.b.example.co.uk/path',
+        exact: 'a.b.example.co.uk',
+        wildcard: '*.example.co.uk',
+        available: true,
+      },
+      {
+        url: 'https://user.github.io/path',
+        exact: 'user.github.io',
+        wildcard: '*.user.github.io',
+        available: true,
+      },
+      {
+        url: 'https://localhost/path',
+        exact: 'localhost',
+        wildcard: 'localhost',
+        available: false,
+      },
+      {
+        url: 'https://intranet/path',
+        exact: 'intranet',
+        wildcard: 'intranet',
+        available: false,
+      },
+      {
+        url: 'https://192.0.2.1/path',
+        exact: '192.0.2.1',
+        wildcard: '192.0.2.1',
+        available: false,
+      },
+      {
+        url: 'https://[2001:db8::1]/path',
+        exact: '2001:db8::1',
+        wildcard: '2001:db8::1',
+        available: false,
+      },
+      {
+        url: 'https://Sub.BÜCHER.de./path',
+        exact: 'sub.xn--bcher-kva.de',
+        wildcard: '*.xn--bcher-kva.de',
+        available: true,
+      },
+    ];
+
+    cases.forEach((testCase) => {
+      const hostname = new URL(testCase.url).hostname;
+      const patterns = global.mv3SiteScope.getSitePatterns(hostname);
+      Chai.expect(patterns, testCase.url).to.include({
+        exactPattern: testCase.exact,
+        wildcardPattern: testCase.wildcard,
+        wildcardAvailable: testCase.available,
+        domainResolution: 'public-suffix-list',
+      });
+    });
+
+  });
+
+  Mocha.it('does not proxy an entire multi-label public suffix', async function() {
+
+    const host = 'a.b.example.co.uk';
+    const pacMods = global.mv3SiteScope.setHostMode({
+      ownProxies: [ownProxy('own.example', 443)],
+    }, host, 'proxy', 'domain');
+    const result = await cook(pacMods, RAW_ALWAYS_PROXY_PAC);
+
+    Chai.expect(pacMods.exceptions).to.deep.include({
+      pattern: '*.example.co.uk',
+      action: 'PROXY',
+      enabled: true,
+      note: '',
+    });
+    Chai.expect(evaluatePac(result.cookedPacData, host))
+        .to.equal('HTTPS own.example:443');
+    Chai.expect(evaluatePac(result.cookedPacData, 'sub.example.co.uk'))
+        .to.equal('HTTPS own.example:443');
+    Chai.expect(evaluatePac(result.cookedPacData, 'unrelated.co.uk'))
+        .to.equal(PROVIDER_PROXY_RESULT);
+
+  });
+
+  Mocha.it('respects private suffix boundaries in evaluated PAC routing',
+      async function() {
+
+        const pacMods = global.mv3SiteScope.setHostMode({
+          ownProxies: [ownProxy('own.example', 443)],
+        }, 'user.github.io', 'proxy', 'domain');
+        const result = await cook(pacMods, RAW_ALWAYS_PROXY_PAC);
+
+        Chai.expect(evaluatePac(result.cookedPacData, 'user.github.io'))
+            .to.equal('HTTPS own.example:443');
+        Chai.expect(evaluatePac(result.cookedPacData, 'child.user.github.io'))
+            .to.equal('HTTPS own.example:443');
+        Chai.expect(evaluatePac(result.cookedPacData, 'other.github.io'))
+            .to.equal(PROVIDER_PROXY_RESULT);
+
+      });
+
+  Mocha.it('switches domain, exact-host, Direct, and Auto rules cleanly',
+      async function() {
+
+        const host = 'a.b.example.co.uk';
+        let pacMods = {
+          ownProxies: [ownProxy('own.example', 443)],
+          exceptions: [{pattern: 'preserve.test', action: 'DIRECT'}],
+        };
+
+        pacMods = global.mv3SiteScope.setHostMode(
+            pacMods,
+            host,
+            'direct',
+            'domain',
+        );
+        let result = await cook(pacMods, RAW_ALWAYS_PROXY_PAC);
+        Chai.expect(evaluatePac(result.cookedPacData, host)).to.equal('DIRECT');
+        Chai.expect(evaluatePac(result.cookedPacData, 'sub.example.co.uk'))
+            .to.equal('DIRECT');
+        Chai.expect(evaluatePac(result.cookedPacData, 'unrelated.co.uk'))
+            .to.equal(PROVIDER_PROXY_RESULT);
+
+        pacMods = global.mv3SiteScope.setHostMode(
+            pacMods,
+            host,
+            'proxy',
+            'host',
+        );
+        result = await cook(pacMods, RAW_ALWAYS_PROXY_PAC);
+        Chai.expect(evaluatePac(result.cookedPacData, host))
+            .to.equal('HTTPS own.example:443');
+        Chai.expect(evaluatePac(result.cookedPacData, `sub.${host}`))
+            .to.equal(PROVIDER_PROXY_RESULT);
+        Chai.expect(pacMods.exceptions.map((rule) => rule.pattern))
+            .not.to.include('*.example.co.uk');
+
+        pacMods = global.mv3SiteScope.setHostMode(
+            pacMods,
+            host,
+            'auto',
+            'domain',
+        );
+        result = await cook(pacMods, RAW_ALWAYS_PROXY_PAC);
+        Chai.expect(evaluatePac(result.cookedPacData, host))
+            .to.equal(PROVIDER_PROXY_RESULT);
+        Chai.expect(pacMods.exceptions).to.deep.equal([{
+          pattern: 'preserve.test',
+          action: 'DIRECT',
+          enabled: true,
+          note: '',
+        }]);
+
+      });
+
+  Mocha.it('recognizes and removes unsafe legacy popup wildcards', function() {
+
+    const host = 'a.b.example.co.uk';
+    const legacy = {
+      ownProxies: [ownProxy('own.example', 443)],
+      exceptions: [
+        {pattern: '*.co.uk', action: 'PROXY'},
+        {pattern: 'preserve.test', action: 'DIRECT'},
+      ],
+    };
+    const state = global.mv3SiteScope.getHostRuleState(legacy, host);
+    const corrected = global.mv3SiteScope.setHostMode(
+        legacy,
+        host,
+        'proxy',
+        'domain',
+    );
+    const auto = global.mv3SiteScope.setHostMode(
+        corrected,
+        host,
+        'auto',
+        'domain',
+    );
+
+    Chai.expect(state).to.include({
+      mode: 'proxy',
+      scope: 'domain',
+      pattern: '*.co.uk',
+      legacy: true,
+    });
+    Chai.expect(corrected.exceptions.map((rule) => rule.pattern))
+        .to.deep.equal(['preserve.test', '*.example.co.uk']);
+    Chai.expect(auto.exceptions.map((rule) => rule.pattern))
+        .to.deep.equal(['preserve.test']);
+
+  });
+
+  Mocha.it('normalizes exact rules without broadening exact-host scope',
+      async function() {
+
+        const result = await cook({
+          exceptions: [
+            {pattern: 'Sub.Example.Com.', action: 'DIRECT'},
+            {pattern: '[2001:DB8::1]', action: 'DIRECT'},
+          ],
+        }, RAW_ALWAYS_PROXY_PAC);
+
+        Chai.expect(evaluatePac(result.cookedPacData, 'sub.example.com.'))
+            .to.equal('DIRECT');
+        Chai.expect(evaluatePac(result.cookedPacData, 'child.sub.example.com'))
+            .to.equal(PROVIDER_PROXY_RESULT);
+        Chai.expect(evaluatePac(result.cookedPacData, '2001:db8::1'))
+            .to.equal('DIRECT');
+
+      });
 
   Mocha.it('preserves the exact provider proxy result with safe defaults', async function() {
 

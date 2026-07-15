@@ -27,6 +27,7 @@ const PAGE_CONSUMER_SOURCE = [
 
 const SELF_TEST_EXPORTS = Object.freeze([
   'mv3PacMods',
+  'mv3SiteScope',
   'mv3Providers',
   'mv3PeriodicUpdate',
   'mv3ProxyAuth',

@@ -6,7 +6,7 @@
 
   // IndexedDB artifact storage supports provider PACs larger than storage.local.
   const MAX_PAC_BYTES = 16 * 1024 * 1024;
-  const PAC_COOK_SEMANTICS_VERSION = 3;
+  const PAC_COOK_SEMANTICS_VERSION = 4;
   const COOK_START = '\n\n//%#@@@@@@ MV3_PAC_COOK_START @@@@@@#%';
   const COOK_END = '//%#@@@@@@ MV3_PAC_COOK_END @@@@@@#%';
 
@@ -207,20 +207,31 @@
   const mv3NoDirect = ${JSON.stringify(mods.noDirect)};
   const mv3UsePacScriptProxies = ${JSON.stringify(mods.usePacScriptProxies)};
 
+  function mv3NormalizeHost(host) {
+    let normalizedHost = String(host || "").trim().toLowerCase();
+    while (normalizedHost.endsWith(".")) {
+      normalizedHost = normalizedHost.slice(0, -1);
+    }
+    if (normalizedHost.startsWith("[") && normalizedHost.endsWith("]")) {
+      normalizedHost = normalizedHost.slice(1, -1);
+    }
+    return normalizedHost;
+  }
+
   function mv3HostMatches(host, pattern) {
-    const normalizedHost = String(host || "").toLowerCase();
-    const normalizedPattern = String(pattern || "").toLowerCase();
+    const normalizedHost = mv3NormalizeHost(host);
+    const normalizedPattern = String(pattern || "").trim().toLowerCase();
     if (!normalizedPattern) {
       return false;
     }
     if (normalizedPattern.startsWith("*.")) {
-      const baseDomain = normalizedPattern.slice(2);
+      const baseDomain = mv3NormalizeHost(normalizedPattern.slice(2));
       return normalizedHost === baseDomain || normalizedHost.endsWith("." + baseDomain);
     }
     if (normalizedPattern.startsWith("*")) {
-      return normalizedHost.endsWith(normalizedPattern.slice(1));
+      return normalizedHost.endsWith(mv3NormalizeHost(normalizedPattern.slice(1)));
     }
-    return normalizedHost === normalizedPattern;
+    return normalizedHost === mv3NormalizeHost(normalizedPattern);
   }
 
   function mv3AnyHostMatches(host, patterns) {
@@ -426,7 +437,7 @@ ${COOK_END}`;
         stableStringify({
           pacCookSemanticsVersion: PAC_COOK_SEMANTICS_VERSION,
           pacMods: normalizePacMods({}),
-        }).includes('"pacCookSemanticsVersion":3'),
+        }).includes('"pacCookSemanticsVersion":4'),
       directRuleReturnsDirect:
         buildWrapper(normalizePacMods({
           localTor: {enabled: true},

@@ -112,7 +112,7 @@
     }
   },
   "popupSubdomainHeuristicNote": {
-    "message": "Subdomain scope uses a simple last-two-label domain heuristic."
+    "message": "Domain scope uses the registrable domain and respects public suffix boundaries."
   },
   "popupQuickProxies": {
     "message": "Quick proxies"

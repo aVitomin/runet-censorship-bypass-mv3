@@ -9,6 +9,7 @@ const BACKGROUND_DIRECTORY = Path.resolve(__dirname, '..', 'background');
 const BACKGROUND_FILES = Object.freeze([
   'pac-artifacts.js',
   'pac-mods.js',
+  'site-scope.js',
   'proxy-health.js',
   'pac-providers.js',
   'state.js',
@@ -25,6 +26,7 @@ const BACKGROUND_FILES = Object.freeze([
 const BACKGROUND_EXPORTS = Object.freeze([
   'mv3PacArtifacts',
   'mv3PacMods',
+  'mv3SiteScope',
   'mv3ProxyHealth',
   'mv3Providers',
   'mv3State',
@@ -43,6 +45,7 @@ function loadBackgroundModules() {
 
   BACKGROUND_EXPORTS.forEach((name) => delete global[name]);
   global.self = global;
+  global.tldts = require('tldts');
   if (!global.crypto) {
     global.crypto = Crypto.webcrypto;
   }

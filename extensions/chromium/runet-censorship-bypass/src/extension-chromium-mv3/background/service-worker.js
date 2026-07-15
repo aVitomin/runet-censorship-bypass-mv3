@@ -2,14 +2,16 @@
 
 /* global importScripts, mv3LegacyMigrationApply, mv3LegacyMigrationAudit */
 /* global mv3ActionStatus, mv3PacArtifacts, mv3PacCook, mv3PacDownload */
-/* global mv3PacMods, mv3PeriodicUpdate */
+/* global mv3PacMods, mv3PeriodicUpdate, mv3SiteScope */
 /* global mv3Providers, mv3ProxyAuth, mv3ProxyHealth, mv3ProxySettings */
 /* global mv3State */
 
 importScripts(
+    'vendor/tldts/dist/index.umd.min.js',
     'storage.js',
     'pac-artifacts.js',
     'pac-mods.js',
+    'site-scope.js',
     'proxy-health.js',
     'pac-providers.js',
     'state.js',
@@ -1393,7 +1395,7 @@ function normalizePopupTabUrl(tabUrl) {
   }
   return {
     controllable: true,
-    host: parsed.hostname.toLowerCase(),
+    host: mv3SiteScope.normalizeHost(parsed.hostname),
     reason: '',
   };
 
@@ -1401,88 +1403,19 @@ function normalizePopupTabUrl(tabUrl) {
 
 function getPopupHostRuleState(pacMods, host) {
 
-  const rules = Array.isArray(pacMods.exceptions) ? pacMods.exceptions : [];
-  const patterns = getPopupSitePatterns(host);
-  const exactPattern = patterns.exactPattern.toLowerCase();
-  const wildcardPattern = patterns.wildcardPattern.toLowerCase();
-  let rule = findEnabledRuleByPattern(rules, exactPattern);
-  let scope = 'host';
-  if (!rule && patterns.wildcardAvailable) {
-    rule = findEnabledRuleByPattern(rules, wildcardPattern);
-    scope = 'domain';
-  }
-  if (!rule) {
-    return {
-      mode: 'auto',
-      scope: patterns.wildcardAvailable ? 'domain' : 'host',
-      pattern: patterns.wildcardAvailable ? wildcardPattern : exactPattern,
-    };
-  }
-  return {
-    mode: rule.action === 'PROXY' ? 'proxy' : 'direct',
-    scope,
-    pattern: String(rule.pattern || '').toLowerCase(),
-  };
-
-}
-
-function findEnabledRuleByPattern(rules, pattern) {
-
-  return rules.find((item) =>
-    item &&
-    item.enabled !== false &&
-    String(item.pattern || '').toLowerCase() === pattern,
-  );
+  return mv3SiteScope.getHostRuleState(pacMods, host);
 
 }
 
 function setPopupHostMode(pacMods, host, mode, scope) {
 
-  const normalized = mv3PacMods.normalizePacMods(pacMods);
-  const patterns = getPopupSitePatterns(host);
-  const exactPattern = patterns.exactPattern.toLowerCase();
-  const wildcardPattern = patterns.wildcardPattern.toLowerCase();
-  const selectedPattern =
-    scope === 'domain' && patterns.wildcardAvailable ?
-      wildcardPattern :
-      exactPattern;
-  const rules = normalized.exceptions.filter((rule) =>
-    ![exactPattern, wildcardPattern].includes(
-        String(rule.pattern || '').toLowerCase(),
-    ),
-  );
-  if (mode !== 'auto') {
-    rules.push({
-      pattern: selectedPattern,
-      action: mode === 'proxy' ? 'PROXY' : 'DIRECT',
-      enabled: true,
-      note: '',
-    });
-  }
-  return Object.assign({}, normalized, {exceptions: rules});
+  return mv3SiteScope.setHostMode(pacMods, host, mode, scope);
 
 }
 
 function getPopupSitePatterns(host) {
 
-  const normalizedHost = String(host || '').toLowerCase();
-  const wildcardPattern = getPopupWildcardPattern(normalizedHost);
-  return {
-    exactPattern: normalizedHost,
-    wildcardPattern,
-    wildcardAvailable: Boolean(wildcardPattern && wildcardPattern !== normalizedHost),
-    wildcardHeuristic: 'last-two-labels',
-  };
-
-}
-
-function getPopupWildcardPattern(host) {
-
-  const labels = String(host || '').split('.').filter(Boolean);
-  if (labels.length < 2) {
-    return String(host || '').toLowerCase();
-  }
-  return `*.${labels.slice(-2).join('.')}`;
+  return mv3SiteScope.getSitePatterns(host);
 
 }
 
