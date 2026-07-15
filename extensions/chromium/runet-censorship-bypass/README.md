@@ -90,14 +90,15 @@ routing when you explicitly cook and apply it.
 
 ## Routing behavior
 
-- **Auto** removes the current-site override and follows the selected PAC provider.
-- Sites not selected by the provider PAC remain DIRECT by default.
+- **Auto** removes the current-site override and follows the selected PAC provider;
+  with safe defaults, non-empty provider Proxy results are preserved unchanged.
+- Provider `DIRECT` results remain `DIRECT` by default.
 - Enabling Tor, WARP, or an own proxy only makes it available to explicit Proxy
   rules by default; it does not proxy every site.
 - **Proxy** routes a matching user rule through enabled proxy candidates.
 - **Direct** forces a matching user rule to bypass the proxy.
 - Broad own-proxy use, DIRECT replacement, and no-DIRECT behavior are advanced,
-  explicit opt-ins.
+  explicit opt-ins; Proxy and Direct rules override provider behavior.
 
 The safe defaults are:
 

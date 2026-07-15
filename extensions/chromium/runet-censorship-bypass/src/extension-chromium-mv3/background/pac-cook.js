@@ -6,7 +6,7 @@
 
   // IndexedDB artifact storage supports provider PACs larger than storage.local.
   const MAX_PAC_BYTES = 16 * 1024 * 1024;
-  const PAC_COOK_SEMANTICS_VERSION = 2;
+  const PAC_COOK_SEMANTICS_VERSION = 3;
   const COOK_START = '\n\n//%#@@@@@@ MV3_PAC_COOK_START @@@@@@#%';
   const COOK_END = '//%#@@@@@@ MV3_PAC_COOK_END @@@@@@#%';
 
@@ -249,14 +249,15 @@
   }
 
   function mv3ApplyProviderPolicy(result) {
+    const providerResult = String(result || "");
     const parts = [];
     if (mv3BroadOwnProxyResult) {
       parts.push(mv3BroadOwnProxyResult);
     }
-    if (mv3UsePacScriptProxies) {
-      parts.push(String(result || ""));
+    if (mv3UsePacScriptProxies && providerResult.trim()) {
+      parts.push(providerResult);
     }
-    if (!mv3NoDirect) {
+    if (!mv3NoDirect && (!mv3UsePacScriptProxies || !providerResult.trim())) {
       parts.push("DIRECT");
     }
     return mv3ApplyDirectPolicy(parts.filter(Boolean).join("; "));
@@ -425,7 +426,7 @@ ${COOK_END}`;
         stableStringify({
           pacCookSemanticsVersion: PAC_COOK_SEMANTICS_VERSION,
           pacMods: normalizePacMods({}),
-        }).includes('"pacCookSemanticsVersion":2'),
+        }).includes('"pacCookSemanticsVersion":3'),
       directRuleReturnsDirect:
         buildWrapper(normalizePacMods({
           localTor: {enabled: true},
