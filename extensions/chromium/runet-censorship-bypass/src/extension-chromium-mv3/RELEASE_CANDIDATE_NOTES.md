@@ -118,8 +118,6 @@ MV3 migration: @aVitomin with Codex
   section instead of normal quick-start warnings.
 - Not restored for safety: DNS monkey-patching / DNS leak PAC overrides and
   arbitrary raw `replaceDirectWith` PAC strings.
-- Custom PAC input URLs require HTTPS (with loopback HTTP allowed), but a final
-  URL reached through redirects is not revalidated.
 - Not restored for RC scope: secure-provider-proxy filtering.
 - Partial parity: full weighted exception edge cases.
 - MV3 does not use the blocking `webRequest` permission.

@@ -78,7 +78,9 @@ one per line. Custom providers can be selected in both full settings and the
 toolbar popup, and can be edited, disabled, or deleted later.
 
 Custom PAC URLs must use HTTPS. `http://localhost` and `http://127.0.0.1` are
-also accepted for local testing. The extension downloads, validates, stores,
+also accepted for local testing. Credential-bearing URLs are rejected. The
+extension validates both the requested URL and the final response URL after
+redirects before accepting the PAC body. It then downloads, validates, stores,
 cooks, and applies custom PAC through the same pipeline used for built-in
 providers. New PAC bodies remain in IndexedDB artifacts and are not stored
 inline in `mv3State` or executed by extension JavaScript. If migration of an

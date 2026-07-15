@@ -126,9 +126,9 @@ credentials; and save. Add an exact-host Proxy rule for the echo hostname. Keep
 `ownProxiesOnlyForOwnSites: true`, `replaceDirectWithProxy: false`, and
 `noDirect: false` unless a case says otherwise. Choose Download PAC, Cook PAC,
 and Apply proxy, then confirm that the extension controls a non-mandatory PAC.
-The loopback server does not redirect. Redirect handling remains separate
-security QA because custom-provider fetches follow redirects without currently
-revalidating the final response URL.
+The loopback server does not redirect. Requested and final PAC response URL
+validation, including redirect rejection before artifact storage, is covered by
+the automated MV3 security tests rather than these browser routing cases.
 
 After changing `$env:PAC_BODY`, stop the Node server with Ctrl+C, set the new
 value in that same PowerShell window, restart the server, then repeat Download

@@ -7,7 +7,7 @@ These files form one service-worker runtime. Preserve the top-level `importScrip
 - Normalize settings through the module APIs. Avoid new whole-state read/modify/write races; `saveStatePatch` is not transactionally serialized.
 - Generated explicit Proxy branches require at least one usable candidate and contain no provider or `DIRECT` fallback. Do not overstate browser fail-closed behavior while PAC application is non-mandatory or candidate text can be malformed.
 - Never serialize valid own-proxy username/password fields into PAC. Auth challenges must be proxy challenges for an exact host/port, bounded by retry limits. Persist only redacted auth/health/migration events.
-- Sanitize request URLs before state, notifications, or logs. Treat custom URL query strings as sensitive. Custom input URLs are validated before fetch, but the final URL after a followed redirect is not currently revalidated. Permission, redirect, provider fallback, and error-listener changes require security review.
+- Sanitize request URLs before state, notifications, or logs. Treat custom URL query strings as sensitive. Validate custom input URLs before fetch and revalidate the final URL after followed redirects before accepting a PAC body. Permission, redirect, provider fallback, and error-listener changes require security review.
 - Automatic refresh may download/cook while disabled, but may reapply only after both persisted metadata and live Chromium control confirm the same active PAC.
 - Migration remains an explicit audit and selected-field apply. It neither clears legacy storage nor invokes proxy application.
 

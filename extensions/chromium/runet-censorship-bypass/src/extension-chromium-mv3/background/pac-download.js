@@ -97,7 +97,58 @@
 
   }
 
-  async function downloadUrl(providerKey, url, cache) {
+  function isCustomProvider(provider) {
+
+    return provider.type === 'custom' ||
+      mv3Providers.isCustomProviderKey(provider.key);
+
+  }
+
+  function isTrustedBuiltInDataUrl(provider, url) {
+
+    if (provider.type !== 'builtIn') {
+      return false;
+    }
+    const builtIn = mv3Providers.getProviderByKey(provider.key);
+    return Boolean(
+        builtIn &&
+        builtIn.readOnly &&
+        builtIn.urls.includes(url) &&
+        String(url).startsWith('data:'),
+    );
+
+  }
+
+  function validateDownloadUrl(url, ifResponseUrl) {
+
+    try {
+      mv3Providers.normalizeCustomPacUrl(url);
+      return null;
+    } catch (err) {
+      return createError(
+          ifResponseUrl ?
+            'PAC_RESPONSE_URL_REJECTED' :
+            'PAC_SOURCE_URL_REJECTED',
+          ifResponseUrl ?
+            'PAC response URL is not allowed.' :
+            'PAC source URL is not allowed.',
+      );
+    }
+
+  }
+
+  async function downloadUrl(provider, url, cache) {
+
+    const providerKey = provider.key;
+    const ifCustom = isCustomProvider(provider);
+    const failureUrl = ifCustom ? null : url;
+    const ifTrustedData = isTrustedBuiltInDataUrl(provider, url);
+    if (!ifTrustedData) {
+      const sourceUrlError = validateDownloadUrl(url, false);
+      if (sourceUrlError) {
+        return createFailure(providerKey, null, sourceUrlError);
+      }
+    }
 
     let response;
     try {
@@ -106,13 +157,22 @@
       const ifTimeout = err && err.name === 'AbortError';
       return createFailure(
           providerKey,
-          url,
+          failureUrl,
           createError(
               ifTimeout ? 'PAC_TIMEOUT' : 'PAC_DOWNLOAD_FAILED',
               ifTimeout ? 'PAC download timed out.' : 'PAC download failed.',
-              err && err.message,
           ),
       );
+    }
+
+    if (!ifTrustedData) {
+      const responseUrlError = validateDownloadUrl(
+          response && response.url,
+          true,
+      );
+      if (responseUrlError) {
+        return createFailure(providerKey, null, responseUrlError);
+      }
     }
 
     const lastModified = getHeader(response.headers, 'Last-Modified');
@@ -135,7 +195,7 @@
     if (!response.ok) {
       return createFailure(
           providerKey,
-          url,
+          failureUrl,
           createError(
               'PAC_DOWNLOAD_FAILED',
               `PAC download failed with HTTP ${response.status}.`,
@@ -153,7 +213,7 @@
     if (contentLength !== null && contentLength > MAX_PAC_BYTES) {
       return createFailure(
           providerKey,
-          url,
+          failureUrl,
           createError(
               'PAC_TOO_LARGE',
               'PAC response is larger than the MV3 cache limit.',
@@ -167,7 +227,7 @@
     if (actualLength > MAX_PAC_BYTES) {
       return createFailure(
           providerKey,
-          url,
+          failureUrl,
           createError(
               'PAC_TOO_LARGE',
               'PAC response is larger than the MV3 cache limit.',
@@ -178,7 +238,11 @@
 
     const validationError = validatePacText(rawPacData);
     if (validationError) {
-      return createFailure(providerKey, url, validationError);
+      return createFailure(
+          providerKey,
+          failureUrl,
+          validationError,
+      );
     }
 
     return {
@@ -207,6 +271,11 @@
       return {
         key: providerOrKey.key,
         urls: providerOrKey.urls.slice(),
+        type: providerOrKey.type || (
+          mv3Providers.isCustomProviderKey(providerOrKey.key) ?
+            'custom' :
+            'builtIn'
+        ),
       };
     }
     return mv3Providers.getProviderByKey(providerOrKey);
@@ -227,7 +296,7 @@
 
     let lastFailure = null;
     for (const url of provider.urls) {
-      const result = await downloadUrl(providerKey, url, cache);
+      const result = await downloadUrl(provider, url, cache);
       if (result.ok) {
         return result;
       }

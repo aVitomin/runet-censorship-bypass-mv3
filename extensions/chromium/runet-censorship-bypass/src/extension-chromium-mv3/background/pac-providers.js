@@ -400,6 +400,7 @@
     hasProvider,
     isBuiltInProviderKey,
     isCustomProviderKey,
+    normalizeCustomPacUrl,
     validateCustomProvider,
     normalizeCustomProviders,
     createCustomProviderKey,
