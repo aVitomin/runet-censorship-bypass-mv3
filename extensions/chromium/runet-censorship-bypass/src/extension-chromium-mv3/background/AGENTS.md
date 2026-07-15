@@ -4,7 +4,7 @@ These files form one service-worker runtime. Preserve the top-level `importScrip
 
 - Keep downloaded PAC as text. Validate/hash/store/cook it without extension-side execution. Apply only a current cooked artifact whose provider, raw hash, modifier hash, and live proxy-control checks agree.
 - Store new PAC bodies in `mv3PacArtifacts`; keep only summaries/references in normal state and RPC results. Do not delete legacy inline data unless its artifact write succeeded.
-- Normalize settings through the module APIs. Avoid new whole-state read/modify/write races; `saveStatePatch` is not transactionally serialized.
+- Normalize settings through the module APIs. State reads and whole-state writers are serialized per active worker, with each queued mutation rereading storage. Do not bypass that queue or derive same-field updates across separate state calls when concurrent callers can intervene; the queue itself does not survive worker restart.
 - Generated explicit Proxy branches require at least one usable candidate and contain no provider or `DIRECT` fallback. Do not overstate browser fail-closed behavior while PAC application is non-mandatory or candidate text can be malformed.
 - Never serialize valid own-proxy username/password fields into PAC. Auth challenges must be proxy challenges for an exact host/port, bounded by retry limits. Persist only redacted auth/health/migration events.
 - Sanitize request URLs before state, notifications, or logs. Treat custom URL query strings as sensitive. Validate custom input URLs before fetch and revalidate the final URL after followed redirects before accepting a PAC body. Permission, redirect, provider fallback, and error-listener changes require security review.

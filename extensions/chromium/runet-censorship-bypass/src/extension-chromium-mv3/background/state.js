@@ -67,6 +67,7 @@
   const MAX_LEGACY_MIGRATION_WARNINGS = 20;
   const MIN_PERIODIC_UPDATE_INTERVAL_MINUTES = 1;
   const MAX_PERIODIC_UPDATE_INTERVAL_MINUTES = 24 * 60;
+  let stateOperationQueue = Promise.resolve();
 
   const DEFAULT_STATE = Object.freeze({
     schemaVersion: 11,
@@ -1198,7 +1199,15 @@
 
   }
 
-  async function loadState() {
+  function enqueueStateOperation(operation) {
+
+    const queued = stateOperationQueue.then(operation);
+    stateOperationQueue = queued.catch(() => undefined);
+    return queued;
+
+  }
+
+  async function loadStateFromStorage() {
 
     const items = await mv3Storage.get({[STORAGE_KEY]: clone(DEFAULT_STATE)});
     const storedState = await migrateInlinePacArtifactsIfNeeded(items[STORAGE_KEY]);
@@ -1206,10 +1215,15 @@
 
   }
 
-  async function saveStatePatch(patch) {
+  async function loadState() {
 
-    assertObject(patch, 'patch');
-    const currentState = await loadState();
+    return enqueueStateOperation(loadStateFromStorage);
+
+  }
+
+  async function saveStatePatchNow(patch) {
+
+    const currentState = await loadStateFromStorage();
     const mergedState = Object.assign({}, currentState, patch);
     if (isObject(patch.pacMods)) {
       mergedState.pacMods = patch.pacMods;
@@ -1309,6 +1323,13 @@
 
   }
 
+  async function saveStatePatch(patch) {
+
+    assertObject(patch, 'patch');
+    return enqueueStateOperation(() => saveStatePatchNow(patch));
+
+  }
+
   async function setPacMods(pacMods) {
 
     const normalizedPacMods = normalizePacMods(pacMods, true);
@@ -1353,11 +1374,17 @@
 
   }
 
-  async function resetState() {
+  async function resetStateNow() {
 
     const defaultState = clone(DEFAULT_STATE);
     await mv3Storage.set({[STORAGE_KEY]: defaultState});
     return defaultState;
+
+  }
+
+  async function resetState() {
+
+    return enqueueStateOperation(resetStateNow);
 
   }
 
