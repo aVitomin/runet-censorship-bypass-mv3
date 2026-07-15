@@ -8,16 +8,27 @@ const vm = require('vm');
 const {loadBackgroundModules} = require('./background-modules');
 
 const PROVIDER = Object.freeze({key: 'test-provider'});
-const RAW_PROVIDER_PAC = [
-  'function FindProxyForURL(url, host) {',
-  '  return "HTTPS provider.example:443; DIRECT";',
-  '}',
-].join('\n');
-const RAW_DIRECT_PAC = [
-  'function FindProxyForURL(url, host) {',
-  '  return "DIRECT";',
-  '}',
-].join('\n');
+const PROVIDER_PROXY_RESULT = 'PROXY 192.0.2.10:8080';
+const PROVIDER_MIXED_RESULT = [
+  PROVIDER_PROXY_RESULT,
+  'DIRECT',
+  'SOCKS5 192.0.2.11:1080',
+].join('; ');
+
+function createProviderPac(proxyResult) {
+
+  return [
+    'function FindProxyForURL(url, host) {',
+    '  if (host === "provider-proxy.test") {',
+    `    return ${JSON.stringify(proxyResult)};`,
+    '  }',
+    '  return "DIRECT";',
+    '}',
+  ].join('\n');
+
+}
+
+const RAW_PROVIDER_PAC = createProviderPac(PROVIDER_PROXY_RESULT);
 
 async function cook(pacMods, rawPacData = RAW_PROVIDER_PAC) {
 
@@ -81,24 +92,107 @@ Mocha.describe('MV3 PAC routing regressions', function() {
 
   });
 
-  Mocha.it('leaves Auto/provider traffic on the provider with safe defaults', async function() {
+  Mocha.it('preserves the exact provider proxy result with safe defaults', async function() {
 
     const result = await cook({
       ownProxies: [ownProxy('own.example', 443)],
     });
-    const routed = evaluatePac(result.cookedPacData, 'auto.example');
     const defaults = global.mv3PacMods.normalizePacMods({});
 
-    Chai.expect(routed).to.include('HTTPS provider.example:443');
-    Chai.expect(routed).not.to.include('own.example');
     Chai.expect(defaults).to.include({
       usePacScriptProxies: true,
       ownProxiesOnlyForOwnSites: true,
       replaceDirectWithProxy: false,
       noDirect: false,
     });
+    Chai.expect(evaluatePac(result.cookedPacData, 'provider-proxy.test'))
+        .to.equal(PROVIDER_PROXY_RESULT);
 
   });
+
+  Mocha.it('preserves the exact provider Direct result with no manual rule',
+      async function() {
+
+        const result = await cook({});
+
+        Chai.expect(evaluatePac(result.cookedPacData, 'provider-direct.test'))
+            .to.equal('DIRECT');
+
+      });
+
+  Mocha.it('lets an explicit Proxy rule override the provider result', async function() {
+
+    const result = await cook({
+      ownProxies: [ownProxy('explicit-proxy.test', 8443)],
+      exceptions: [{pattern: 'provider-proxy.test', action: 'PROXY'}],
+    });
+
+    Chai.expect(evaluatePac(result.cookedPacData, 'provider-proxy.test'))
+        .to.equal('HTTPS explicit-proxy.test:8443');
+
+  });
+
+  Mocha.it('lets an explicit Direct rule override the provider result', async function() {
+
+    const result = await cook({
+      exceptions: [{pattern: 'provider-proxy.test', action: 'DIRECT'}],
+    });
+
+    Chai.expect(evaluatePac(result.cookedPacData, 'provider-proxy.test'))
+        .to.equal('DIRECT');
+
+  });
+
+  Mocha.it('restores the exact provider result after a manual rule returns to Auto',
+      async function() {
+
+        const manualMods = {
+          ownProxies: [ownProxy('explicit-proxy.test', 8443)],
+          exceptions: [{pattern: 'provider-proxy.test', action: 'PROXY'}],
+        };
+        const manual = await cook(manualMods);
+        const auto = await cook(Object.assign({}, manualMods, {exceptions: []}));
+
+        Chai.expect(evaluatePac(manual.cookedPacData, 'provider-proxy.test'))
+            .to.equal('HTTPS explicit-proxy.test:8443');
+        Chai.expect(evaluatePac(auto.cookedPacData, 'provider-proxy.test'))
+            .to.equal(PROVIDER_PROXY_RESULT);
+
+      });
+
+  Mocha.it('does not broaden enabled candidates onto provider-Direct traffic',
+      async function() {
+
+        const cases = {
+          ownProxy: {
+            ownProxies: [ownProxy('own-proxy.test', 8443)],
+          },
+          tor: {
+            localTor: {enabled: true},
+          },
+          warp: {
+            warp: {
+              enabled: true,
+              proxyString: 'HTTPS warp-proxy.test:8443',
+            },
+          },
+        };
+        const actual = {};
+        for (const [name, pacMods] of Object.entries(cases)) {
+          const result = await cook(Object.assign({
+            ownProxiesOnlyForOwnSites: true,
+          }, pacMods));
+          actual[name] = evaluatePac(
+              result.cookedPacData,
+              'provider-direct.test',
+          );
+        }
+
+        Object.entries(actual).forEach(([name, result]) => {
+          Chai.expect(result, name).to.equal('DIRECT');
+        });
+
+      });
 
   Mocha.it('gives explicit Direct precedence over explicit Proxy', async function() {
 
@@ -180,14 +274,67 @@ Mocha.describe('MV3 PAC routing regressions', function() {
 
   });
 
-  Mocha.it('removes Direct from a noDirect provider result', async function() {
+  Mocha.it('synthesizes Direct only for an empty provider result', async function() {
 
-    const result = await cook({noDirect: true}, RAW_DIRECT_PAC);
+    const result = await cook({}, createProviderPac(''));
 
-    Chai.expect(result.ok).to.equal(true);
-    Chai.expect(evaluatePac(result.cookedPacData, 'direct.example'))
-        .to.equal('');
+    Chai.expect(evaluatePac(result.cookedPacData, 'provider-proxy.test'))
+        .to.equal('DIRECT');
 
   });
+
+  Mocha.it('removes Direct without altering provider proxy candidate order',
+      async function() {
+
+        const result = await cook(
+            {noDirect: true},
+            createProviderPac(PROVIDER_MIXED_RESULT),
+        );
+
+        Chai.expect(result.ok).to.equal(true);
+        Chai.expect(evaluatePac(result.cookedPacData, 'provider-direct.test'))
+            .to.equal('');
+        Chai.expect(evaluatePac(result.cookedPacData, 'provider-proxy.test'))
+            .to.equal([
+              PROVIDER_PROXY_RESULT,
+              'SOCKS5 192.0.2.11:1080',
+            ].join('; '));
+
+      });
+
+  async function cookWithDirectReplacement() {
+
+    return cook({
+      ownProxies: [{
+        enabled: true,
+        type: 'HTTPS',
+        host: 'direct-replacement.test',
+        port: 8443,
+        useAsDirectReplacement: true,
+      }],
+      replaceDirectWithProxy: true,
+    });
+
+  }
+
+  Mocha.it('replaces a provider Direct result exactly once when opted in',
+      async function() {
+
+        const result = await cookWithDirectReplacement();
+
+        Chai.expect(evaluatePac(result.cookedPacData, 'provider-direct.test'))
+            .to.equal('HTTPS direct-replacement.test:8443');
+
+      });
+
+  Mocha.it('does not alter a provider Proxy result during Direct replacement',
+      async function() {
+
+        const result = await cookWithDirectReplacement();
+
+        Chai.expect(evaluatePac(result.cookedPacData, 'provider-proxy.test'))
+            .to.equal(PROVIDER_PROXY_RESULT);
+
+      });
 
 });

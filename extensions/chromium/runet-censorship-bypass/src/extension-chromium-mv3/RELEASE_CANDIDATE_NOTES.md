@@ -88,18 +88,21 @@ MV3 migration: @aVitomin with Codex
 - `noDirect` defaults to `false`.
 - Auto mode removes exact-host and derived wildcard overrides for the current
   site, then follows the selected provider PAC.
+- Safe defaults preserve a non-empty provider Proxy result without appending a
+  synthetic `DIRECT`; provider candidate order remains unchanged.
 - A provider `DIRECT` result remains `DIRECT` by default even when Tor, WARP,
   or own proxies are enabled.
 - Explicit Proxy rules use enabled user proxy candidates; explicit Direct rules
-  return `DIRECT`.
+  return `DIRECT`; both override provider behavior.
+- Broad DIRECT replacement and no-DIRECT behavior remain explicit opt-ins.
 - Generated explicit Proxy branches contain enabled user candidates only: their
   PAC result has no `DIRECT` or provider-PAC fallback, and applying a Proxy rule
   without an enabled candidate is rejected. This generated-result invariant is
   not universal browser fail-closed behavior: PAC is applied with
   `mandatory: false`, and PAC failure or an empty/malformed result may fall back
   to a direct connection.
-- Cooked artifacts from builds before the explicit-Proxy safety fix are marked
-  stale automatically and must be recooked; the cached raw PAC is retained.
+- Cooked artifacts from builds before the current routing-safety semantics are
+  marked stale automatically and must be recooked; the cached raw PAC is retained.
 - Clear proxy returns Chromium to system proxy settings without deleting PAC
   artifacts, provider selection, site rules, or legacy data.
 
