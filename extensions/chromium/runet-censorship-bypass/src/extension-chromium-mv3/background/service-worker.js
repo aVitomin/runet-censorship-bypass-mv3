@@ -257,20 +257,24 @@ const RPC_METHODS = Object.freeze({
   async getState() {
 
     const state = await mv3State.loadState();
+    const [periodicUpdate, cookedPacStale] = await Promise.all([
+      mv3PeriodicUpdate.getStatus(state),
+      getCookedPacStaleness(state),
+    ]);
     return Object.assign({}, PHASE_TEN_STATUS, {
       state,
       providers: getProvidersForState(state, true),
       artifactStorage: mv3PacArtifacts.getStatus(),
       proxyAuth: getProxyAuthStatusFromState(state),
-      periodicUpdate: await mv3PeriodicUpdate.getStatus(),
+      periodicUpdate,
       reliability: {
         autoUpdate: getPacAutoUpdateSummary(state),
         proxyHealth: state.proxyHealth,
       },
       stale: {
-        cookedPac: await getCookedPacStaleness(state),
+        cookedPac: cookedPacStale,
       },
-      proxy: await getProxyStatusFromState(state),
+      proxy: await getProxyStatusFromState(state, cookedPacStale),
     });
 
   },
@@ -295,14 +299,11 @@ const RPC_METHODS = Object.freeze({
     const previousFingerprint = mv3ProxyHealth.getCandidateFingerprint(
         previous.pacMods,
     );
-    const pacMods = await mv3State.setPacMods(params.pacMods);
-    if (
+    const state = await mv3State.savePacMods(params.pacMods, {
+      resetProxyHealth:
       previousFingerprint !==
-      mv3ProxyHealth.getCandidateFingerprint(pacMods)
-    ) {
-      await mv3State.resetProxyHealth();
-    }
-    const state = await mv3State.loadState();
+        mv3ProxyHealth.getCandidateFingerprint(params.pacMods),
+    });
     await requestActionStatusRefresh({state});
     return state;
 
@@ -631,16 +632,10 @@ const RPC_METHODS = Object.freeze({
 
   async runPeriodicUpdateNow(params = {}) {
 
-    const result = await runPeriodicUpdate({
+    return runPeriodicUpdate({
       trigger: 'manual',
       applyIfSafe: params.applyIfSafe !== false,
     });
-    await updateActionStatusFromStoredState({
-      error: result && result.ok === false && result.status !== 'skipped' ?
-        result.error && result.error.message || 'Periodic PAC update failed.' :
-        '',
-    });
-    return result;
 
   },
 
@@ -1121,18 +1116,15 @@ async function persistPopupDraft(tabUrl, draft) {
     getPopupHostRuleState(previousPacMods, target.host).mode :
     'auto';
   const pacMods = applyPopupDraftToPacMods(previousPacMods, tabUrl, draft);
-  await mv3State.setPacMods(pacMods);
   const nextSiteMode = target.controllable ?
     getPopupHostRuleState(pacMods, target.host).mode :
     'auto';
-  if (
-    candidateFingerprint !==
-      mv3ProxyHealth.getCandidateFingerprint(pacMods) ||
-    previousSiteMode !== nextSiteMode
-  ) {
-    await mv3State.resetProxyHealth();
-  }
-  return mv3State.loadState();
+  return mv3State.savePacMods(pacMods, {
+    resetProxyHealth:
+      candidateFingerprint !==
+        mv3ProxyHealth.getCandidateFingerprint(pacMods) ||
+      previousSiteMode !== nextSiteMode,
+  });
 
 }
 
@@ -1651,6 +1643,9 @@ function runPeriodicUpdate(params = {}) {
       if (ifAutomatic) {
         await mv3PeriodicUpdate.scheduleDueCheck(15);
       }
+      await updateActionStatusFromStoredState({
+        error: result.status === 'error' ? result.error.message : '',
+      });
       return result;
     });
   }
@@ -1736,7 +1731,10 @@ async function executePeriodicUpdatePipeline({trigger, applyIfSafe}) {
 
   let finalAutoApply = autoApply;
   if (autoApply.allowed) {
-    finalAutoApply = await applyPeriodicUpdateIfStillSafe(providerKey);
+    finalAutoApply = await applyPeriodicUpdateIfStillSafe(
+        providerKey,
+        autoApply.previousCookedPacSha256,
+    );
     if (finalAutoApply.status === 'error') {
       return createPeriodicFailure(
           finalAutoApply.error.code,
@@ -1849,7 +1847,10 @@ function getPeriodicAutoApplyPlan(state, applyIfSafe) {
 
 }
 
-async function applyPeriodicUpdateIfStillSafe(providerKey) {
+async function applyPeriodicUpdateIfStillSafe(
+    providerKey,
+    previousCookedPacSha256,
+) {
 
   const state = await mv3State.loadState();
   if (
@@ -1894,6 +1895,18 @@ async function applyPeriodicUpdateIfStillSafe(providerKey) {
       reason: 'proxy settings are not currently controlled by this extension',
       levelOfControl: control.levelOfControl,
       rawValue: control.rawValue,
+    };
+  }
+  if (
+    previousCookedPacSha256 &&
+    state.cookedPacCache.cookedPacSha256 === previousCookedPacSha256
+  ) {
+    return {
+      allowed: true,
+      status: 'unchanged',
+      applied: false,
+      reason: 'effective cooked PAC is unchanged',
+      proxyControl: control,
     };
   }
 
@@ -2161,13 +2174,13 @@ async function getCookedPacStaleness(state) {
 
 }
 
-async function getProxyStatusFromState(state) {
+async function getProxyStatusFromState(state, cookedPacStale) {
 
   return {
     proxyApply: state.proxyApply,
     proxyControl: state.proxyControl,
     stale: {
-      cookedPac: await getCookedPacStaleness(state),
+      cookedPac: cookedPacStale || await getCookedPacStaleness(state),
     },
     currentPacProviderKey: state.currentPacProviderKey,
     cookedPacCache: await summarizeCookedPacCache(state.cookedPacCache),
@@ -2926,17 +2939,40 @@ async function downloadPacAndPersist(params) {
 
   if (result.ok && result.status === 'success') {
     let rawArtifact;
+    if (
+      state.pacCache.providerKey === result.providerKey &&
+      state.pacCache.rawPacSha256 === result.sha256 &&
+      state.pacCache.artifactRef
+    ) {
+      try {
+        const cachedArtifact = await mv3PacArtifacts.getRawPacArtifact({
+          providerKey: result.providerKey,
+          sha256: result.sha256,
+        });
+        if (
+          cachedArtifact &&
+          cachedArtifact.rawPacSha256 === result.sha256 &&
+          cachedArtifact.rawPacData === result.rawPacData
+        ) {
+          rawArtifact = cachedArtifact;
+        }
+      } catch (err) {
+        rawArtifact = null;
+      }
+    }
     try {
-      rawArtifact = await mv3PacArtifacts.putRawPacArtifact({
-        providerKey: result.providerKey,
-        url: result.url,
-        rawPacData: result.rawPacData,
-        rawPacSha256: result.sha256,
-        fetchedAt: finishedAt,
-        lastModified: result.lastModified,
-        etag: result.etag,
-        contentLength: result.contentLength,
-      });
+      if (!rawArtifact) {
+        rawArtifact = await mv3PacArtifacts.putRawPacArtifact({
+          providerKey: result.providerKey,
+          url: result.url,
+          rawPacData: result.rawPacData,
+          rawPacSha256: result.sha256,
+          fetchedAt: finishedAt,
+          lastModified: result.lastModified,
+          etag: result.etag,
+          contentLength: result.contentLength,
+        });
+      }
     } catch (err) {
       const error = normalizeProxyError(
           err,
@@ -2960,36 +2996,40 @@ async function downloadPacAndPersist(params) {
       );
     }
 
-    const pacCache = await mv3State.setPacCache(
-        createPacCacheFromDownload(result, rawArtifact, finishedAt),
-    );
-    const pacDownload = await mv3State.setPacDownloadState(
-        createPacDownloadState('success', Object.assign({}, result, {
-          startedAt,
-          finishedAt,
-        })),
-    );
-    await mv3State.saveStatePatch({lastPacUpdateStamp: finishedAt});
+    const nextState = await mv3State.saveStatePatch({
+      pacCache: createPacCacheFromDownload(result, rawArtifact, finishedAt),
+      pacDownload: createPacDownloadState(
+          'success',
+          Object.assign({}, result, {
+            startedAt,
+            finishedAt,
+          }),
+      ),
+      lastPacUpdateStamp: finishedAt,
+    });
     return {
       ok: true,
       status: 'success',
-      pacDownload,
-      pacCache: await summarizePacCache(pacCache),
+      pacDownload: nextState.pacDownload,
+      pacCache: await summarizePacCache(nextState.pacCache),
     };
   }
 
   if (result.ok && result.status === 'not_modified') {
-    const pacDownload = await mv3State.setPacDownloadState(
-        createPacDownloadState('not_modified', Object.assign({}, result, {
-          startedAt,
-          finishedAt,
-        })),
-    );
+    const nextState = await mv3State.saveStatePatch({
+      pacDownload: createPacDownloadState(
+          'not_modified',
+          Object.assign({}, result, {
+            startedAt,
+            finishedAt,
+          }),
+      ),
+    });
     return {
       ok: true,
       status: 'not_modified',
-      pacDownload,
-      pacCache: await summarizePacCache(await mv3State.getPacCache()),
+      pacDownload: nextState.pacDownload,
+      pacCache: await summarizePacCache(nextState.pacCache),
     };
   }
 
@@ -3071,6 +3111,42 @@ async function cookPacAndPersist(params) {
     return failure;
   }
 
+  const pacModsSha256 = await mv3PacCook.hashPacMods(state.pacMods);
+  const cachedCook = state.cookedPacCache;
+  if (
+    cachedCook.providerKey === providerKey &&
+    cachedCook.sourceRawPacSha256 === state.pacCache.rawPacSha256 &&
+    cachedCook.pacModsSha256 === pacModsSha256 &&
+    cachedCook.cookedPacSha256 &&
+    cachedCook.artifactRef &&
+    state.pacCook.status === 'success'
+  ) {
+    try {
+      const cachedArtifact = await mv3PacArtifacts.getCookedPacArtifact({
+        providerKey,
+        sha256: cachedCook.cookedPacSha256,
+      });
+      if (
+        cachedArtifact &&
+        cachedArtifact.cookedPacData &&
+        cachedArtifact.cookedPacSha256 === cachedCook.cookedPacSha256 &&
+        cachedArtifact.sourceRawPacSha256 === state.pacCache.rawPacSha256 &&
+        cachedArtifact.pacModsSha256 === pacModsSha256
+      ) {
+        const latestState = await mv3State.loadState();
+        return {
+          ok: true,
+          status: 'not_modified',
+          pacCook: state.pacCook,
+          cookedPacCache: await summarizeCookedPacCache(cachedCook),
+          stale: await getCookedPacStaleness(latestState),
+        };
+      }
+    } catch (err) {
+      // Fall through and reconstruct the cooked artifact from durable raw PAC.
+    }
+  }
+
   let rawArtifact;
   try {
     rawArtifact = await mv3PacArtifacts.getRawPacArtifact({
@@ -3120,7 +3196,6 @@ async function cookPacAndPersist(params) {
   }
 
   const startedAt = Date.now();
-  const pacModsSha256 = await mv3PacCook.hashPacMods(state.pacMods);
   await mv3State.setPacCookState(createPacCookState('cooking', {
     providerKey,
     sourceRawPacSha256: state.pacCache.rawPacSha256,
@@ -3131,6 +3206,7 @@ async function cookPacAndPersist(params) {
   const result = await mv3PacCook.cookPac({
     rawPacData: rawArtifact.rawPacData,
     pacMods: state.pacMods,
+    pacModsSha256,
     provider,
     sourceRawPacSha256: state.pacCache.rawPacSha256,
   });
@@ -3173,21 +3249,24 @@ async function cookPacAndPersist(params) {
       );
     }
 
-    const cookedPacCache = await mv3State.setCookedPacCache(
-        createCookedPacCacheFromCook(result, cookedArtifact, finishedAt),
-    );
-    const pacCook = await mv3State.setPacCookState(
-        createPacCookState('success', Object.assign({}, result, {
-          startedAt,
+    const nextState = await mv3State.saveStatePatch({
+      cookedPacCache: createCookedPacCacheFromCook(
+          result,
+          cookedArtifact,
           finishedAt,
-        })),
-    );
+      ),
+      pacCook: createPacCookState('success', Object.assign({}, result, {
+        startedAt,
+        finishedAt,
+      })),
+    });
+    const latestState = await mv3State.loadState();
     return {
       ok: true,
       status: 'success',
-      pacCook,
-      cookedPacCache: await summarizeCookedPacCache(cookedPacCache),
-      stale: await getCookedPacStaleness(await mv3State.loadState()),
+      pacCook: nextState.pacCook,
+      cookedPacCache: await summarizeCookedPacCache(nextState.cookedPacCache),
+      stale: await getCookedPacStaleness(latestState),
     };
   }
 

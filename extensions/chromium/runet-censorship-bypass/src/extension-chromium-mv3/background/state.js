@@ -1330,11 +1330,21 @@
 
   }
 
+  async function savePacMods(pacMods, options = {}) {
+
+    const patch = {
+      pacMods: normalizePacMods(pacMods, true),
+    };
+    if (options.resetProxyHealth === true) {
+      patch.proxyHealth = clone(DEFAULT_STATE.proxyHealth);
+    }
+    return saveStatePatch(patch);
+
+  }
+
   async function setPacMods(pacMods) {
 
-    const normalizedPacMods = normalizePacMods(pacMods, true);
-    const state = await saveStatePatch({pacMods: normalizedPacMods});
-    return state.pacMods;
+    return (await savePacMods(pacMods)).pacMods;
 
   }
 
@@ -1876,6 +1886,7 @@
     STORAGE_KEY,
     loadState,
     saveStatePatch,
+    savePacMods,
     setPacMods,
     setNotificationPrefs,
     setCurrentPacProvider,

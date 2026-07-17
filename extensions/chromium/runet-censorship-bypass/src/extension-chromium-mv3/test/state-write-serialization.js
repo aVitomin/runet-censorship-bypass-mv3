@@ -242,6 +242,32 @@ Mocha.describe('MV3 state write serialization', function() {
 
   });
 
+  Mocha.it('batches PAC modifiers and proxy-health reset in one queued write',
+      async function() {
+
+        const storage = createStorage();
+        global.mv3Storage = storage;
+        loadBackgroundModules();
+        await global.mv3State.setProxyHealthState({
+          status: 'error',
+          lastErrorCode: 'ERR_PROXY_CONNECTION_FAILED',
+        });
+        const writesBefore = storage.getWrites().length;
+
+        const state = await global.mv3State.savePacMods({
+          torBrowser: {enabled: true},
+        }, {resetProxyHealth: true});
+
+        Chai.expect(storage.getWrites()).to.have.length(writesBefore + 1);
+        Chai.expect(state.pacMods.torBrowser.enabled).to.equal(true);
+        Chai.expect(state.proxyHealth).to.include({
+          status: 'unknown',
+          lastErrorCode: null,
+        });
+        Chai.expect(state).to.deep.equal(storage.getStoredState());
+
+      });
+
   Mocha.it('serializes reset with patches in call order', async function() {
 
     const storage = createStorage();

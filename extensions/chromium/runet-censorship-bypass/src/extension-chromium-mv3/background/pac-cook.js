@@ -300,7 +300,13 @@ ${COOK_END}`;
 
   }
 
-  async function cookPac({rawPacData, pacMods, provider, sourceRawPacSha256}) {
+  async function cookPac({
+    rawPacData,
+    pacMods,
+    pacModsSha256,
+    provider,
+    sourceRawPacSha256,
+  }) {
 
     const providerKey = provider && provider.key || null;
     if (!provider) {
@@ -335,6 +341,11 @@ ${COOK_END}`;
     }
 
     const cookedPacSha256 = await mv3Hash.sha256Hex(cookedPacData);
+    const trustedPacModsSha256 =
+      typeof pacModsSha256 === 'string' &&
+      /^[a-f0-9]{64}$/i.test(pacModsSha256) ?
+        pacModsSha256.toLowerCase() :
+        await hashPacMods(normalizedMods);
     return {
       ok: true,
       status: 'success',
@@ -343,7 +354,7 @@ ${COOK_END}`;
       cookedPacSha256,
       cookedContentLength: mv3Hash.getUtf8Length(cookedPacData),
       sourceRawPacSha256,
-      pacModsSha256: await hashPacMods(normalizedMods),
+      pacModsSha256: trustedPacModsSha256,
       warnings,
     };
 

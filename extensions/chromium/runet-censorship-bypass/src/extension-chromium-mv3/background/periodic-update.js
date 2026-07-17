@@ -218,9 +218,17 @@
         state.periodicUpdate,
         state.currentPacProviderKey,
     );
+    const nextStatus = status || state.periodicUpdate.status;
+    const nextRunAt = dueAt || fallbackNextRunAt || null;
+    if (
+      state.periodicUpdate.status === nextStatus &&
+      state.periodicUpdate.nextRunAt === nextRunAt
+    ) {
+      return state.periodicUpdate;
+    }
     return mv3State.setPeriodicUpdateState({
-      status: status || state.periodicUpdate.status,
-      nextRunAt: dueAt || fallbackNextRunAt || null,
+      status: nextStatus,
+      nextRunAt,
     });
 
   }
@@ -249,9 +257,9 @@
 
   }
 
-  async function getStatus() {
+  async function getStatus(stateSnapshot) {
 
-    const state = await mv3State.loadState();
+    const state = stateSnapshot || await mv3State.loadState();
     return {
       periodicUpdate: state.periodicUpdate,
       alarms: {
