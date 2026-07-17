@@ -12,9 +12,19 @@
     off: '#64748b',
   });
   const ICON_PATHS = Object.freeze({
-    applied: 'icons/default-128.png',
-    inactive: 'icons/default-grayscale-128.png',
+    applied: Object.freeze({
+      128: 'icons/default-128.png',
+    }),
+    inactive: Object.freeze({
+      128: 'icons/default-grayscale-128.png',
+    }),
   });
+  const NOTIFICATION_ICON_PATH = 'icons/default-128.png';
+  const RUNTIME_ICON_PATHS = Object.freeze(Array.from(new Set(
+      Object.values(ICON_PATHS)
+          .flatMap((paths) => Object.values(paths))
+          .concat(NOTIFICATION_ICON_PATH),
+  )));
   const MAX_CACHED_TABS = 256;
   const actionStateByApi = new WeakMap();
 
@@ -181,10 +191,18 @@
 
   }
 
+  function getRuntimeIconPaths() {
+
+    return RUNTIME_ICON_PATHS.slice();
+
+  }
+
   async function updateStatus(status = {}, options = {}) {
 
     const actionApi = options.actionApi ||
       (typeof chrome !== 'undefined' && chrome.action);
+    const runtimeApi = options.runtimeApi ||
+      (typeof chrome !== 'undefined' && chrome.runtime);
     if (!actionApi) {
       return {ok: false, status: 'unavailable'};
     }
@@ -215,12 +233,19 @@
       ['title', 'setTitle', Object.assign({title: presentation.title}, tabParams)],
     ].filter(([key]) => previous[key] !== presentation[key]);
     const results = await Promise.all(changes.map(([, method, params]) =>
-      callAction(actionApi, method, params),
+      callAction(actionApi, runtimeApi, method, params),
     ));
     const ok = results.every(Boolean);
-    if (ok) {
+    const next = Object.assign({}, previous);
+    results.forEach((ifSucceeded, index) => {
+      if (ifSucceeded) {
+        const key = changes[index][0];
+        next[key] = presentation[key];
+      }
+    });
+    if (ok || results.some(Boolean)) {
       cache.delete(cacheKey);
-      cache.set(cacheKey, presentation);
+      cache.set(cacheKey, next);
       while (cache.size > MAX_CACHED_TABS) {
         cache.delete(cache.keys().next().value);
       }
@@ -230,6 +255,9 @@
       badge,
       iconPath: presentation.iconPath,
       changed: changes.map(([, method]) => method),
+      failed: changes
+          .filter((change, index) => !results[index])
+          .map(([, method]) => method),
     };
 
   }
@@ -245,7 +273,7 @@
 
   }
 
-  function callAction(actionApi, method, params) {
+  function callAction(actionApi, runtimeApi, method, params) {
 
     return new Promise((resolve) => {
       if (!actionApi || typeof actionApi[method] !== 'function') {
@@ -253,7 +281,10 @@
         return;
       }
       try {
-        actionApi[method](params, () => resolve(true));
+        actionApi[method](params, () => {
+          const error = runtimeApi && runtimeApi.lastError;
+          resolve(!error);
+        });
       } catch (err) {
         resolve(false);
       }
@@ -342,7 +373,11 @@
       }
       return updateStatus(
           Object.assign({}, status, params.overrides),
-          {actionApi: chromeApi.action, tabId: tab.id},
+          {
+            actionApi: chromeApi.action,
+            runtimeApi: chromeApi.runtime,
+            tabId: tab.id,
+          },
       );
 
     }
@@ -523,7 +558,7 @@
     return new Promise((resolve) => {
       chrome.notifications.create(notificationId, {
         type: 'basic',
-        iconUrl: 'icons/default-128.png',
+        iconUrl: NOTIFICATION_ICON_PATH,
         title,
         message,
       }, (id) => {
@@ -637,6 +672,7 @@
   exports.mv3ActionStatus = Object.freeze({
     getBadgeStatus,
     getIconPath,
+    getRuntimeIconPaths,
     formatTitle,
     sanitizeMessage,
     updateStatus,

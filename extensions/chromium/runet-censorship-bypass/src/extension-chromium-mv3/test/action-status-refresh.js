@@ -45,11 +45,22 @@ function createHarness(options = {}) {
   ]);
   const calls = [];
   const counts = {
+    runtimeErrorReads: 0,
     stateReads: 0,
     tabQueries: 0,
     tabGets: 0,
     statusBuilds: 0,
   };
+  let runtimeLastError = null;
+  const runtime = {};
+  Object.defineProperty(runtime, 'lastError', {
+    get() {
+
+      ++counts.runtimeErrorReads;
+      return runtimeLastError;
+
+    },
+  });
   let state = Object.assign({
     mode: 'auto',
     proxyApplied: true,
@@ -58,6 +69,7 @@ function createHarness(options = {}) {
     pacCooked: true,
   }, options.state);
   let focusedWindowId = 10;
+  let iconFailuresRemaining = options.iconFailures || 0;
   const action = {};
   [
     'setIcon',
@@ -67,12 +79,21 @@ function createHarness(options = {}) {
   ].forEach((method) => {
     action[method] = (params, callback) => {
       calls.push({method, params});
+      if (method === 'setIcon' && iconFailuresRemaining > 0) {
+        --iconFailuresRemaining;
+        runtimeLastError = {
+          message: 'Failed to set icon: Failed to fetch',
+        };
+        callback();
+        runtimeLastError = null;
+        return;
+      }
       callback();
     };
   });
   const chromeApi = {
     action,
-    runtime: {lastError: null},
+    runtime,
     tabs: {
       onActivated: events.activated,
       onUpdated: events.updated,
@@ -141,8 +162,9 @@ function createHarness(options = {}) {
 
       coordinator.start();
       if (options.refreshOnStart !== false) {
-        await coordinator.requestRefresh({});
+        return coordinator.requestRefresh({});
       }
+      return undefined;
 
     },
     activate(tabId) {
@@ -202,7 +224,10 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
 
     Chai.expect(harness.calls).to.deep.include({
       method: 'setIcon',
-      params: {path: 'icons/default-128.png', tabId: 2},
+      params: {
+        path: {128: 'icons/default-128.png'},
+        tabId: 2,
+      },
     });
     const title = harness.calls.find((call) => call.method === 'setTitle');
     Chai.expect(title.params).to.include({tabId: 2});
@@ -324,8 +349,8 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         Chai.expect(harness.calls.filter((call) =>
           call.method === 'setIcon',
         ).map((call) => call.params.path)).to.deep.equal([
-          'icons/default-128.png',
-          'icons/default-grayscale-128.png',
+          {128: 'icons/default-128.png'},
+          {128: 'icons/default-grayscale-128.png'},
         ]);
 
       });
@@ -341,7 +366,10 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
 
     Chai.expect(harness.calls).to.deep.include({
       method: 'setIcon',
-      params: {path: 'icons/default-grayscale-128.png', tabId: 1},
+      params: {
+        path: {128: 'icons/default-grayscale-128.png'},
+        tabId: 1,
+      },
     });
     Chai.expect(harness.calls).to.deep.include({
       method: 'setBadgeText',
@@ -380,6 +408,37 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
     Chai.expect(harness.calls).to.deep.equal([]);
 
   });
+
+  Mocha.it('isolates an icon failure and retries it on a later refresh',
+      async function() {
+
+        const harness = createHarness({iconFailures: 1});
+        const first = await harness.start();
+
+        Chai.expect(first).to.include({ok: false});
+        Chai.expect(first.failed).to.deep.equal(['setIcon']);
+        Chai.expect(harness.counts.runtimeErrorReads).to.be.greaterThan(0);
+        Chai.expect(harness.calls.map((call) => call.method)).to.have.members([
+          'setIcon',
+          'setBadgeText',
+          'setBadgeBackgroundColor',
+          'setTitle',
+        ]);
+
+        harness.calls.length = 0;
+        const retry = await harness.coordinator.requestRefresh({
+          state: harness.setState({}),
+        });
+        Chai.expect(retry).to.include({ok: true});
+        Chai.expect(harness.calls.map((call) => call.method)).to.deep.equal([
+          'setIcon',
+        ]);
+
+        harness.calls.length = 0;
+        await harness.coordinator.requestRefresh({state: harness.setState({})});
+        Chai.expect(harness.calls).to.deep.equal([]);
+
+      });
 
   Mocha.it('bounds the per-tab presentation cache', async function() {
 

@@ -11,6 +11,7 @@ as an unpacked extension in current Brave and Chrome builds.
 - Download, cook, apply, refresh, clear, and recook PAC data from the popup and options page. Confirm the PAC and applied statuses, colored/grayscale icon, badge, and title agree.
 - Take over proxy settings with another extension or policy, then release control. Confirm the action and a newly opened popup reflect live control without a tab switch.
 - From the browser's extensions page, inspect and stop the extension service worker. Then activate a tab and reopen the popup; confirm the active site and live proxy-control status are reconstructed.
+- Keep the service-worker DevTools console open while applying and clearing PAC. Confirm there is no `Unchecked runtime.lastError`, especially from `action.setIcon`, and that icon, badge, and title updates continue after a failed Action API call.
 - Repeat the checks in both UI languages. Confirm no notification, title, popup field, error, or console entry exposes proxy credentials or a full private custom-provider URL.
 
 Chromium still applies PAC with `mandatory: false`; these checks do not establish browser-level fail-closed behavior for malformed PAC or unusable proxy results.
