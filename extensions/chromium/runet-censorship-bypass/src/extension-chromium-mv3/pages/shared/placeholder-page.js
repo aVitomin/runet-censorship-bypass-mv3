@@ -15,7 +15,7 @@
 
   }
 
-  function renderStatus(state, status) {
+  function renderStatus(status) {
 
     root.replaceChildren();
     appendText(root, 'h1', 'Runet Censorship Bypass');
@@ -33,9 +33,9 @@
     appendText(details, 'dt', 'Page');
     appendText(details, 'dd', pageTitle);
     appendText(details, 'dt', 'Background');
-    appendText(details, 'dd', state.status);
+    appendText(details, 'dd', status.backgroundStatus);
     appendText(details, 'dt', 'PAC/proxy');
-    appendText(details, 'dd', state.pac.status);
+    appendText(details, 'dd', status.pacStatus);
 
   }
 
@@ -50,9 +50,8 @@
 
   try {
     const rpc = window.mv3Rpc;
-    const state = await rpc.callBackground('getState');
     const status = await rpc.callBackground('getPageStatus', {page});
-    renderStatus(state, status);
+    renderStatus(status);
   } catch (err) {
     renderError(err);
   }

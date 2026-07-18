@@ -512,6 +512,414 @@
 
   }
 
+  function createCredentialRef(proxy, index, credentialRevision) {
+
+    // This response-only reference names one row in one durable PAC-mods
+    // revision. It contains public identity fields only; the queued save
+    // rechecks every field against the latest durable row before preservation.
+    return {
+      index,
+      revision: credentialRevision,
+      type: proxy.type,
+      host: proxy.host,
+      port: proxy.port,
+      username: proxy.username,
+    };
+
+  }
+
+  function serializeOwnProxyForRpc(
+      proxy,
+      index,
+      credentialRevision,
+      metadataSource = proxy,
+  ) {
+
+    const normalized = normalizeOwnProxy(proxy);
+    if (!normalized) {
+      return null;
+    }
+    const source = isObject(metadataSource) ? metadataSource : {};
+    const hasPassword = Boolean(normalized.password) ||
+      source.hasPassword === true;
+    const serialized = {
+      enabled: normalized.enabled,
+      type: normalized.type,
+      host: normalized.host,
+      port: normalized.port,
+      username: normalized.username,
+      hasCredentials: Boolean(
+          normalized.username || normalized.password ||
+          source.hasCredentials === true,
+      ),
+      hasPassword,
+      useAsDirectReplacement: normalized.useAsDirectReplacement,
+      note: normalized.note,
+    };
+    if (Number.isSafeInteger(credentialRevision) && credentialRevision >= 0) {
+      serialized.credentialRef = createCredentialRef(
+          normalized,
+          index,
+          credentialRevision,
+      );
+    }
+    return serialized;
+
+  }
+
+  function serializePacModsForRpc(pacMods, credentialRevision) {
+
+    const normalized = normalizePacMods(pacMods);
+    const sourceOwnProxies = isObject(pacMods) &&
+      Array.isArray(pacMods.ownProxies) ?
+      pacMods.ownProxies :
+      [];
+    const serialized = Object.assign({}, normalized, {
+      ownProxies: normalized.ownProxies
+          .map((proxy, index) => {
+            const source = sourceOwnProxies[index];
+            const sourceProxy = normalizeOwnProxy(source);
+            const metadataSource = ifSameProxyIdentity(proxy, sourceProxy) ?
+              source :
+              proxy;
+            return serializeOwnProxyForRpc(
+                proxy,
+                index,
+                credentialRevision,
+                metadataSource,
+            );
+          })
+          .filter(Boolean),
+    });
+    if (Number.isSafeInteger(credentialRevision) && credentialRevision >= 0) {
+      serialized.credentialRevision = credentialRevision;
+    }
+    return serialized;
+
+  }
+
+  function normalizeCredentialRef(value) {
+
+    if (
+      !isObject(value) ||
+      !Number.isSafeInteger(value.index) ||
+      value.index < 0
+    ) {
+      return null;
+    }
+    const allowedKeys = [
+      'host',
+      'index',
+      'port',
+      'revision',
+      'type',
+      'username',
+    ];
+    if (
+      Object.keys(value).length !== allowedKeys.length ||
+      Object.keys(value).some((key) => !allowedKeys.includes(key))
+    ) {
+      return null;
+    }
+    const port = normalizePort(value.port);
+    const host = normalizeHost(value.host);
+    if (
+      typeof value.host !== 'string' ||
+      value.host !== host ||
+      !host ||
+      !Number.isInteger(value.port) ||
+      !port ||
+      typeof value.type !== 'string' ||
+      !PROXY_TYPES.includes(value.type) ||
+      typeof value.username !== 'string' ||
+      !Number.isSafeInteger(value.revision) ||
+      value.revision < 0
+    ) {
+      return null;
+    }
+    return {
+      index: value.index,
+      revision: value.revision,
+      type: value.type,
+      host,
+      port,
+      username: value.username,
+    };
+
+  }
+
+  function ifCredentialRefMatchesProxy(
+      ref,
+      proxy,
+      index,
+      credentialRevision,
+  ) {
+
+    const normalized = normalizeOwnProxy(proxy);
+    return Boolean(
+        normalized &&
+        ref.index === index &&
+        ref.revision === credentialRevision &&
+        ref.type === normalized.type &&
+        ref.host.toLowerCase() === normalized.host.toLowerCase() &&
+        ref.port === normalized.port &&
+        ref.username === normalized.username,
+    );
+
+  }
+
+  function ifSameProxyEndpoint(left, right) {
+
+    return Boolean(
+        left &&
+        right &&
+        left.type === right.type &&
+        left.host.toLowerCase() === right.host.toLowerCase() &&
+        left.port === right.port,
+    );
+
+  }
+
+  function ifSameProxyIdentity(left, right) {
+
+    return Boolean(
+        left &&
+        right &&
+        left.type === right.type &&
+        left.host.toLowerCase() === right.host.toLowerCase() &&
+        left.port === right.port &&
+        left.username === right.username,
+    );
+
+  }
+
+  function getCredentialSource(
+      requestedProxy,
+      currentProxies,
+      usedCredentialIndexes,
+      credentialRevision,
+  ) {
+
+    if (
+      isObject(requestedProxy) &&
+      Object.prototype.hasOwnProperty.call(requestedProxy, 'credentialRef')
+    ) {
+      const ref = normalizeCredentialRef(requestedProxy.credentialRef);
+      const current = ref && currentProxies[ref.index];
+      if (
+        ref &&
+        !usedCredentialIndexes.has(ref.index) &&
+        ifCredentialRefMatchesProxy(
+            ref,
+            current,
+            ref.index,
+            credentialRevision,
+        )
+      ) {
+        return {index: ref.index, proxy: current};
+      }
+      throw new TypeError('Stored proxy credential reference is stale.');
+    }
+    throw new TypeError('Redacted proxy password cannot be restored safely.');
+
+  }
+
+  function getPasswordIntent(proxy) {
+
+    if (typeof proxy === 'string') {
+      const parsed = parseProxyString(proxy);
+      return parsed && parsed.password === REDACTED_PASSWORD ?
+        'preserve' :
+        'explicit';
+    }
+    if (!isObject(proxy)) {
+      return 'explicit';
+    }
+    if (Object.prototype.hasOwnProperty.call(proxy, 'password')) {
+      if (String(proxy.password || '') === REDACTED_PASSWORD) {
+        if (
+          proxy.hasPassword !== true ||
+          !Object.prototype.hasOwnProperty.call(proxy, 'credentialRef')
+        ) {
+          throw new TypeError('Proxy password intent is ambiguous.');
+        }
+        return 'preserve';
+      }
+      if (
+        proxy.hasPassword === true ||
+        Object.prototype.hasOwnProperty.call(proxy, 'credentialRef')
+      ) {
+        throw new TypeError('Proxy password intent is ambiguous.');
+      }
+      return 'explicit';
+    }
+    if (proxy.hasPassword === true) {
+      if (!Object.prototype.hasOwnProperty.call(proxy, 'credentialRef')) {
+        throw new TypeError('Proxy password intent is ambiguous.');
+      }
+      return 'preserve';
+    }
+    if (proxy.hasPassword === false) {
+      if (!Object.prototype.hasOwnProperty.call(proxy, 'credentialRef')) {
+        throw new TypeError('Proxy password intent is ambiguous.');
+      }
+      return 'preserve-empty';
+    }
+    throw new TypeError('Proxy password intent is required.');
+
+  }
+
+  function assertPasswordCanStayOnRequestedProxy(
+      requestedProxy,
+      source,
+      currentProxies,
+  ) {
+
+    const requested = normalizeOwnProxy(requestedProxy);
+    const current = normalizeOwnProxy(source.proxy);
+    if (!ifSameProxyEndpoint(requested, current)) {
+      throw new TypeError(
+          'Stored proxy password cannot move to a different endpoint.',
+      );
+    }
+    if (!current.password) {
+      throw new TypeError('Stored proxy password is unavailable.');
+    }
+    if (
+      requested.username !== current.username &&
+      currentProxies.some((proxy, index) =>
+        index !== source.index &&
+        ifSameProxyIdentity(requested, normalizeOwnProxy(proxy)),
+      )
+    ) {
+      throw new TypeError(
+          'Stored proxy password cannot move to another proxy row.',
+      );
+    }
+
+  }
+
+  function assertDuplicateCredentialOrder(sources, currentProxies) {
+
+    const getIdentity = (proxy) => [
+      proxy.type,
+      proxy.host.toLowerCase(),
+      proxy.port,
+      proxy.username,
+    ].join('\n');
+    const currentCounts = currentProxies.reduce((counts, candidate) => {
+      const proxy = normalizeOwnProxy(candidate);
+      if (proxy && proxy.password) {
+        const identity = getIdentity(proxy);
+        counts.set(identity, (counts.get(identity) || 0) + 1);
+      }
+      return counts;
+    }, new Map());
+    const lastIndexByIdentity = new Map();
+    const preservedCounts = new Map();
+    sources.filter(Boolean).forEach((source) => {
+      const proxy = normalizeOwnProxy(source.proxy);
+      const identity = getIdentity(proxy);
+      const currentCount = currentCounts.get(identity) || 0;
+      const previousIndex = lastIndexByIdentity.get(identity);
+      // Identical public identities cannot prove which redacted password a
+      // reordered row intended. Preserve their durable order or reject.
+      if (
+        currentCount > 1 &&
+        previousIndex !== undefined &&
+        source.index < previousIndex
+      ) {
+        throw new TypeError(
+            'Duplicate proxy credentials cannot be reordered safely.',
+        );
+      }
+      lastIndexByIdentity.set(identity, source.index);
+      preservedCounts.set(identity, (preservedCounts.get(identity) || 0) + 1);
+    });
+    preservedCounts.forEach((preservedCount, identity) => {
+      const currentCount = currentCounts.get(identity) || 0;
+      if (currentCount > 1 && preservedCount !== currentCount) {
+        throw new TypeError(
+            'Duplicate proxy credentials cannot be preserved partially.',
+        );
+      }
+    });
+
+  }
+
+  function restoreRpcPacModsCredentials(
+      requestedPacMods,
+      currentPacMods,
+      credentialRevision,
+  ) {
+
+    const requested = isObject(requestedPacMods) ? requestedPacMods : {};
+    const requestedRevision = requested.credentialRevision;
+    const ifRevisionProvided = Object.prototype.hasOwnProperty.call(
+        requested,
+        'credentialRevision',
+    );
+    const ifVersionedRequest = Number.isSafeInteger(requestedRevision) &&
+      requestedRevision >= 0;
+    if (ifRevisionProvided && !ifVersionedRequest) {
+      throw new TypeError('Proxy credential state version is invalid.');
+    }
+    if (ifVersionedRequest && requestedRevision !== credentialRevision) {
+      throw new TypeError('Proxy credential state is stale.');
+    }
+    const requestedOwnProxies = Array.isArray(requested.ownProxies) ?
+      requested.ownProxies :
+      (typeof requested.ownProxies === 'string' ?
+        normalizeOwnProxies(requested.ownProxies) :
+        []);
+    const currentOwnProxies = normalizePacMods(currentPacMods).ownProxies;
+    const usedCredentialIndexes = new Set();
+    const credentialSources = [];
+    const restoredOwnProxies = requestedOwnProxies.map((proxy) => {
+      const intent = getPasswordIntent(proxy);
+      if (intent !== 'explicit' && !ifVersionedRequest) {
+        throw new TypeError('Proxy credential state version is required.');
+      }
+      const source = intent === 'explicit' ?
+        null :
+        getCredentialSource(
+            proxy,
+            currentOwnProxies,
+            usedCredentialIndexes,
+            credentialRevision,
+        );
+      if (source) {
+        usedCredentialIndexes.add(source.index);
+      }
+      credentialSources.push(intent === 'preserve' ? source : null);
+      if (intent === 'explicit') {
+        return proxy;
+      }
+      if (intent === 'preserve-empty') {
+        if (source.proxy.password) {
+          throw new TypeError(
+              'Explicit empty password is required to remove credentials.',
+          );
+        }
+        return proxy;
+      }
+      assertPasswordCanStayOnRequestedProxy(
+          proxy,
+          source,
+          currentOwnProxies,
+      );
+      const restored = normalizeOwnProxy(proxy);
+      return Object.assign({}, restored, {
+        password: source.proxy.password,
+      });
+    });
+    assertDuplicateCredentialOrder(credentialSources, currentOwnProxies);
+    return normalizePacMods(Object.assign({}, requested, {
+      ownProxies: restoredOwnProxies,
+    }));
+
+  }
+
   function selfTest() {
 
     const samplePassword = ['sec', 'ret'].join('');
@@ -621,6 +1029,8 @@
     getDirectReplacementCandidates,
     getProxyRuleCandidates,
     redactPacMods,
+    serializePacModsForRpc,
+    restoreRpcPacModsCredentials,
     selfTest,
   });
 

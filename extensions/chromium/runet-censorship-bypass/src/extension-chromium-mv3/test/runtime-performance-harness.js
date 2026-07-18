@@ -112,6 +112,8 @@ function waitForAsyncWork() {
 async function createRuntimeHarness(options = {}) {
 
   const counts = createCounts();
+  const asyncCounterWaiters = [];
+  let completedHashOperations = 0;
   const storageData = {};
   const alarms = new Map();
   const rawArtifacts = new Map();
@@ -158,6 +160,38 @@ async function createRuntimeHarness(options = {}) {
       pacScript: {data: 'installed PAC', mandatory: false},
     },
   };
+
+  function notifyAsyncCounterWaiters() {
+
+    asyncCounterWaiters.slice().forEach((waiter) => {
+      if (waiter.read() < waiter.target) {
+        return;
+      }
+      asyncCounterWaiters.splice(asyncCounterWaiters.indexOf(waiter), 1);
+      clearTimeout(waiter.timer);
+      waiter.resolve();
+    });
+
+  }
+
+  function waitForAsyncCounter(read, target, label) {
+
+    if (read() >= target) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const waiter = {read, target, resolve, timer: null};
+      waiter.timer = setTimeout(() => {
+        const index = asyncCounterWaiters.indexOf(waiter);
+        if (index !== -1) {
+          asyncCounterWaiters.splice(index, 1);
+        }
+        reject(new Error(`Timed out waiting for ${label}.`));
+      }, 2000);
+      asyncCounterWaiters.push(waiter);
+    });
+
+  }
 
   const chromeApi = {
     action: {
@@ -341,6 +375,7 @@ async function createRuntimeHarness(options = {}) {
   ].forEach((method) => {
     chromeApi.action[method] = (params, callback) => {
       ++counts.actionCalls;
+      notifyAsyncCounterWaiters();
       callback();
     };
   });
@@ -385,7 +420,10 @@ async function createRuntimeHarness(options = {}) {
     async sha256Hex(text) {
 
       ++counts.hashOperations;
-      return realHash.sha256Hex(text);
+      const result = await realHash.sha256Hex(text);
+      ++completedHashOperations;
+      notifyAsyncCounterWaiters();
+      return result;
 
     },
   }));
@@ -399,9 +437,11 @@ async function createRuntimeHarness(options = {}) {
     },
   }));
 
-  const pacMods = context.mv3PacMods.normalizePacMods({
-    torBrowser: {enabled: true},
-  });
+  const pacMods = context.mv3PacMods.normalizePacMods(
+      Object.prototype.hasOwnProperty.call(options, 'pacMods') ?
+        options.pacMods :
+        {torBrowser: {enabled: true}},
+  );
   const seedAt = Date.now() - 5 * 60 * 1000;
   const rawPacSha256 = sha256(RAW_PAC);
   const seededCook = await context.mv3PacCook.cookPac({
@@ -436,8 +476,12 @@ async function createRuntimeHarness(options = {}) {
     warnings: seededCook.warnings,
   });
   storageData.mv3State = {
-    schemaVersion: 11,
+    schemaVersion: 12,
     currentPacProviderKey: 'Антизапрет',
+    pacModsRevision:
+      Number.isSafeInteger(options.pacModsRevision) ?
+        options.pacModsRevision :
+        0,
     pacMods,
     lastPacUpdateStamp: seedAt,
     pacCook: {
@@ -605,6 +649,7 @@ async function createRuntimeHarness(options = {}) {
     '  clearCookedPacCacheAndArtifacts,\n' +
     '  clearPacCacheAndArtifacts,\n' +
     '  cookPacAndPersist,\n' +
+    '  createErrorResponse,\n' +
     '  downloadPacAndPersist,\n' +
     '  executePeriodicUpdatePipeline,\n' +
     '  handleProxySettingsChanged,\n' +
@@ -630,21 +675,25 @@ async function createRuntimeHarness(options = {}) {
 
   }
 
-  async function callRpc(method, params = {}) {
+  async function callRpcRaw(method, params = {}) {
 
     ++counts.runtimeRpcs;
     const listeners = events.message;
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const sender = {id: chromeApi.runtime.id};
-      const callback = (response) => {
-        if (!response || response.ok !== true) {
-          reject(response && response.error || new Error('RPC failed.'));
-          return;
-        }
-        resolve(response.result);
-      };
+      const callback = (response) => resolve(response);
       listeners.dispatch({v: 1, method, params}, sender, callback);
     });
+
+  }
+
+  async function callRpc(method, params = {}) {
+
+    const response = await callRpcRaw(method, params);
+    if (!response || response.ok !== true) {
+      throw response && response.error || new Error('RPC failed.');
+    }
+    return response.result;
 
   }
 
@@ -656,9 +705,15 @@ async function createRuntimeHarness(options = {}) {
     events,
     tabs,
     callRpc,
+    callRpcRaw,
     activateTab(tabId) {
 
       const target = tabs.get(tabId);
+      const actionCompletion = waitForAsyncCounter(
+          () => counts.actionCalls,
+          counts.actionCalls + 4,
+          'active-tab action refresh',
+      );
       Array.from(tabs.values()).forEach((tab) => {
         if (tab.windowId === target.windowId) {
           tab.active = false;
@@ -666,6 +721,7 @@ async function createRuntimeHarness(options = {}) {
       });
       target.active = true;
       events.tabActivated.dispatch({tabId, windowId: target.windowId});
+      return actionCompletion.then(waitForAsyncWork);
 
     },
     blockCookedArtifactRead() {
@@ -706,6 +762,18 @@ async function createRuntimeHarness(options = {}) {
       downloadResult = clone(result);
 
     },
+    changeProxyDetails(details) {
+
+      const actionCompletion = waitForAsyncCounter(
+          () => counts.actionCalls,
+          counts.actionCalls + 4,
+          'proxy-change action refresh',
+      );
+      proxyDetails = clone(details);
+      events.proxyChanged.dispatch({});
+      return actionCompletion.then(waitForAsyncWork);
+
+    },
     setProxyDetails(details) {
 
       proxyDetails = clone(details);
@@ -714,8 +782,14 @@ async function createRuntimeHarness(options = {}) {
     updateTab(tabId, changeInfo) {
 
       const tab = tabs.get(tabId);
+      const hashCompletion = waitForAsyncCounter(
+          () => completedHashOperations,
+          completedHashOperations + 1,
+          'updated-tab status hash',
+      );
       Object.assign(tab, changeInfo);
       events.tabUpdated.dispatch(tabId, clone(changeInfo), clone(tab));
+      return hashCompletion.then(waitForAsyncWork);
 
     },
     waitForAsyncWork,

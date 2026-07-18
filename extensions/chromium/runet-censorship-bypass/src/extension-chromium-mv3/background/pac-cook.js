@@ -49,10 +49,17 @@
 
   async function hashPacMods(pacMods) {
 
+    const normalized = normalizePacMods(pacMods);
+    const pacEffectiveMods = Object.assign({}, normalized, {
+      ownProxies: normalized.ownProxies.map((proxy) => Object.assign({}, proxy, {
+        username: '',
+        password: proxy.password ? 'present' : '',
+      })),
+    });
     // Include wrapper semantics so safety fixes invalidate older cooked PACs.
     return mv3Hash.sha256Hex(stableStringify({
       pacCookSemanticsVersion: PAC_COOK_SEMANTICS_VERSION,
-      pacMods: normalizePacMods(pacMods),
+      pacMods: pacEffectiveMods,
     }));
 
   }

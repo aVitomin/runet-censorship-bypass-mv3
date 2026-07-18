@@ -70,13 +70,14 @@
   let stateOperationQueue = Promise.resolve();
 
   const DEFAULT_STATE = Object.freeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     mv3: true,
     uiLanguage: 'auto',
     currentPacProviderKey: null,
     customPacProviders: Object.freeze([]),
     lastPacUpdateStamp: null,
     pacUpdatePeriodInMinutes: 12,
+    pacModsRevision: 0,
     pacMods: mv3PacMods.DEFAULT_PAC_MODS,
     notificationPrefs: Object.freeze({
       pacError: true,
@@ -437,10 +438,19 @@
 
   function sanitizeRpcText(value) {
 
-    return String(value || '').replace(
-        /([a-z][a-z0-9+.-]*:\/\/)[^/\s?#]*@/gi,
-        '$1***@',
-    );
+    return String(value || '')
+        .replace(
+            /([a-z][a-z0-9+.-]*:\/\/)[^/\s?#]*@/gi,
+            '$1***@',
+        )
+        .replace(
+            /(\b(?:PROXY|HTTPS|SOCKS4|SOCKS5)\s+)[^\s;@]+@/gi,
+            '$1***@',
+        )
+        .replace(
+            /(\b(?:password|passwd|pwd)\s*[=:]\s*)[^\s,;]+/gi,
+            '$1***',
+        );
 
   }
 
@@ -451,6 +461,21 @@
     }
     if (value === null || value === undefined || typeof value !== 'object') {
       return value;
+    }
+    if (parentKey === 'pacMods') {
+      const credentialRevision = Number.isSafeInteger(value.credentialRevision) ?
+        value.credentialRevision :
+        undefined;
+      return sanitizeRpcValue(
+          mv3PacMods.serializePacModsForRpc(value, credentialRevision),
+          ancestors,
+          'rpcSafePacMods',
+      );
+    }
+    if (parentKey === 'authCredentials') {
+      return {
+        hasCredentials: Boolean(value.username || value.password),
+      };
     }
     if (ancestors.has(value)) {
       return null;
@@ -464,12 +489,18 @@
       return sanitized;
     }
     const sanitized = Object.keys(value).reduce((result, key) => {
+      const loweredKey = key.toLowerCase();
+      const ifPasswordKey = loweredKey === 'password' ||
+        (loweredKey.endsWith('password') && loweredKey !== 'haspassword');
       if (
+        !ifPasswordKey &&
         !(parentKey === 'pacScript' && key === 'data') &&
         key !== 'rawPacData' &&
         key !== 'cookedPacData' &&
         key !== 'rawPacPreview' &&
-        key !== 'cookedPacPreview'
+        key !== 'cookedPacPreview' &&
+        key !== 'pacModsSha256' &&
+        key !== 'currentPacModsSha256'
       ) {
         result[key] = sanitizeRpcValue(value[key], ancestors, key);
       }
@@ -1057,6 +1088,11 @@
       pacUpdatePeriodInMinutes: normalizePacUpdatePeriod(
           source.pacUpdatePeriodInMinutes,
       ),
+      pacModsRevision:
+        Number.isSafeInteger(source.pacModsRevision) &&
+        source.pacModsRevision >= 0 ?
+          source.pacModsRevision :
+          DEFAULT_STATE.pacModsRevision,
       pacMods: normalizePacMods(source.pacMods),
       notificationPrefs: normalizeNotificationPrefs(source.notificationPrefs),
       pacDownload: normalizePacDownload(source.pacDownload),
@@ -1221,12 +1257,13 @@
 
   }
 
-  async function saveStatePatchNow(patch) {
+  async function saveStatePatchNow(patch, currentStateOverride) {
 
-    const currentState = await loadStateFromStorage();
+    const currentState = currentStateOverride || await loadStateFromStorage();
     const mergedState = Object.assign({}, currentState, patch);
     if (isObject(patch.pacMods)) {
       mergedState.pacMods = patch.pacMods;
+      mergedState.pacModsRevision = currentState.pacModsRevision + 1;
     }
     if (isObject(patch.notificationPrefs)) {
       mergedState.notificationPrefs = Object.assign(
@@ -1342,6 +1379,28 @@
 
   }
 
+  async function saveRpcPacMods(pacMods, options = {}) {
+
+    assertObject(pacMods, 'pacMods');
+    return enqueueStateOperation(async () => {
+      const currentState = await loadStateFromStorage();
+      const restoredPacMods = mv3PacMods.restoreRpcPacModsCredentials(
+          pacMods,
+          currentState.pacMods,
+          currentState.pacModsRevision,
+      );
+      const patch = {pacMods: restoredPacMods};
+      if (
+        typeof options.ifResetProxyHealth === 'function' &&
+        options.ifResetProxyHealth(currentState.pacMods, restoredPacMods)
+      ) {
+        patch.proxyHealth = clone(DEFAULT_STATE.proxyHealth);
+      }
+      return saveStatePatchNow(patch, currentState);
+    });
+
+  }
+
   async function setPacMods(pacMods) {
 
     return (await savePacMods(pacMods)).pacMods;
@@ -1386,7 +1445,9 @@
 
   async function resetStateNow() {
 
+    const currentState = await loadStateFromStorage();
     const defaultState = clone(DEFAULT_STATE);
+    defaultState.pacModsRevision = currentState.pacModsRevision + 1;
     await mv3Storage.set({[STORAGE_KEY]: defaultState});
     return defaultState;
 
@@ -1791,7 +1852,7 @@
       },
     });
     return {
-      schemaUpgradesToEleven: normalized.schemaVersion === 11,
+      schemaUpgradesToTwelve: normalized.schemaVersion === 12,
       uiLanguageDefaultsToAuto: normalized.uiLanguage === 'auto',
       uiLanguagePersistsSupportedValue:
         normalizeState({uiLanguage: 'ru'}).uiLanguage === 'ru',
@@ -1887,6 +1948,7 @@
     loadState,
     saveStatePatch,
     savePacMods,
+    saveRpcPacMods,
     setPacMods,
     setNotificationPrefs,
     setCurrentPacProvider,

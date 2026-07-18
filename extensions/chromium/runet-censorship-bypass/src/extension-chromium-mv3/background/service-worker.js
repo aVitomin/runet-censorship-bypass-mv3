@@ -123,6 +123,39 @@ function createProviderMutationResult(state, provider, metadata = {}) {
 
 }
 
+function cloneRpcRecord(value) {
+
+  return value && typeof value === 'object' ?
+    JSON.parse(JSON.stringify(value)) :
+    {};
+
+}
+
+function createOptionsStateForRpc(state) {
+
+  const pacCook = cloneRpcRecord(state.pacCook);
+  const cookedPacCache = cloneRpcRecord(state.cookedPacCache);
+  delete pacCook.pacModsSha256;
+  delete cookedPacCache.pacModsSha256;
+  return {
+    uiLanguage: state.uiLanguage,
+    currentPacProviderKey: state.currentPacProviderKey,
+    pacMods: mv3PacMods.serializePacModsForRpc(
+        state.pacMods,
+        state.pacModsRevision,
+    ),
+    notificationPrefs: cloneRpcRecord(state.notificationPrefs),
+    pacDownload: cloneRpcRecord(state.pacDownload),
+    pacCache: cloneRpcRecord(state.pacCache),
+    pacCook,
+    cookedPacCache,
+    proxyApply: cloneRpcRecord(state.proxyApply),
+    proxyControl: cloneRpcRecord(state.proxyControl),
+    legacyMigration: cloneRpcRecord(state.legacyMigration),
+  };
+
+}
+
 async function addCustomPacProvider(params) {
 
   const state = await mv3State.loadState();
@@ -262,7 +295,7 @@ const RPC_METHODS = Object.freeze({
       getCookedPacStaleness(state),
     ]);
     return Object.assign({}, PHASE_TEN_STATUS, {
-      state,
+      state: createOptionsStateForRpc(state),
       providers: getProvidersForState(state, true),
       artifactStorage: mv3PacArtifacts.getStatus(),
       proxyAuth: getProxyAuthStatusFromState(state),
@@ -289,23 +322,25 @@ const RPC_METHODS = Object.freeze({
   async getPacMods() {
 
     const state = await mv3State.loadState();
-    return state.pacMods;
+    return mv3PacMods.serializePacModsForRpc(
+        state.pacMods,
+        state.pacModsRevision,
+    );
 
   },
 
   async setPacMods(params = {}) {
 
-    const previous = await mv3State.loadState();
-    const previousFingerprint = mv3ProxyHealth.getCandidateFingerprint(
-        previous.pacMods,
-    );
-    const state = await mv3State.savePacMods(params.pacMods, {
-      resetProxyHealth:
-      previousFingerprint !==
-        mv3ProxyHealth.getCandidateFingerprint(params.pacMods),
+    const state = await mv3State.saveRpcPacMods(params.pacMods, {
+      ifResetProxyHealth(previousPacMods, nextPacMods) {
+
+        return mv3ProxyHealth.getCandidateFingerprint(previousPacMods) !==
+          mv3ProxyHealth.getCandidateFingerprint(nextPacMods);
+
+      },
     });
     await requestActionStatusRefresh({state});
-    return state;
+    return {ok: true};
 
   },
 
@@ -342,17 +377,33 @@ const RPC_METHODS = Object.freeze({
 
   },
 
-  normalizePacMods(params = {}) {
+  async normalizePacMods(params = {}) {
 
-    return mv3PacMods.normalizePacMods(params.pacMods);
+    const state = await mv3State.loadState();
+    return mv3PacMods.serializePacModsForRpc(
+        mv3PacMods.restoreRpcPacModsCredentials(
+            params.pacMods,
+            state.pacMods,
+            state.pacModsRevision,
+        ),
+        state.pacModsRevision,
+    );
 
   },
 
-  validatePacMods(params = {}) {
+  async validatePacMods(params = {}) {
 
+    const state = await mv3State.loadState();
     return {
       ok: true,
-      pacMods: mv3PacMods.normalizePacMods(params.pacMods),
+      pacMods: mv3PacMods.serializePacModsForRpc(
+          mv3PacMods.restoreRpcPacModsCredentials(
+              params.pacMods,
+              state.pacMods,
+              state.pacModsRevision,
+          ),
+          state.pacModsRevision,
+      ),
     };
 
   },
@@ -386,7 +437,6 @@ const RPC_METHODS = Object.freeze({
     await updateActionStatusFromStoredState({});
     return {
       currentPacProviderKey: state.currentPacProviderKey,
-      state,
     };
 
   },
@@ -415,14 +465,14 @@ const RPC_METHODS = Object.freeze({
     return {
       ok: true,
       uiLanguage: state.uiLanguage,
-      state,
     };
 
   },
 
-  resetMv3State() {
+  async resetMv3State() {
 
-    return mv3State.resetState();
+    await mv3State.resetState();
+    return {ok: true};
 
   },
 
@@ -692,6 +742,8 @@ const RPC_METHODS = Object.freeze({
       mv3: true,
       migrated: false,
       status: 'This page is not fully migrated to MV3 yet.',
+      backgroundStatus: PHASE_TEN_STATUS.status,
+      pacStatus: PHASE_TEN_STATUS.pac.status,
     };
 
   },

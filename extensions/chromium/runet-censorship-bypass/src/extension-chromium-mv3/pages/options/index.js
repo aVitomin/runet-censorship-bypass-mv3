@@ -1068,7 +1068,7 @@
     const details = append(parent, 'details');
     appendText(details, 'summary', t('optionsAdvancedJsonEditor'));
     const textarea = append(details, 'textarea');
-    textarea.value = JSON.stringify(redactPacModsForDisplay(pacMods), null, 2);
+    textarea.value = JSON.stringify(pacMods, null, 2);
     const saveButton = append(details, 'button');
     saveButton.type = 'button';
     saveButton.dataset.idleText = t('optionsSavePacModifiersJson');
@@ -1086,7 +1086,7 @@
       try {
         await rpc.callBackground(
             'setPacMods',
-            {pacMods: restoreRedactedPacMods(nextPacMods, pacMods)},
+            {pacMods: preparePacModsForSave(nextPacMods)},
         );
         await refresh(t('optionsPacChangedCookApply'));
       } catch (err) {
@@ -1482,7 +1482,6 @@
     appendDefinition(list, 'Status', pacCook.status);
     appendDefinition(list, 'Provider', pacCook.providerKey);
     appendDefinition(list, 'Source raw SHA-256', pacCook.sourceRawPacSha256);
-    appendDefinition(list, 'PAC mods SHA-256', pacCook.pacModsSha256);
     appendDefinition(list, 'Cooked SHA-256', pacCook.cookedPacSha256);
     appendDefinition(list, 'Cooked content length', pacCook.cookedContentLength);
     if (pacCook.warnings && pacCook.warnings.length) {
@@ -2398,6 +2397,9 @@
   function renderOwnProxyRow(parent, proxy) {
 
     const row = append(parent, 'div', 'proxy-row');
+    row.mv3CredentialRef = proxy.credentialRef ?
+      clone(proxy.credentialRef) :
+      null;
     appendCheckbox(row, 'proxy.enabled', t('optionsEnabled'), proxy.enabled !== false);
     appendSelect(
         row,
@@ -2413,7 +2415,7 @@
         row,
         'proxy.password',
         t('optionsPassword'),
-        proxy.password ? REDACTED_PASSWORD : '',
+        proxy.hasPassword ? REDACTED_PASSWORD : '',
     );
     appendCheckbox(
         row,
@@ -2597,7 +2599,7 @@
     if (localTor.enabled && torBrowser.enabled) {
       localTor.enabled = false;
     }
-    return restoreRedactedPacMods(createPacModsPatch(originalPacMods, {
+    return createPacModsPatch(originalPacMods, {
       localTor,
       torBrowser,
       usePacScriptProxies: getChecked(form, 'usePacScriptProxies'),
@@ -2614,7 +2616,7 @@
         ),
       },
       ownProxies: collectOwnProxyRows(form),
-    }), originalPacMods);
+    });
 
   }
 
@@ -2647,19 +2649,29 @@
   function collectOwnProxyRows(form) {
 
     return Array.from(form.querySelectorAll('.proxy-row'))
-        .map((row) => ({
-          enabled: getChecked(row, 'proxy.enabled'),
-          type: getValue(row, 'proxy.type'),
-          host: getValue(row, 'proxy.host'),
-          port: Number(getValue(row, 'proxy.port')),
-          username: getValue(row, 'proxy.username'),
-          password: getValue(row, 'proxy.password'),
-          useAsDirectReplacement: getChecked(
-              row,
-              'proxy.useAsDirectReplacement',
-          ),
-          note: getValue(row, 'proxy.note'),
-        }))
+        .map((row) => {
+          const proxy = {
+            enabled: getChecked(row, 'proxy.enabled'),
+            type: getValue(row, 'proxy.type'),
+            host: getValue(row, 'proxy.host'),
+            port: Number(getValue(row, 'proxy.port')),
+            username: getValue(row, 'proxy.username'),
+            password: getValue(row, 'proxy.password'),
+            useAsDirectReplacement: getChecked(
+                row,
+                'proxy.useAsDirectReplacement',
+            ),
+            note: getValue(row, 'proxy.note'),
+          };
+          if (
+            row.mv3CredentialRef &&
+            proxy.password === REDACTED_PASSWORD
+          ) {
+            proxy.credentialRef = clone(row.mv3CredentialRef);
+            proxy.hasPassword = true;
+          }
+          return proxy;
+        })
         .filter((proxy) => proxy.host);
 
   }
@@ -2691,115 +2703,25 @@
 
   }
 
-  function parseProxyForRedaction(proxyAsStringRaw) {
+  function preparePacModsForSave(pacMods) {
 
-    if (proxyAsStringRaw && typeof proxyAsStringRaw === 'object') {
-      const proxy = proxyAsStringRaw;
-      const type = String(proxy.type || 'PROXY').toUpperCase();
-      const username = String(proxy.username || '');
-      const host = String(proxy.host || proxy.hostname || '');
-      const port = String(proxy.port || '');
-      if (!host || !port) {
-        return null;
-      }
-      return {
-        type,
-        username,
-        password: String(proxy.password || ''),
-        address: `${host}:${port}`,
-        host,
-        port,
-        key: `${type} ${username}@${host}:${port}`.toLowerCase(),
-      };
-    }
-
-    const proxyAsString = String(proxyAsStringRaw || '').trim();
-    const match = proxyAsString.match(/^(\S+)\s+(.+)$/);
-    if (!match) {
-      return null;
-    }
-    const atIndex = match[2].lastIndexOf('@');
-    if (atIndex === -1) {
-      return null;
-    }
-    const credentials = match[2].slice(0, atIndex);
-    const address = match[2].slice(atIndex + 1);
-    const colonIndex = credentials.indexOf(':');
-    const username = colonIndex === -1 ?
-      credentials :
-      credentials.slice(0, colonIndex);
-    const password = colonIndex === -1 ? '' : credentials.slice(colonIndex + 1);
-    return {
-      type: match[1],
-      username,
-      password,
-      address,
-      key: `${match[1].toUpperCase()} ${username}@${address}`.toLowerCase(),
-    };
-
-  }
-
-  function redactProxyPassword(proxyAsString) {
-
-    if (proxyAsString && typeof proxyAsString === 'object') {
-      const clone = JSON.parse(JSON.stringify(proxyAsString));
-      if (clone.password) {
-        clone.password = REDACTED_PASSWORD;
-      }
-      return clone;
-    }
-    const parsed = parseProxyForRedaction(proxyAsString);
-    if (!parsed || !parsed.password) {
-      return proxyAsString;
-    }
-    return `${parsed.type} ${parsed.username}:${REDACTED_PASSWORD}@${parsed.address}`;
-
-  }
-
-  function redactPacModsForDisplay(pacMods) {
-
-    const clone = JSON.parse(JSON.stringify(pacMods));
-    clone.ownProxies = Array.isArray(clone.ownProxies) ?
-      clone.ownProxies.map(redactProxyPassword) :
+    const prepared = clone(pacMods);
+    prepared.ownProxies = Array.isArray(prepared.ownProxies) ?
+      prepared.ownProxies.map((proxy) => {
+        if (
+          !isObject(proxy) ||
+          !Object.prototype.hasOwnProperty.call(proxy, 'password') ||
+          proxy.password === REDACTED_PASSWORD
+        ) {
+          return proxy;
+        }
+        delete proxy.credentialRef;
+        delete proxy.hasCredentials;
+        delete proxy.hasPassword;
+        return proxy;
+      }) :
       [];
-    return clone;
-
-  }
-
-  function restoreRedactedProxyPassword(proxyAsString, originalOwnProxies) {
-
-    const parsed = parseProxyForRedaction(proxyAsString);
-    if (!parsed || parsed.password !== REDACTED_PASSWORD) {
-      return proxyAsString;
-    }
-    const originalProxy = originalOwnProxies.find((candidate) => {
-      const originalParsed = parseProxyForRedaction(candidate);
-      return originalParsed && originalParsed.key === parsed.key;
-    });
-    if (!originalProxy) {
-      return proxyAsString;
-    }
-    if (proxyAsString && typeof proxyAsString === 'object') {
-      return Object.assign({}, proxyAsString, {
-        password: parseProxyForRedaction(originalProxy).password,
-      });
-    }
-    return originalProxy;
-
-  }
-
-  function restoreRedactedPacMods(nextPacMods, originalPacMods) {
-
-    const clone = JSON.parse(JSON.stringify(nextPacMods));
-    const originalOwnProxies = Array.isArray(originalPacMods.ownProxies) ?
-      originalPacMods.ownProxies :
-      [];
-    clone.ownProxies = Array.isArray(clone.ownProxies) ?
-      clone.ownProxies.map((proxy) =>
-        restoreRedactedProxyPassword(proxy, originalOwnProxies),
-      ) :
-      [];
-    return clone;
+    return prepared;
 
   }
 

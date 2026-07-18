@@ -184,8 +184,7 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
 
         const harness = await createRuntimeHarness();
         harness.resetCounts();
-        harness.activateTab(2);
-        await harness.waitForAsyncWork();
+        await harness.activateTab(2);
         Chai.expect(pickCounts(harness.counts, [
           'storageGets',
           'storageSets',
@@ -201,11 +200,10 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
         });
 
         harness.resetCounts();
-        harness.updateTab(2, {
+        await harness.updateTab(2, {
           url: 'https://changed.example/',
           status: 'complete',
         });
-        await harness.waitForAsyncWork();
         Chai.expect(pickCounts(harness.counts, [
           'storageGets',
           'storageSets',
@@ -431,12 +429,10 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
 
         const harness = await createRuntimeHarness();
         harness.resetCounts();
-        harness.setProxyDetails({
+        await harness.changeProxyDetails({
           levelOfControl: 'controlled_by_other_extensions',
           value: {mode: 'direct'},
         });
-        harness.events.proxyChanged.dispatch({});
-        await harness.waitForAsyncWork();
 
         Chai.expect(pickCounts(harness.counts, [
           'proxySettingsReads',
