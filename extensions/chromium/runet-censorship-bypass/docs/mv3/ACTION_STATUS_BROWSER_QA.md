@@ -1,5 +1,7 @@
 # Action status browser QA
 
+This is repository-only QA documentation and is not part of the extension package.
+
 Run `npm --prefix .\extensions\chromium\runet-censorship-bypass run build:mv3`,
 then load `extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3`
 as an unpacked extension in current Brave and Chrome builds.

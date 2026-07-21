@@ -7,7 +7,7 @@
     "lint:mv3": "eslint ./src/extension-chromium-mv3/**/*.js",
     "gulp": "gulp",
     "build:mv2": "node ./node_modules/gulp/bin/gulp.js buildAll",
-    "build:mv3": "node ./node_modules/gulp/bin/gulp.js buildChromiumMv3 && node ./src/extension-chromium-mv3/test/verify-runtime-icons.js",
+    "build:mv3": "node ./node_modules/gulp/bin/gulp.js buildChromiumMv3 && node ./src/extension-chromium-mv3/test/verify-runtime-icons.js && node ./src/extension-chromium-mv3/test/verify-package-integrity.js",
     "test": "mocha --recursive ./src/**/test/*",
     "test:legacy": "mocha --recursive ./src/extension-common/test/*",
     "test:mv3": "mocha --recursive ./src/extension-chromium-mv3/test/*",

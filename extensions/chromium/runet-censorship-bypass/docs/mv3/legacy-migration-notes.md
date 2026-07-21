@@ -1,5 +1,7 @@
 # MV3 Legacy Migration Audit Notes
 
+These repository audit notes are not part of the extension package.
+
 Phase 9A is audit-only. It reads legacy data, builds a sanitized plan, and
 stores only a small summary in `mv3State.legacyMigration`.
 

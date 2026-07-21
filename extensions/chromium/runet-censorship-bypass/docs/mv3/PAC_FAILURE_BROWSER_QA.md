@@ -1,5 +1,7 @@
 # PAC failure and extension-bypass QA
 
+This is repository-only QA documentation and is not part of the extension package.
+
 This procedure checks whether a request covered by an explicit Proxy rule can
 bypass the extension when PAC evaluation or every configured proxy fails. Run
 every case in current Chrome and Brave on Windows. A no-leak result means the

@@ -1,5 +1,7 @@
 # MV3 Release Candidate Notes
 
+These repository release notes are not part of the extension package.
+
 MV3 migration: @aVitomin with Codex
 
 ## Working in MV3

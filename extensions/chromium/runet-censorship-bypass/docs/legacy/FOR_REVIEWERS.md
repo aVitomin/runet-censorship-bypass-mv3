@@ -1,5 +1,7 @@
 # For Reviewers
 
+This repository documentation is not part of an extension package.
+
 > These are preserved upstream instructions for the legacy MV2 package. For the
 > current fork's PowerShell-compatible MV2 and MV3 commands, see the repository
 > `AGENTS.md` and the extension `README.md`.

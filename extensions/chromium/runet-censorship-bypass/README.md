@@ -159,7 +159,7 @@ Tor Browser must already be running.
 - The MV3 extension does not request blocking `webRequest`, does not use a DNR
   replacement for PAC routing, and does not execute PAC text in extension JavaScript.
 
-See [the MV3 RC notes](src/extension-chromium-mv3/RELEASE_CANDIDATE_NOTES.md)
-and [legacy migration notes](src/extension-chromium-mv3/background/legacy-migration-notes.md)
-for detailed scope and upgrade behavior. Legacy MV2 reviewer notes remain in
-`src/extension-common/FOR_REVIEWERS.md`.
+See [the MV3 RC notes](docs/mv3/RELEASE_CANDIDATE_NOTES.md)
+and [legacy migration notes](docs/mv3/legacy-migration-notes.md) for detailed
+scope and upgrade behavior. Legacy MV2 reviewer notes remain in
+`docs/legacy/FOR_REVIEWERS.md`.

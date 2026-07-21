@@ -1,5 +1,7 @@
 # Chromium MV3 performance audit
 
+This repository audit is not part of the extension package.
+
 ## Method
 
 The primary evidence is deterministic operation counting in
