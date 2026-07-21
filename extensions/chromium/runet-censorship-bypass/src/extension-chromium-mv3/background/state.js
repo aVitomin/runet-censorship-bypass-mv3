@@ -73,13 +73,14 @@
   let atomicReentryError = null;
 
   const DEFAULT_STATE = Object.freeze({
-    schemaVersion: 12,
+    schemaVersion: 13,
     mv3: true,
     uiLanguage: 'auto',
     currentPacProviderKey: null,
     customPacProviders: Object.freeze([]),
     lastPacUpdateStamp: null,
     pacUpdatePeriodInMinutes: 12,
+    pacWorkflowGeneration: 0,
     pacModsRevision: 0,
     pacMods: mv3PacMods.DEFAULT_PAC_MODS,
     notificationPrefs: Object.freeze({
@@ -1101,6 +1102,11 @@
       pacUpdatePeriodInMinutes: normalizePacUpdatePeriod(
           source.pacUpdatePeriodInMinutes,
       ),
+      pacWorkflowGeneration:
+        Number.isSafeInteger(source.pacWorkflowGeneration) &&
+        source.pacWorkflowGeneration >= 0 ?
+          source.pacWorkflowGeneration :
+          DEFAULT_STATE.pacWorkflowGeneration,
       pacModsRevision:
         Number.isSafeInteger(source.pacModsRevision) &&
         source.pacModsRevision >= 0 ?
@@ -1479,7 +1485,15 @@
         patch.proxyHealth = clone(DEFAULT_STATE.proxyHealth);
       }
       if (typeof options.onBeforeSave === 'function') {
-        options.onBeforeSave(currentState.pacMods, restoredPacMods);
+        const additionalPatch = options.onBeforeSave(
+            currentState.pacMods,
+            restoredPacMods,
+            currentState,
+        );
+        if (additionalPatch !== undefined) {
+          assertObject(additionalPatch, 'additional PAC-mods patch');
+          Object.assign(patch, additionalPatch);
+        }
       }
       return saveStatePatchNow(patch, currentState);
     });
@@ -1532,6 +1546,10 @@
 
     const currentState = await loadStateFromStorage();
     const defaultState = clone(DEFAULT_STATE);
+    defaultState.pacWorkflowGeneration =
+      currentState.pacWorkflowGeneration >= Number.MAX_SAFE_INTEGER ?
+        1 :
+        currentState.pacWorkflowGeneration + 1;
     defaultState.pacModsRevision = currentState.pacModsRevision + 1;
     await mv3Storage.set({[STORAGE_KEY]: defaultState});
     return defaultState;
@@ -1939,7 +1957,11 @@
       },
     });
     return {
-      schemaUpgradesToTwelve: normalized.schemaVersion === 12,
+      schemaUpgradesToThirteen: normalized.schemaVersion === 13,
+      pacWorkflowGenerationDefaultsToZero:
+        normalized.pacWorkflowGeneration === 0,
+      pacWorkflowGenerationPersists:
+        normalizeState({pacWorkflowGeneration: 7}).pacWorkflowGeneration === 7,
       uiLanguageDefaultsToAuto: normalized.uiLanguage === 'auto',
       uiLanguagePersistsSupportedValue:
         normalizeState({uiLanguage: 'ru'}).uiLanguage === 'ru',

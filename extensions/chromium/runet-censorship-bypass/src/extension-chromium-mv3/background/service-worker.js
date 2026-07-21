@@ -117,9 +117,66 @@ function invalidatePacApplyFreshness() {
 
 }
 
-function beginPacApplyOperation() {
+function getNextPacWorkflowGeneration(state) {
 
-  const operation = Object.freeze({});
+  const generation = state && state.pacWorkflowGeneration;
+  return Number.isSafeInteger(generation) && generation < Number.MAX_SAFE_INTEGER ?
+    generation + 1 :
+    1;
+
+}
+
+async function beginPacWorkflow() {
+
+  invalidatePacApplyFreshness();
+  const state = await mv3State.updateStateAtomically((currentState) => ({
+    pacWorkflowGeneration: getNextPacWorkflowGeneration(currentState),
+  }));
+  return Object.freeze({generation: state.pacWorkflowGeneration});
+
+}
+
+async function invalidatePacWorkflowFreshness() {
+
+  await beginPacWorkflow();
+
+}
+
+function ifPacWorkflowIsFresh(workflow, state) {
+
+  return Boolean(
+      workflow &&
+      Number.isSafeInteger(workflow.generation) &&
+      state &&
+      state.pacWorkflowGeneration === workflow.generation,
+  );
+
+}
+
+async function getFreshPacWorkflowState(workflow) {
+
+  const state = await mv3State.loadState();
+  return ifPacWorkflowIsFresh(workflow, state) ? state : null;
+
+}
+
+async function savePacWorkflowStatePatch(workflow, patch) {
+
+  let ifSaved = false;
+  const state = await mv3State.updateStateAtomically((currentState) => {
+    if (!ifPacWorkflowIsFresh(workflow, currentState)) {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    ifSaved = true;
+    return patch;
+  });
+  return ifSaved ? state : null;
+
+}
+
+function beginPacApplyOperation(workflow) {
+
+  const operation = Object.freeze({workflow});
   activePacApplyOperation = operation;
   return operation;
 
@@ -304,6 +361,13 @@ async function updateCustomPacProvider(params) {
     if (ifSelected && (urlsChanged || selectedProviderCleared)) {
       patch.proxyHealth = null;
     }
+    if (
+      ifSelected &&
+      (urlsChanged || previous.enabled !== provider.enabled)
+    ) {
+      invalidatePacApplyFreshness();
+      patch.pacWorkflowGeneration = getNextPacWorkflowGeneration(currentState);
+    }
     mutation = {
       provider,
       previous,
@@ -313,15 +377,6 @@ async function updateCustomPacProvider(params) {
     };
     return patch;
   });
-  if (
-    mutation.ifSelected &&
-    (
-      mutation.urlsChanged ||
-      mutation.previous.enabled !== mutation.provider.enabled
-    )
-  ) {
-    invalidatePacApplyFreshness();
-  }
   const cacheMetadataCleared = mutation.ifSelected &&
     mutation.provider.enabled && mutation.urlsChanged;
   if (cacheMetadataCleared) {
@@ -367,12 +422,11 @@ async function deleteCustomPacProvider(params) {
     };
     if (selectedProviderCleared) {
       patch.proxyHealth = null;
+      invalidatePacApplyFreshness();
+      patch.pacWorkflowGeneration = getNextPacWorkflowGeneration(currentState);
     }
     return patch;
   });
-  if (selectedProviderCleared) {
-    invalidatePacApplyFreshness();
-  }
   await updateActionStatusFromStoredState({});
   return createProviderMutationResult(nextState, null, {
     status: 'deleted',
@@ -439,13 +493,16 @@ const RPC_METHODS = Object.freeze({
           mv3ProxyHealth.getCandidateFingerprint(nextPacMods);
 
       },
-      onBeforeSave(previousPacMods, nextPacMods) {
+      onBeforeSave(previousPacMods, nextPacMods, currentState) {
 
         if (
           mv3PacCook.getPacApplyModsIdentity(previousPacMods) !==
           mv3PacCook.getPacApplyModsIdentity(nextPacMods)
         ) {
           invalidatePacApplyFreshness();
+          return {
+            pacWorkflowGeneration: getNextPacWorkflowGeneration(currentState),
+          };
         }
 
       },
@@ -544,14 +601,16 @@ const RPC_METHODS = Object.freeze({
         throw new TypeError('Unknown PAC provider.');
       }
       ifProviderChanged = providerKey !== currentState.currentPacProviderKey;
-      return {
+      const patch = {
         currentPacProviderKey: providerKey,
         proxyHealth: null,
       };
+      if (ifProviderChanged) {
+        invalidatePacApplyFreshness();
+        patch.pacWorkflowGeneration = getNextPacWorkflowGeneration(currentState);
+      }
+      return patch;
     });
-    if (ifProviderChanged) {
-      invalidatePacApplyFreshness();
-    }
     await scheduleAutomaticPacUpdateCheck('provider-change');
     await updateActionStatusFromStoredState({});
     return {
@@ -842,7 +901,7 @@ const RPC_METHODS = Object.freeze({
 
   },
 
-  applyLegacyMigration(params = {}) {
+  async applyLegacyMigration(params = {}) {
 
     if (
       Array.isArray(params.fields) &&
@@ -850,7 +909,7 @@ const RPC_METHODS = Object.freeze({
         ['currentPacProviderKey', 'pacMods'].includes(field),
       )
     ) {
-      invalidatePacApplyFreshness();
+      await invalidatePacWorkflowFreshness();
     }
     return mv3LegacyMigrationApply.applyLegacyMigration(params);
 
@@ -1157,6 +1216,19 @@ async function applyPopupChanges(params = {}) {
   if (!['save', 'updatePac', 'apply'].includes(operation)) {
     throw new TypeError('Unsupported popup operation.');
   }
+  if (operation !== 'save' && mv3PeriodicUpdate.isUpdateInFlight()) {
+    return createPopupOperationFailure(
+        'Periodic PAC update is already running.',
+        params.tabUrl,
+    );
+  }
+  if (operation !== 'save' && (pacDownloadPromise || pacCookPromise)) {
+    return createPopupOperationFailure(
+        'Another PAC operation is already running.',
+        params.tabUrl,
+    );
+  }
+  const workflow = operation === 'save' ? null : await beginPacWorkflow();
 
   const draft = params.draft || {};
   const validation = await validatePopupDraftProxyCandidates(
@@ -1166,7 +1238,24 @@ async function applyPopupChanges(params = {}) {
   if (validation.error) {
     return createPopupNoCandidateFailure(params.tabUrl, validation.state);
   }
-  let state = await persistPopupDraft(params.tabUrl, draft);
+  if (workflow && !await getFreshPacWorkflowState(workflow)) {
+    return createPopupPipelineFailure(
+        createPacApplyStaleResult(),
+        params.tabUrl,
+    );
+  }
+  let state;
+  try {
+    state = await persistPopupDraft(params.tabUrl, draft, workflow);
+  } catch (err) {
+    if (err && err.code === PAC_APPLY_STALE_ERROR.code) {
+      return createPopupPipelineFailure(
+          createPacApplyStaleResult(),
+          params.tabUrl,
+      );
+    }
+    throw err;
+  }
   const target = normalizePopupTabUrl(params.tabUrl);
   const siteMode = String(draft.siteMode || '').toLowerCase();
   if (operation === 'save') {
@@ -1178,19 +1267,6 @@ async function applyPopupChanges(params = {}) {
         target.reason,
       popupState: await createPopupStateAndUpdateAction(params.tabUrl, state),
     };
-  }
-
-  if (mv3PeriodicUpdate.isUpdateInFlight()) {
-    return createPopupOperationFailure(
-        'Periodic PAC update is already running.',
-        params.tabUrl,
-    );
-  }
-  if (pacDownloadPromise || pacCookPromise) {
-    return createPopupOperationFailure(
-        'Another PAC operation is already running.',
-        params.tabUrl,
-    );
   }
 
   const providerKey = state.currentPacProviderKey;
@@ -1210,17 +1286,23 @@ async function applyPopupChanges(params = {}) {
     pacDownloadPromise = downloadPacAndPersist({
       providerKey,
       force: forceDownload,
-    }).finally(() => {
+    }, workflow).finally(() => {
       pacDownloadPromise = null;
     });
     download = await pacDownloadPromise;
     if (download.ok === false) {
       return createPopupPipelineFailure(download, params.tabUrl);
     }
-    state = await mv3State.loadState();
+    state = await getFreshPacWorkflowState(workflow);
+    if (!state) {
+      return createPopupPipelineFailure(
+          createPacApplyStaleResult(),
+          params.tabUrl,
+      );
+    }
   }
 
-  pacCookPromise = cookPacAndPersist({providerKey})
+  pacCookPromise = cookPacAndPersist({providerKey}, workflow)
       .finally(() => {
         pacCookPromise = null;
       });
@@ -1229,6 +1311,13 @@ async function applyPopupChanges(params = {}) {
     return createPopupPipelineFailure(cook, params.tabUrl);
   }
   if (operation === 'updatePac') {
+    const updatedState = await getFreshPacWorkflowState(workflow);
+    if (!updatedState) {
+      return createPopupPipelineFailure(
+          createPacApplyStaleResult(),
+          params.tabUrl,
+      );
+    }
     return {
       ok: true,
       status: 'updated',
@@ -1238,22 +1327,35 @@ async function applyPopupChanges(params = {}) {
       warnings: cook.warnings || [],
       popupState: await createPopupStateAndUpdateAction(
           params.tabUrl,
-          await mv3State.loadState(),
+          updatedState,
       ),
     };
   }
 
-  const apply = await applyCookedPacAndPersist({});
+  const apply = await applyCookedPacAndPersist({}, workflow);
   if (apply.ok === false) {
     return createPopupPipelineFailure(apply, params.tabUrl);
   }
-  const appliedState = await mv3State.loadState();
+  const appliedState = await getFreshPacWorkflowState(workflow);
+  if (!appliedState) {
+    return createPopupPipelineFailure(
+        createPacApplyStaleResult(),
+        params.tabUrl,
+    );
+  }
   const appliedSiteMode = target.controllable ?
     getPopupHostRuleState(appliedState.pacMods, target.host).mode :
     'auto';
   const healthCheck = appliedSiteMode === 'proxy' ?
     await runProxyHealthCheck({tabUrl: params.tabUrl}) :
     null;
+  const finalState = await getFreshPacWorkflowState(workflow);
+  if (!finalState) {
+    return createPopupPipelineFailure(
+        createPacApplyStaleResult(),
+        params.tabUrl,
+    );
+  }
   return {
     ok: true,
     status: 'applied',
@@ -1265,18 +1367,23 @@ async function applyPopupChanges(params = {}) {
     warnings: (cook.warnings || []).concat(apply.warnings || []),
     popupState: await createPopupStateAndUpdateAction(
         params.tabUrl,
-        await mv3State.loadState(),
+        finalState,
     ),
   };
 
 }
 
-async function persistPopupDraft(tabUrl, draft) {
+async function persistPopupDraft(tabUrl, draft, workflow = null) {
 
   const providerKey = getPopupDraftProviderKey(draft);
   const target = normalizePopupTabUrl(tabUrl);
   let mutation;
+  let ifWorkflowStale = false;
   const state = await mv3State.updateStateAtomically((currentState) => {
+    if (workflow && !ifPacWorkflowIsFresh(workflow, currentState)) {
+      ifWorkflowStale = true;
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
     const providerChanged = providerKey !== undefined &&
       providerKey !== currentState.currentPacProviderKey;
     if (
@@ -1315,11 +1422,18 @@ async function persistPopupDraft(tabUrl, draft) {
     if (resetProxyHealth) {
       patch.proxyHealth = null;
     }
+    if (
+      !workflow &&
+      (pacModsChanged || providerChanged)
+    ) {
+      invalidatePacApplyFreshness();
+      patch.pacWorkflowGeneration = getNextPacWorkflowGeneration(currentState);
+    }
     mutation = {pacModsChanged, providerChanged};
     return patch;
   });
-  if (mutation.pacModsChanged || mutation.providerChanged) {
-    invalidatePacApplyFreshness();
+  if (ifWorkflowStale) {
+    throw createPacApplyStaleError();
   }
   if (mutation.providerChanged) {
     await scheduleAutomaticPacUpdateCheck('popup-provider-change');
@@ -1483,7 +1597,15 @@ async function createPopupPipelineFailure(result, tabUrl) {
 
   const error = result && result.error;
   const message = error && error.message || 'PAC update failed.';
-  await notifyErrorIfEnabled(getNotificationTypeForResult(result), 'Operation failed', message);
+  const ifStale = result && result.status === 'stale';
+  if (!ifStale) {
+    await notifyErrorIfEnabled(
+        getNotificationTypeForResult(result),
+        'Operation failed',
+        message,
+    );
+  }
+  const state = await mv3State.loadState();
   return {
     ok: false,
     status: result && result.status || 'error',
@@ -1492,8 +1614,8 @@ async function createPopupPipelineFailure(result, tabUrl) {
     warnings: result && result.warnings || [],
     popupState: await createPopupStateAndUpdateAction(
         tabUrl,
-        await mv3State.loadState(),
-        {error: message},
+        state,
+        ifStale ? {} : {error: message},
     ),
   };
 
@@ -1903,7 +2025,15 @@ function runPeriodicUpdate(params = {}) {
 
 async function executePeriodicUpdatePipeline({trigger, applyIfSafe}) {
 
-  const initialState = await mv3State.loadState();
+  const workflow = await beginPacWorkflow();
+  const initialState = await getFreshPacWorkflowState(workflow);
+  if (!initialState) {
+    return createPeriodicSkip(
+        PAC_APPLY_STALE_ERROR.code,
+        PAC_APPLY_STALE_ERROR.message,
+        {trigger},
+    );
+  }
   const providerKey = initialState.currentPacProviderKey;
   if (!providerKey) {
     return createPeriodicSkip(
@@ -1921,8 +2051,15 @@ async function executePeriodicUpdatePipeline({trigger, applyIfSafe}) {
   }
 
   const autoApply = getPeriodicAutoApplyPlan(initialState, applyIfSafe);
-  const download = await downloadPacAndPersist({providerKey});
+  const download = await downloadPacAndPersist({providerKey}, workflow);
   if (download.ok === false) {
+    if (download.status === 'stale') {
+      return createPeriodicSkip(
+          PAC_APPLY_STALE_ERROR.code,
+          PAC_APPLY_STALE_ERROR.message,
+          {trigger, providerKey},
+      );
+    }
     return createPeriodicFailure(
         download.error && download.error.code || 'PAC_DOWNLOAD_FAILED',
         download.error && download.error.message || 'PAC download failed.',
@@ -1936,8 +2073,15 @@ async function executePeriodicUpdatePipeline({trigger, applyIfSafe}) {
     );
   }
 
-  const cook = await cookPacAndPersist({providerKey});
+  const cook = await cookPacAndPersist({providerKey}, workflow);
   if (cook.ok === false) {
+    if (cook.status === 'stale') {
+      return createPeriodicSkip(
+          PAC_APPLY_STALE_ERROR.code,
+          PAC_APPLY_STALE_ERROR.message,
+          {trigger, providerKey},
+      );
+    }
     return createPeriodicFailure(
         cook.error && cook.error.code || 'PAC_COOK_FAILED',
         cook.error && cook.error.message || 'PAC cooking failed.',
@@ -1957,7 +2101,15 @@ async function executePeriodicUpdatePipeline({trigger, applyIfSafe}) {
     finalAutoApply = await applyPeriodicUpdateIfStillSafe(
         providerKey,
         autoApply.previousCookedPacSha256,
+        workflow,
     );
+    if (finalAutoApply.status === 'stale') {
+      return createPeriodicSkip(
+          PAC_APPLY_STALE_ERROR.code,
+          PAC_APPLY_STALE_ERROR.message,
+          {trigger, providerKey},
+      );
+    }
     if (finalAutoApply.status === 'error') {
       return createPeriodicFailure(
           finalAutoApply.error.code,
@@ -2073,9 +2225,18 @@ function getPeriodicAutoApplyPlan(state, applyIfSafe) {
 async function applyPeriodicUpdateIfStillSafe(
     providerKey,
     previousCookedPacSha256,
+    workflow,
 ) {
 
-  const state = await mv3State.loadState();
+  const state = await getFreshPacWorkflowState(workflow);
+  if (!state) {
+    return {
+      allowed: true,
+      status: 'stale',
+      applied: false,
+      error: PAC_APPLY_STALE_ERROR,
+    };
+  }
   if (
     state.cookedPacCache.providerKey !== providerKey ||
     !state.cookedPacCache.cookedPacSha256
@@ -2098,6 +2259,14 @@ async function applyPeriodicUpdateIfStillSafe(
   }
 
   const control = await refreshProxyControlAndPersist();
+  if (!await getFreshPacWorkflowState(workflow)) {
+    return {
+      allowed: true,
+      status: 'stale',
+      applied: false,
+      error: PAC_APPLY_STALE_ERROR,
+    };
+  }
   if (!control.canControl) {
     return {
       allowed: false,
@@ -2133,7 +2302,7 @@ async function applyPeriodicUpdateIfStillSafe(
     };
   }
 
-  const apply = await applyCookedPacAndPersist({});
+  const apply = await applyCookedPacAndPersist({}, workflow);
   if (apply.ok === false) {
     if (apply.status === 'stale') {
       return {
@@ -2316,6 +2485,7 @@ async function assertPacApplyIsFresh(operation, fingerprint) {
   const latestState = await mv3State.loadState();
   if (
     !ifPacApplyOperationIsFresh(operation) ||
+    !ifPacWorkflowIsFresh(operation.workflow, latestState) ||
     !ifPacApplyFingerprintsMatch(
         fingerprint,
         createPacApplyFingerprint(latestState),
@@ -2985,7 +3155,7 @@ async function notifyErrorIfEnabled(type, title, message) {
 
 async function clearPacCacheAndArtifacts() {
 
-  invalidatePacApplyFreshness();
+  await invalidatePacWorkflowFreshness();
   const cache = await mv3State.getPacCache();
   if (cache.providerKey && cache.rawPacSha256) {
     try {
@@ -3010,7 +3180,7 @@ async function clearPacCacheAndArtifacts() {
 
 async function clearCookedPacCacheAndArtifacts() {
 
-  invalidatePacApplyFreshness();
+  await invalidatePacWorkflowFreshness();
   const cache = await mv3State.getCookedPacCache();
   if (cache.providerKey && cache.cookedPacSha256) {
     try {
@@ -3044,15 +3214,28 @@ async function persistProxyFailure(
   if (operation && !ifPacApplyOperationIsFresh(operation)) {
     return createPacApplyStaleResult();
   }
+  if (operation && !await getFreshPacWorkflowState(operation.workflow)) {
+    return createPacApplyStaleResult();
+  }
 
   const error = {
     code,
     message,
     details: metadata.details || null,
   };
-  const proxyApply = await mv3State.setProxyApplyState(
-      createProxyApplyState('error', Object.assign({}, metadata, {error})),
+  const proxyApplyState = createProxyApplyState(
+      'error',
+      Object.assign({}, metadata, {error}),
   );
+  const nextState = operation ?
+    await savePacWorkflowStatePatch(operation.workflow, {
+      proxyApply: proxyApplyState,
+    }) :
+    await mv3State.saveStatePatch({proxyApply: proxyApplyState});
+  if (!nextState) {
+    return createPacApplyStaleResult();
+  }
+  const proxyApply = nextState.proxyApply;
   if (operation && !ifPacApplyOperationIsFresh(operation)) {
     return createPacApplyStaleResult();
   }
@@ -3063,9 +3246,13 @@ async function persistProxyFailure(
 
 }
 
-function applyCookedPacAndPersist(params = {}) {
+async function applyCookedPacAndPersist(params = {}, workflow = null) {
 
-  const operation = beginPacApplyOperation();
+  const currentWorkflow = workflow || await beginPacWorkflow();
+  if (!await getFreshPacWorkflowState(currentWorkflow)) {
+    return createPacApplyStaleResult();
+  }
+  const operation = beginPacApplyOperation(currentWorkflow);
   return enqueuePacProxyOperation(() =>
     applyCookedPacAndPersistForOperation(params, operation),
   ).finally(() => {
@@ -3078,8 +3265,8 @@ function applyCookedPacAndPersist(params = {}) {
 
 async function applyCookedPacAndPersistForOperation(params, operation) {
 
-  const state = await mv3State.loadState();
-  if (!ifPacApplyOperationIsFresh(operation)) {
+  const state = await getFreshPacWorkflowState(operation.workflow);
+  if (!state || !ifPacApplyOperationIsFresh(operation)) {
     return createPacApplyStaleResult();
   }
   const providerKey = state.currentPacProviderKey;
@@ -3202,15 +3389,19 @@ async function applyCookedPacAndPersistForOperation(params, operation) {
           {levelOfControl: latestProxyControl.levelOfControl},
       );
     }
-    const proxyApply = await mv3State.setProxyApplyState(
-        createProxyApplyState('applied', {
-          providerKey,
-          cookedPacSha256: cache.cookedPacSha256,
-          appliedAt,
-          levelOfControl: latestProxyControl.levelOfControl,
-          warnings,
-        }),
-    );
+    const appliedState = await savePacWorkflowStatePatch(operation.workflow, {
+      proxyApply: createProxyApplyState('applied', {
+        providerKey,
+        cookedPacSha256: cache.cookedPacSha256,
+        appliedAt,
+        levelOfControl: latestProxyControl.levelOfControl,
+        warnings,
+      }),
+    });
+    if (!appliedState) {
+      return createPacApplyStaleResult();
+    }
+    const proxyApply = appliedState.proxyApply;
     if (!ifPacApplyOperationIsFresh(operation)) {
       return createPacApplyStaleResult();
     }
@@ -3233,15 +3424,19 @@ async function applyCookedPacAndPersistForOperation(params, operation) {
         'PROXY_SET_FAILED',
         'Failed to apply proxy settings.',
     );
-    const proxyApply = await mv3State.setProxyApplyState(
-        createProxyApplyState('error', {
-          providerKey,
-          cookedPacSha256: cache.cookedPacSha256,
-          levelOfControl: latestProxyControl.levelOfControl,
-          error,
-          warnings,
-        }),
-    );
+    const failedState = await savePacWorkflowStatePatch(operation.workflow, {
+      proxyApply: createProxyApplyState('error', {
+        providerKey,
+        cookedPacSha256: cache.cookedPacSha256,
+        levelOfControl: latestProxyControl.levelOfControl,
+        error,
+        warnings,
+      }),
+    });
+    if (!failedState) {
+      return createPacApplyStaleResult();
+    }
+    const proxyApply = failedState.proxyApply;
     if (!ifPacApplyOperationIsFresh(operation)) {
       return createPacApplyStaleResult();
     }
@@ -3260,8 +3455,11 @@ async function applyCookedPacAndPersistForOperation(params, operation) {
 
 function clearProxyAndPersist() {
 
-  invalidatePacApplyFreshness();
-  return enqueuePacProxyOperation(clearProxyAndPersistForOperation);
+  const invalidation = invalidatePacWorkflowFreshness();
+  return enqueuePacProxyOperation(async () => {
+    await invalidation;
+    return clearProxyAndPersistForOperation();
+  });
 
 }
 
@@ -3346,9 +3544,13 @@ async function clearProxyAndPersistForOperation() {
 
 }
 
-async function downloadPacAndPersist(params) {
+async function downloadPacAndPersist(params = {}, workflow = null) {
 
-  const state = await mv3State.loadState();
+  const currentWorkflow = workflow || await beginPacWorkflow();
+  const state = await getFreshPacWorkflowState(currentWorkflow);
+  if (!state) {
+    return createPacApplyStaleResult();
+  }
   const providerKey = params.providerKey === undefined ?
     state.currentPacProviderKey :
     params.providerKey;
@@ -3357,11 +3559,13 @@ async function downloadPacAndPersist(params) {
         'PROVIDER_NOT_SELECTED',
         'Select a PAC provider before downloading.',
     );
-    await mv3State.setPacDownloadState(createPacDownloadState('error', {
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacDownload: createPacDownloadState('error', {
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   const provider = getProviderForState(state, providerKey);
@@ -3371,23 +3575,33 @@ async function downloadPacAndPersist(params) {
         'PAC provider was not found.',
         {providerKey},
     );
-    await mv3State.setPacDownloadState(createPacDownloadState('error', {
-      providerKey,
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacDownload: createPacDownloadState('error', {
+        providerKey,
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   const startedAt = Date.now();
-  await mv3State.setPacDownloadState(createPacDownloadState('downloading', {
-    providerKey,
-    startedAt,
-  }));
+  const downloadingState = await savePacWorkflowStatePatch(currentWorkflow, {
+    pacDownload: createPacDownloadState('downloading', {
+      providerKey,
+      startedAt,
+    }),
+  });
+  if (!downloadingState) {
+    return createPacApplyStaleResult();
+  }
 
   const cacheForHeaders = params.force ? null : state.pacCache;
   const result = await mv3PacDownload.downloadPac(provider, cacheForHeaders);
   const finishedAt = Date.now();
+  if (!await getFreshPacWorkflowState(currentWorkflow)) {
+    return createPacApplyStaleResult();
+  }
 
   if (result.ok && result.status === 'success') {
     let rawArtifact;
@@ -3396,24 +3610,31 @@ async function downloadPacAndPersist(params) {
       state.pacCache.rawPacSha256 === result.sha256 &&
       state.pacCache.artifactRef
     ) {
+      let cachedArtifact;
       try {
-        const cachedArtifact = await mv3PacArtifacts.getRawPacArtifact({
+        cachedArtifact = await mv3PacArtifacts.getRawPacArtifact({
           providerKey: result.providerKey,
           sha256: result.sha256,
         });
-        if (
-          cachedArtifact &&
-          cachedArtifact.rawPacSha256 === result.sha256 &&
-          cachedArtifact.rawPacData === result.rawPacData
-        ) {
-          rawArtifact = cachedArtifact;
-        }
       } catch (err) {
-        rawArtifact = null;
+        cachedArtifact = null;
+      }
+      if (!await getFreshPacWorkflowState(currentWorkflow)) {
+        return createPacApplyStaleResult();
+      }
+      if (
+        cachedArtifact &&
+        cachedArtifact.rawPacSha256 === result.sha256 &&
+        cachedArtifact.rawPacData === result.rawPacData
+      ) {
+        rawArtifact = cachedArtifact;
       }
     }
     try {
       if (!rawArtifact) {
+        if (!await getFreshPacWorkflowState(currentWorkflow)) {
+          return createPacApplyStaleResult();
+        }
         rawArtifact = await mv3PacArtifacts.putRawPacArtifact({
           providerKey: result.providerKey,
           url: result.url,
@@ -3424,6 +3645,9 @@ async function downloadPacAndPersist(params) {
           etag: result.etag,
           contentLength: result.contentLength,
         });
+        if (!await getFreshPacWorkflowState(currentWorkflow)) {
+          return createPacApplyStaleResult();
+        }
       }
     } catch (err) {
       const error = normalizeProxyError(
@@ -3431,20 +3655,26 @@ async function downloadPacAndPersist(params) {
           'PAC_ARTIFACT_STORE_FAILED',
           'Failed to store raw PAC artifact.',
       );
-      const pacDownload = await mv3State.setPacDownloadState(
-          createPacDownloadState('error', Object.assign({}, result, {
-            startedAt,
-            finishedAt,
-            error,
-          })),
-      );
+      const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+        pacDownload: createPacDownloadState(
+            'error',
+            Object.assign({}, result, {
+              startedAt,
+              finishedAt,
+              error,
+            }),
+        ),
+      });
+      if (!nextState) {
+        return createPacApplyStaleResult();
+      }
       return Object.assign(
           createPacDownloadFailure(error.code, error.message, {
             providerKey,
             url: result.url,
             details: error.details,
           }),
-          {pacDownload},
+          {pacDownload: nextState.pacDownload},
       );
     }
 
@@ -3453,14 +3683,7 @@ async function downloadPacAndPersist(params) {
         rawArtifact,
         finishedAt,
     );
-    if (
-      state.pacCache.providerKey !== nextPacCache.providerKey ||
-      state.pacCache.rawPacSha256 !== nextPacCache.rawPacSha256 ||
-      state.pacCache.artifactRef !== nextPacCache.artifactRef
-    ) {
-      invalidatePacApplyFreshness();
-    }
-    const nextState = await mv3State.saveStatePatch({
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
       pacCache: nextPacCache,
       pacDownload: createPacDownloadState(
           'success',
@@ -3471,6 +3694,9 @@ async function downloadPacAndPersist(params) {
       ),
       lastPacUpdateStamp: finishedAt,
     });
+    if (!nextState) {
+      return createPacApplyStaleResult();
+    }
     return {
       ok: true,
       status: 'success',
@@ -3480,7 +3706,7 @@ async function downloadPacAndPersist(params) {
   }
 
   if (result.ok && result.status === 'not_modified') {
-    const nextState = await mv3State.saveStatePatch({
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
       pacDownload: createPacDownloadState(
           'not_modified',
           Object.assign({}, result, {
@@ -3489,6 +3715,9 @@ async function downloadPacAndPersist(params) {
           }),
       ),
     });
+    if (!nextState) {
+      return createPacApplyStaleResult();
+    }
     return {
       ok: true,
       status: 'not_modified',
@@ -3497,21 +3726,30 @@ async function downloadPacAndPersist(params) {
     };
   }
 
-  const errorDownload = createPacDownloadState('error', Object.assign({}, result, {
-    startedAt,
-    finishedAt,
-    error: result.error,
-  }));
-  const pacDownload = await mv3State.setPacDownloadState(errorDownload);
-  return Object.assign({}, result, {
-    pacDownload,
+  const errorDownload = createPacDownloadState(
+      'error',
+      Object.assign({}, result, {
+        startedAt,
+        finishedAt,
+        error: result.error,
+      }),
+  );
+  const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+    pacDownload: errorDownload,
   });
+  return nextState ? Object.assign({}, result, {
+    pacDownload: nextState.pacDownload,
+  }) : createPacApplyStaleResult();
 
 }
 
-async function cookPacAndPersist(params) {
+async function cookPacAndPersist(params = {}, workflow = null) {
 
-  const state = await mv3State.loadState();
+  const currentWorkflow = workflow || await beginPacWorkflow();
+  const state = await getFreshPacWorkflowState(currentWorkflow);
+  if (!state) {
+    return createPacApplyStaleResult();
+  }
   const providerKey = params.providerKey === undefined ?
     state.currentPacProviderKey :
     params.providerKey;
@@ -3520,11 +3758,13 @@ async function cookPacAndPersist(params) {
         'PROVIDER_NOT_SELECTED',
         'Select a PAC provider before cooking.',
     );
-    await mv3State.setPacCookState(createPacCookState('error', {
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacCook: createPacCookState('error', {
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   const provider = getProviderForState(state, providerKey);
@@ -3534,12 +3774,14 @@ async function cookPacAndPersist(params) {
         'PAC provider was not found.',
         {providerKey},
     );
-    await mv3State.setPacCookState(createPacCookState('error', {
-      providerKey,
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacCook: createPacCookState('error', {
+        providerKey,
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   if (!state.pacCache.rawPacSha256) {
@@ -3548,12 +3790,14 @@ async function cookPacAndPersist(params) {
         'Download PAC before cooking.',
         {providerKey},
     );
-    await mv3State.setPacCookState(createPacCookState('error', {
-      providerKey,
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacCook: createPacCookState('error', {
+        providerKey,
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   if (state.pacCache.providerKey !== providerKey) {
@@ -3566,16 +3810,21 @@ async function cookPacAndPersist(params) {
           details: {cachedProviderKey: state.pacCache.providerKey},
         },
     );
-    await mv3State.setPacCookState(createPacCookState('error', {
-      providerKey,
-      sourceRawPacSha256: state.pacCache.rawPacSha256,
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacCook: createPacCookState('error', {
+        providerKey,
+        sourceRawPacSha256: state.pacCache.rawPacSha256,
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   const pacModsSha256 = await mv3PacCook.hashPacMods(state.pacMods);
+  if (!await getFreshPacWorkflowState(currentWorkflow)) {
+    return createPacApplyStaleResult();
+  }
   const cachedCook = state.cookedPacCache;
   if (
     cachedCook.providerKey === providerKey &&
@@ -3585,29 +3834,34 @@ async function cookPacAndPersist(params) {
     cachedCook.artifactRef &&
     state.pacCook.status === 'success'
   ) {
+    let cachedArtifact;
     try {
-      const cachedArtifact = await mv3PacArtifacts.getCookedPacArtifact({
+      cachedArtifact = await mv3PacArtifacts.getCookedPacArtifact({
         providerKey,
         sha256: cachedCook.cookedPacSha256,
       });
-      if (
-        cachedArtifact &&
-        cachedArtifact.cookedPacData &&
-        cachedArtifact.cookedPacSha256 === cachedCook.cookedPacSha256 &&
-        cachedArtifact.sourceRawPacSha256 === state.pacCache.rawPacSha256 &&
-        cachedArtifact.pacModsSha256 === pacModsSha256
-      ) {
-        const latestState = await mv3State.loadState();
-        return {
-          ok: true,
-          status: 'not_modified',
-          pacCook: state.pacCook,
-          cookedPacCache: await summarizeCookedPacCache(cachedCook),
-          stale: await getCookedPacStaleness(latestState),
-        };
-      }
     } catch (err) {
       // Fall through and reconstruct the cooked artifact from durable raw PAC.
+      cachedArtifact = null;
+    }
+    const latestState = await getFreshPacWorkflowState(currentWorkflow);
+    if (!latestState) {
+      return createPacApplyStaleResult();
+    }
+    if (
+      cachedArtifact &&
+      cachedArtifact.cookedPacData &&
+      cachedArtifact.cookedPacSha256 === cachedCook.cookedPacSha256 &&
+      cachedArtifact.sourceRawPacSha256 === state.pacCache.rawPacSha256 &&
+      cachedArtifact.pacModsSha256 === pacModsSha256
+    ) {
+      return {
+        ok: true,
+        status: 'not_modified',
+        pacCook: state.pacCook,
+        cookedPacCache: await summarizeCookedPacCache(cachedCook),
+        stale: await getCookedPacStaleness(latestState),
+      };
     }
   }
 
@@ -3617,6 +3871,9 @@ async function cookPacAndPersist(params) {
       providerKey,
       sha256: state.pacCache.rawPacSha256,
     });
+    if (!await getFreshPacWorkflowState(currentWorkflow)) {
+      return createPacApplyStaleResult();
+    }
   } catch (err) {
     const error = normalizeProxyError(
         err,
@@ -3632,13 +3889,15 @@ async function cookPacAndPersist(params) {
           details: error.details,
         },
     );
-    await mv3State.setPacCookState(createPacCookState('error', {
-      providerKey,
-      sourceRawPacSha256: state.pacCache.rawPacSha256,
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacCook: createPacCookState('error', {
+        providerKey,
+        sourceRawPacSha256: state.pacCache.rawPacSha256,
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   if (!rawArtifact || !rawArtifact.rawPacData) {
@@ -3650,22 +3909,29 @@ async function cookPacAndPersist(params) {
           sourceRawPacSha256: state.pacCache.rawPacSha256,
         },
     );
-    await mv3State.setPacCookState(createPacCookState('error', {
-      providerKey,
-      sourceRawPacSha256: state.pacCache.rawPacSha256,
-      finishedAt: Date.now(),
-      error: failure.error,
-    }));
-    return failure;
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+      pacCook: createPacCookState('error', {
+        providerKey,
+        sourceRawPacSha256: state.pacCache.rawPacSha256,
+        finishedAt: Date.now(),
+        error: failure.error,
+      }),
+    });
+    return nextState ? failure : createPacApplyStaleResult();
   }
 
   const startedAt = Date.now();
-  await mv3State.setPacCookState(createPacCookState('cooking', {
-    providerKey,
-    sourceRawPacSha256: state.pacCache.rawPacSha256,
-    pacModsSha256,
-    startedAt,
-  }));
+  const cookingState = await savePacWorkflowStatePatch(currentWorkflow, {
+    pacCook: createPacCookState('cooking', {
+      providerKey,
+      sourceRawPacSha256: state.pacCache.rawPacSha256,
+      pacModsSha256,
+      startedAt,
+    }),
+  });
+  if (!cookingState) {
+    return createPacApplyStaleResult();
+  }
 
   const result = await mv3PacCook.cookPac({
     rawPacData: rawArtifact.rawPacData,
@@ -3675,6 +3941,9 @@ async function cookPacAndPersist(params) {
     sourceRawPacSha256: state.pacCache.rawPacSha256,
   });
   const finishedAt = Date.now();
+  if (!await getFreshPacWorkflowState(currentWorkflow)) {
+    return createPacApplyStaleResult();
+  }
 
   if (result.ok) {
     let cookedArtifact;
@@ -3689,19 +3958,28 @@ async function cookPacAndPersist(params) {
         warnings: result.warnings,
         cookedPacSize: result.cookedContentLength,
       });
+      if (!await getFreshPacWorkflowState(currentWorkflow)) {
+        return createPacApplyStaleResult();
+      }
     } catch (err) {
       const error = normalizeProxyError(
           err,
           'PAC_ARTIFACT_STORE_FAILED',
           'Failed to store cooked PAC artifact.',
       );
-      const pacCook = await mv3State.setPacCookState(
-          createPacCookState('error', Object.assign({}, result, {
-            startedAt,
-            finishedAt,
-            error,
-          })),
-      );
+      const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+        pacCook: createPacCookState(
+            'error',
+            Object.assign({}, result, {
+              startedAt,
+              finishedAt,
+              error,
+            }),
+        ),
+      });
+      if (!nextState) {
+        return createPacApplyStaleResult();
+      }
       return Object.assign(
           createPacCookFailure(error.code, error.message, {
             providerKey,
@@ -3709,7 +3987,7 @@ async function cookPacAndPersist(params) {
             details: error.details,
             warnings: result.warnings,
           }),
-          {pacCook},
+          {pacCook: nextState.pacCook},
       );
     }
 
@@ -3718,44 +3996,37 @@ async function cookPacAndPersist(params) {
         cookedArtifact,
         finishedAt,
     );
-    if (
-      state.cookedPacCache.providerKey !== nextCookedPacCache.providerKey ||
-      state.cookedPacCache.sourceRawPacSha256 !==
-        nextCookedPacCache.sourceRawPacSha256 ||
-      state.cookedPacCache.pacModsSha256 !==
-        nextCookedPacCache.pacModsSha256 ||
-      state.cookedPacCache.cookedPacSha256 !==
-        nextCookedPacCache.cookedPacSha256 ||
-      state.cookedPacCache.artifactRef !== nextCookedPacCache.artifactRef
-    ) {
-      invalidatePacApplyFreshness();
-    }
-    const nextState = await mv3State.saveStatePatch({
+    const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
       cookedPacCache: nextCookedPacCache,
       pacCook: createPacCookState('success', Object.assign({}, result, {
         startedAt,
         finishedAt,
       })),
     });
-    const latestState = await mv3State.loadState();
+    if (!nextState) {
+      return createPacApplyStaleResult();
+    }
     return {
       ok: true,
       status: 'success',
       pacCook: nextState.pacCook,
       cookedPacCache: await summarizeCookedPacCache(nextState.cookedPacCache),
-      stale: await getCookedPacStaleness(latestState),
+      stale: await getCookedPacStaleness(nextState),
     };
   }
 
-  const pacCook = await mv3State.setPacCookState(
-      createPacCookState('error', Object.assign({}, result, {
-        startedAt,
-        finishedAt,
-        error: result.error,
-      })),
-  );
-  return Object.assign({}, result, {
-    pacCook,
+  const nextState = await savePacWorkflowStatePatch(currentWorkflow, {
+    pacCook: createPacCookState(
+        'error',
+        Object.assign({}, result, {
+          startedAt,
+          finishedAt,
+          error: result.error,
+        }),
+    ),
   });
+  return nextState ? Object.assign({}, result, {
+    pacCook: nextState.pacCook,
+  }) : createPacApplyStaleResult();
 
 }

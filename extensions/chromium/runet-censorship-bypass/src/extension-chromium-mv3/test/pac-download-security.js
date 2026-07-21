@@ -329,11 +329,14 @@ async function runPersistenceFlow(result, existingPacCache) {
     'https://origin.example/proxy.pac',
   ]);
   const names = [
+    'beginPacWorkflow',
     'createPacDownloadState',
+    'getFreshPacWorkflowState',
     'getProviderForState',
     'mv3PacArtifacts',
     'mv3PacDownload',
     'mv3State',
+    'savePacWorkflowStatePatch',
   ];
   const descriptors = new Map(
       names.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]),
@@ -346,9 +349,18 @@ async function runPersistenceFlow(result, existingPacCache) {
     artifactRef: 'cooked:synthetic-existing-artifact',
     cookedPacSha256: 'synthetic-existing-cooked-sha256',
   };
+  const workflow = {generation: 1};
+  const state = {
+    currentPacProviderKey: provider.key,
+    pacCache: existingPacCache,
+    cookedPacCache: existingCookedPacCache,
+    pacWorkflowGeneration: workflow.generation,
+  };
 
+  global.beginPacWorkflow = async () => workflow;
   global.createPacDownloadState = (status, value) =>
     Object.assign({status}, value);
+  global.getFreshPacWorkflowState = async () => state;
   global.getProviderForState = () => provider;
   global.mv3PacArtifacts = {
     async putRawPacArtifact(value) {
@@ -368,11 +380,7 @@ async function runPersistenceFlow(result, existingPacCache) {
   global.mv3State = {
     async loadState() {
 
-      return {
-        currentPacProviderKey: provider.key,
-        pacCache: existingPacCache,
-        cookedPacCache: existingCookedPacCache,
-      };
+      return state;
 
     },
     async setPacDownloadState(value) {
@@ -387,6 +395,17 @@ async function runPersistenceFlow(result, existingPacCache) {
       return value;
 
     },
+  };
+  global.savePacWorkflowStatePatch = async (currentWorkflow, patch) => {
+    Chai.expect(currentWorkflow).to.equal(workflow);
+    if (patch.pacDownload) {
+      downloadStates.push(patch.pacDownload);
+    }
+    if (patch.pacCache) {
+      cacheWrites.push(patch.pacCache);
+    }
+    Object.assign(state, patch);
+    return state;
   };
 
   try {

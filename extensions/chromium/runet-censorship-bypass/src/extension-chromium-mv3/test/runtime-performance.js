@@ -278,8 +278,8 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
         ])).to.deep.equal({
           indexedDbReads: 2,
           indexedDbWrites: 2,
-          storageGets: 21,
-          storageSets: 12,
+          storageGets: 30,
+          storageSets: 13,
           tabGets: 1,
           pacDownloads: 1,
           pacCooks: 1,
@@ -319,8 +319,8 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
           'proxySettingsReads',
           'proxySettingsWrites',
         ])).to.deep.equal({
-          storageGets: 14,
-          storageSets: 7,
+          storageGets: 19,
+          storageSets: 8,
           indexedDbReads: 2,
           indexedDbWrites: 0,
           tabGets: 1,
@@ -414,7 +414,7 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
           'proxySettingsWrites',
         ])).to.deep.equal({
           runtimeRpcs: 2,
-          storageSets: 2,
+          storageSets: 4,
           indexedDbWrites: 2,
           proxySettingsWrites: 0,
         });

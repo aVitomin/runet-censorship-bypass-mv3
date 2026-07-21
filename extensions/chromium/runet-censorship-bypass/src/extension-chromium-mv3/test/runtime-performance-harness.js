@@ -112,6 +112,7 @@ function waitForAsyncWork() {
 async function createRuntimeHarness(options = {}) {
 
   const counts = createCounts();
+  const actionState = {};
   const asyncCounterWaiters = [];
   let completedHashOperations = 0;
   const storageData = {};
@@ -155,8 +156,8 @@ async function createRuntimeHarness(options = {}) {
   let markPacDownloadStarted = null;
   let pacCookGate = null;
   let markPacCookStarted = null;
+  let cookedArtifactReads = 0;
   let cookedArtifactReadGate = null;
-  let markCookedArtifactReadStarted = null;
   let proxySettingsReadGate = null;
   let proxySettingsSetGate = null;
   let nextProxySettingsSetError = null;
@@ -416,6 +417,7 @@ async function createRuntimeHarness(options = {}) {
   ].forEach((method) => {
     chromeApi.action[method] = (params, callback) => {
       ++counts.actionCalls;
+      actionState[method] = clone(params);
       notifyAsyncCounterWaiters();
       callback();
     };
@@ -521,8 +523,9 @@ async function createRuntimeHarness(options = {}) {
     warnings: seededCook.warnings,
   });
   storageData.mv3State = {
-    schemaVersion: 12,
+    schemaVersion: 13,
     currentPacProviderKey: 'Антизапрет',
+    pacWorkflowGeneration: 0,
     pacModsRevision:
       Number.isSafeInteger(options.pacModsRevision) ?
         options.pacModsRevision :
@@ -648,9 +651,13 @@ async function createRuntimeHarness(options = {}) {
     async getCookedPacArtifact(input) {
 
       countIndexedDb('read');
-      if (cookedArtifactReadGate) {
-        markCookedArtifactReadStarted();
-        await cookedArtifactReadGate;
+      ++cookedArtifactReads;
+      if (
+        cookedArtifactReadGate &&
+        cookedArtifactReads >= cookedArtifactReadGate.target
+      ) {
+        cookedArtifactReadGate.markStarted();
+        await cookedArtifactReadGate.promise;
       }
       return clone(cookedArtifacts.get(cookedKey(input))) || null;
 
@@ -699,6 +706,7 @@ async function createRuntimeHarness(options = {}) {
     '  actionStatusRecoveryPromise,\n' +
     '  applyCookedPacAndPersist,\n' +
     '  applyPeriodicUpdateIfStillSafe,\n' +
+    '  beginPacWorkflow,\n' +
     '  clearCookedPacCacheAndArtifacts,\n' +
     '  clearPacCacheAndArtifacts,\n' +
     '  clearProxyAndPersist,\n' +
@@ -779,19 +787,24 @@ async function createRuntimeHarness(options = {}) {
       return actionCompletion.then(waitForAsyncWork);
 
     },
-    blockCookedArtifactRead() {
+    blockCookedArtifactRead(offset = 1) {
 
       let release;
+      let markStarted;
       const started = new Promise((resolve) => {
-        markCookedArtifactReadStarted = resolve;
+        markStarted = resolve;
       });
-      cookedArtifactReadGate = new Promise((resolve) => {
+      const promise = new Promise((resolve) => {
         release = () => {
           cookedArtifactReadGate = null;
-          markCookedArtifactReadStarted = null;
           resolve();
         };
       });
+      cookedArtifactReadGate = {
+        markStarted,
+        promise,
+        target: cookedArtifactReads + offset,
+      };
       return {release, started};
 
     },
@@ -874,6 +887,11 @@ async function createRuntimeHarness(options = {}) {
     getState() {
 
       return clone(storageData.mv3State);
+
+    },
+    getActionState() {
+
+      return clone(actionState);
 
     },
     getProxyDetails() {

@@ -40,6 +40,121 @@ function expectStaleWithoutProxyWrite(harness, result) {
 }
 
 describe('PAC apply freshness', () => {
+  it('keeps a popup PAC workflow stale after clear during download', async () => {
+    const harness = await createRuntimeHarness();
+    await harness.context.mv3State.clearPacCache();
+    harness.resetCounts();
+    const download = harness.blockPacDownload();
+
+    const popupApply = harness.callRpc('applyPopupChanges', {
+      tabUrl: 'https://audit.example/',
+      operation: 'apply',
+      draft: {},
+    });
+    await download.started;
+    const clearResult = await harness.callRpc('clearProxy');
+    download.release();
+
+    const result = await popupApply;
+
+    expect(clearResult).to.include({ok: true, status: 'cleared'});
+    expect(result).to.include({ok: false, status: 'stale'});
+    expect(harness.counts.proxySettingsWrites).to.equal(0);
+    expect(harness.counts.proxySettingsClears).to.equal(1);
+    expect(harness.getProxyDetails().value.mode).to.equal('direct');
+    expect(harness.getState().proxyApply.status).to.equal('cleared');
+    expect(result.popupState.proxyApplyStatus).to.equal('cleared');
+    expect(harness.getActionState().setIcon.path[128])
+        .to.include('default-grayscale-128.png');
+    expect(harness.getActionState().setTitle.title)
+        .to.include('Proxy: system');
+  });
+
+  it('keeps a popup PAC workflow stale after clear during cooking', async () => {
+    const harness = await createRuntimeHarness();
+    await harness.context.mv3State.clearPacCache();
+    harness.setDownloadResult(harness.createDownloadResult(CHANGED_RAW_PAC));
+    harness.resetCounts();
+    const cook = harness.blockPacCook();
+
+    const popupApply = harness.callRpc('applyPopupChanges', {
+      tabUrl: 'https://audit.example/',
+      operation: 'apply',
+      draft: {},
+    });
+    await cook.started;
+    const clearResult = await harness.callRpc('clearProxy');
+    cook.release();
+
+    const result = await popupApply;
+
+    expect(clearResult).to.include({ok: true, status: 'cleared'});
+    expect(result).to.include({ok: false, status: 'stale'});
+    expect(harness.counts.proxySettingsWrites).to.equal(0);
+    expect(harness.getProxyDetails().value.mode).to.equal('direct');
+    expect(harness.getState().proxyApply.status).to.equal('cleared');
+  });
+
+  it('keeps a PAC apply stale after clear during artifact loading', async () => {
+    const harness = await createRuntimeHarness();
+    harness.resetCounts();
+    const artifactRead = harness.blockCookedArtifactRead();
+
+    const oldApply = harness.audit.applyCookedPacAndPersist({});
+    await artifactRead.started;
+    const clear = harness.audit.clearProxyAndPersist();
+    artifactRead.release();
+
+    const [result, clearResult] = await Promise.all([oldApply, clear]);
+
+    expect(clearResult).to.include({ok: true, status: 'cleared'});
+    expect(result).to.include({ok: false, status: 'stale'});
+    expect(harness.counts.proxySettingsWrites).to.equal(0);
+    expect(harness.getProxyDetails().value.mode).to.equal('direct');
+    expect(harness.getState().proxyApply.status).to.equal('cleared');
+  });
+
+  it('lets a fresh popup apply succeed after a failed stale workflow', async () => {
+    const harness = await createRuntimeHarness();
+    await harness.context.mv3State.clearPacCache();
+    harness.setDownloadResult({
+      ok: false,
+      status: 'error',
+      providerKey: 'Антизапрет',
+      error: {
+        code: 'PAC_DOWNLOAD_FAILED',
+        message: 'Synthetic stale download failure.',
+        details: null,
+      },
+      warnings: [],
+    });
+    harness.resetCounts();
+    const download = harness.blockPacDownload();
+
+    const staleApply = harness.callRpc('applyPopupChanges', {
+      tabUrl: 'https://audit.example/',
+      operation: 'apply',
+      draft: {},
+    });
+    await download.started;
+    await harness.callRpc('clearProxy');
+    download.release();
+    const staleResult = await staleApply;
+
+    harness.setDownloadResult(harness.createDownloadResult(CHANGED_RAW_PAC));
+    const freshResult = await harness.callRpc('applyPopupChanges', {
+      tabUrl: 'https://audit.example/',
+      operation: 'apply',
+      draft: {},
+    });
+
+    expect(staleResult).to.include({ok: false, status: 'stale'});
+    expect(freshResult).to.include({ok: true, status: 'applied'});
+    expect(harness.counts.proxySettingsWrites).to.equal(1);
+    expect(harness.getState().proxyApply.status).to.equal('applied');
+    expect(harness.getProxyDetails().value.mode).to.equal('pac_script');
+  });
+
   it('reproduces and blocks an old provider apply after provider selection changes', async () => {
     const harness = await createRuntimeHarness();
     harness.resetCounts();
@@ -81,11 +196,8 @@ describe('PAC apply freshness', () => {
 
     const result = await pipeline;
 
-    expect(result).to.include({ok: true});
-    expect(result.autoApply).to.include({
-      allowed: false,
-      status: 'skipped',
-    });
+    expect(result).to.include({ok: false, status: 'skipped'});
+    expect(result.error.code).to.equal('PAC_APPLY_STALE');
     expect(harness.counts.proxySettingsWrites).to.equal(0);
     expect(harness.getState().currentPacProviderKey).to.equal('onlyOwnSites');
   });
@@ -109,13 +221,9 @@ describe('PAC apply freshness', () => {
 
     const result = await pipeline;
 
-    expect(result).to.include({ok: true});
-    expect(result.autoApply).to.include({
-      allowed: false,
-      status: 'skipped',
-    });
+    expect(result).to.include({ok: false, status: 'skipped'});
+    expect(result.error.code).to.equal('PAC_APPLY_STALE');
     expect(harness.counts.proxySettingsWrites).to.equal(0);
-    expect(result.autoApply.reason).to.equal('cooked PAC is stale');
   });
 
   it('lets proxy clear supersede an apply paused immediately before set', async () => {
@@ -480,15 +588,15 @@ describe('PAC apply freshness', () => {
 
     const results = await Promise.all([first, second]);
 
-    results.forEach((result) => {
-      expect(result).to.include({
-        ok: true,
-        cookStatus: 'not_modified',
-      });
-      expect(result.autoApply).to.include({
-        status: 'unchanged',
-        applied: false,
-      });
+    expect(results[0]).to.include({ok: false, status: 'skipped'});
+    expect(results[0].error.code).to.equal('PAC_APPLY_STALE');
+    expect(results[1]).to.include({
+      ok: true,
+      cookStatus: 'not_modified',
+    });
+    expect(results[1].autoApply).to.include({
+      status: 'unchanged',
+      applied: false,
     });
     expect(harness.counts.proxySettingsWrites).to.equal(0);
     expect(harness.counts.pacCooks).to.equal(0);
@@ -542,5 +650,28 @@ describe('PAC apply freshness', () => {
     expect(restartedWorker.counts.proxySettingsWrites).to.equal(1);
     expect(restartedWorker.getState().proxyApply.cookedPacSha256)
         .to.equal(durableState.cookedPacCache.cookedPacSha256);
+  });
+
+  it('keeps a pre-restart workflow stale after a durable clear', async () => {
+    const firstWorker = await createRuntimeHarness();
+    const oldWorkflow = await firstWorker.audit.beginPacWorkflow();
+    const durableState = firstWorker.getState();
+
+    const restartedWorker = await createRuntimeHarness({
+      initialState: durableState,
+    });
+    restartedWorker.resetCounts();
+    const clear = await restartedWorker.audit.clearProxyAndPersist();
+    const stale = await restartedWorker.audit.applyCookedPacAndPersist(
+        {},
+        oldWorkflow,
+    );
+    const fresh = await restartedWorker.audit.applyCookedPacAndPersist({});
+
+    expect(clear).to.include({ok: true, status: 'cleared'});
+    expect(stale).to.include({ok: false, status: 'stale'});
+    expect(fresh).to.include({ok: true, status: 'applied'});
+    expect(restartedWorker.counts.proxySettingsClears).to.equal(1);
+    expect(restartedWorker.counts.proxySettingsWrites).to.equal(1);
   });
 });
