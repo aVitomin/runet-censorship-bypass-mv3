@@ -229,17 +229,21 @@ function createOptionsStateForRpc(state) {
 
 async function addCustomPacProvider(params) {
 
-  const state = await mv3State.loadState();
   const now = Date.now();
-  const key = mv3Providers.createCustomProviderKey(state.customPacProviders);
-  const provider = mv3Providers.validateCustomProvider(params, {
-    key,
-    now,
-    createdAt: now,
+  let provider;
+  const nextState = await mv3State.updateStateAtomically((currentState) => {
+    const key = mv3Providers.createCustomProviderKey(
+        currentState.customPacProviders,
+    );
+    provider = mv3Providers.validateCustomProvider(params, {
+      key,
+      now,
+      createdAt: now,
+    });
+    return {
+      customPacProviders: currentState.customPacProviders.concat(provider),
+    };
   });
-  const nextState = await mv3State.setCustomPacProviders(
-      state.customPacProviders.concat(provider),
-  );
   return createProviderMutationResult(nextState, provider, {
     status: 'added',
   });
@@ -255,65 +259,78 @@ async function updateCustomPacProvider(params) {
         'Built-in PAC providers are read-only.',
     );
   }
-  const state = await mv3State.loadState();
-  const index = state.customPacProviders.findIndex((provider) =>
-    provider.key === key,
-  );
-  if (index === -1) {
-    throw createProviderError(
-        'CUSTOM_PROVIDER_NOT_FOUND',
-        'Custom PAC provider was not found.',
+  let mutation;
+  const nextState = await mv3State.updateStateAtomically((currentState) => {
+    const index = currentState.customPacProviders.findIndex((provider) =>
+      provider.key === key,
     );
-  }
-  const previous = state.customPacProviders[index];
-  const provider = mv3Providers.validateCustomProvider(
-      Object.assign({}, previous, params),
-      {
-        key,
-        createdAt: previous.createdAt,
-        now: Date.now(),
-      },
-  );
-  const urlsChanged = JSON.stringify(previous.urls) !==
-    JSON.stringify(provider.urls);
-  const ifSelected = state.currentPacProviderKey === key;
-  const selectedProviderCleared = ifSelected && !provider.enabled;
+    if (index === -1) {
+      throw createProviderError(
+          'CUSTOM_PROVIDER_NOT_FOUND',
+          'Custom PAC provider was not found.',
+      );
+    }
+    const previous = currentState.customPacProviders[index];
+    const provider = mv3Providers.validateCustomProvider(
+        Object.assign({}, previous, params),
+        {
+          key,
+          createdAt: previous.createdAt,
+          now: Date.now(),
+        },
+    );
+    const urlsChanged = JSON.stringify(previous.urls) !==
+      JSON.stringify(provider.urls);
+    const ifSelected = currentState.currentPacProviderKey === key;
+    const selectedProviderCleared = ifSelected && !provider.enabled;
+    const nextProviders = currentState.customPacProviders.slice();
+    nextProviders[index] = provider;
+    const patch = {
+      customPacProviders: nextProviders,
+      currentPacProviderKey: selectedProviderCleared ?
+        null :
+        currentState.currentPacProviderKey,
+    };
+    if (ifSelected && provider.enabled && urlsChanged) {
+      patch.pacDownload = null;
+      patch.pacCache = null;
+      patch.pacCook = null;
+      patch.cookedPacCache = null;
+      patch.periodicUpdate = {
+        lastSuccessfulProviderKey: null,
+        nextRunAt: null,
+      };
+    }
+    if (ifSelected && (urlsChanged || selectedProviderCleared)) {
+      patch.proxyHealth = null;
+    }
+    mutation = {
+      provider,
+      previous,
+      urlsChanged,
+      ifSelected,
+      selectedProviderCleared,
+    };
+    return patch;
+  });
   if (
-    ifSelected &&
-    (urlsChanged || previous.enabled !== provider.enabled)
+    mutation.ifSelected &&
+    (
+      mutation.urlsChanged ||
+      mutation.previous.enabled !== mutation.provider.enabled
+    )
   ) {
     invalidatePacApplyFreshness();
   }
-  const nextProviders = state.customPacProviders.slice();
-  nextProviders[index] = provider;
-  let nextState = await mv3State.saveStatePatch({
-    customPacProviders: nextProviders,
-    currentPacProviderKey: selectedProviderCleared ?
-      null :
-      state.currentPacProviderKey,
-  });
-  let cacheMetadataCleared = false;
-  if (ifSelected && provider.enabled && urlsChanged) {
-    await mv3State.clearPacCache();
-    await mv3State.clearCookedPacCache();
-    nextState = await mv3State.loadState();
-    cacheMetadataCleared = true;
-    await mv3State.setPeriodicUpdateState({
-      lastSuccessfulProviderKey: null,
-      nextRunAt: null,
-    });
-    nextState = await mv3State.loadState();
-  }
-  if (ifSelected && (urlsChanged || selectedProviderCleared)) {
-    await mv3State.resetProxyHealth();
-  }
-  if (ifSelected && provider.enabled && urlsChanged) {
+  const cacheMetadataCleared = mutation.ifSelected &&
+    mutation.provider.enabled && mutation.urlsChanged;
+  if (cacheMetadataCleared) {
     await scheduleAutomaticPacUpdateCheck('provider-updated');
   }
   await updateActionStatusFromStoredState({});
-  return createProviderMutationResult(nextState, provider, {
+  return createProviderMutationResult(nextState, mutation.provider, {
     status: 'updated',
-    selectedProviderCleared,
+    selectedProviderCleared: mutation.selectedProviderCleared,
     cacheMetadataCleared,
   });
 
@@ -328,29 +345,33 @@ async function deleteCustomPacProvider(params) {
         'Built-in PAC providers cannot be deleted.',
     );
   }
-  const state = await mv3State.loadState();
-  const provider = state.customPacProviders.find((item) => item.key === key);
-  if (!provider) {
-    throw createProviderError(
-        'CUSTOM_PROVIDER_NOT_FOUND',
-        'Custom PAC provider was not found.',
+  let selectedProviderCleared = false;
+  const nextState = await mv3State.updateStateAtomically((currentState) => {
+    const provider = currentState.customPacProviders.find((item) =>
+      item.key === key,
     );
-  }
-  const selectedProviderCleared = state.currentPacProviderKey === key;
-  if (selectedProviderCleared) {
-    invalidatePacApplyFreshness();
-  }
-  let nextState = await mv3State.saveStatePatch({
-    customPacProviders: state.customPacProviders.filter((item) =>
-      item.key !== key,
-    ),
-    currentPacProviderKey: selectedProviderCleared ?
-      null :
-      state.currentPacProviderKey,
+    if (!provider) {
+      throw createProviderError(
+          'CUSTOM_PROVIDER_NOT_FOUND',
+          'Custom PAC provider was not found.',
+      );
+    }
+    selectedProviderCleared = currentState.currentPacProviderKey === key;
+    const patch = {
+      customPacProviders: currentState.customPacProviders.filter((item) =>
+        item.key !== key,
+      ),
+      currentPacProviderKey: selectedProviderCleared ?
+        null :
+        currentState.currentPacProviderKey,
+    };
+    if (selectedProviderCleared) {
+      patch.proxyHealth = null;
+    }
+    return patch;
   });
   if (selectedProviderCleared) {
-    await mv3State.resetProxyHealth();
-    nextState = await mv3State.loadState();
+    invalidatePacApplyFreshness();
   }
   await updateActionStatusFromStoredState({});
   return createProviderMutationResult(nextState, null, {
@@ -514,18 +535,23 @@ const RPC_METHODS = Object.freeze({
   async setCurrentPacProvider(params = {}) {
 
     const providerKey = params.providerKey === undefined ? null : params.providerKey;
-    const currentState = await mv3State.loadState();
-    if (
-      providerKey !== null &&
-      !getProviderForState(currentState, providerKey)
-    ) {
-      throw new TypeError('Unknown PAC provider.');
-    }
-    if (providerKey !== currentState.currentPacProviderKey) {
+    let ifProviderChanged = false;
+    const state = await mv3State.updateStateAtomically((currentState) => {
+      if (
+        providerKey !== null &&
+        !getProviderForState(currentState, providerKey)
+      ) {
+        throw new TypeError('Unknown PAC provider.');
+      }
+      ifProviderChanged = providerKey !== currentState.currentPacProviderKey;
+      return {
+        currentPacProviderKey: providerKey,
+        proxyHealth: null,
+      };
+    });
+    if (ifProviderChanged) {
       invalidatePacApplyFreshness();
     }
-    const state = await mv3State.setCurrentPacProvider(providerKey);
-    await mv3State.resetProxyHealth();
     await scheduleAutomaticPacUpdateCheck('provider-change');
     await updateActionStatusFromStoredState({});
     return {
@@ -1247,45 +1273,58 @@ async function applyPopupChanges(params = {}) {
 
 async function persistPopupDraft(tabUrl, draft) {
 
-  let state = await mv3State.loadState();
   const providerKey = getPopupDraftProviderKey(draft);
-  if (
-    providerKey !== undefined &&
-    providerKey !== state.currentPacProviderKey
-  ) {
-    if (providerKey !== null && !getProviderForState(state, providerKey)) {
+  const target = normalizePopupTabUrl(tabUrl);
+  let mutation;
+  const state = await mv3State.updateStateAtomically((currentState) => {
+    const providerChanged = providerKey !== undefined &&
+      providerKey !== currentState.currentPacProviderKey;
+    if (
+      providerChanged &&
+      providerKey !== null &&
+      !getProviderForState(currentState, providerKey)
+    ) {
       throw new TypeError('Unknown PAC provider.');
     }
-    invalidatePacApplyFreshness();
-    state = await mv3State.setCurrentPacProvider(providerKey);
-    await mv3State.resetProxyHealth();
-    await scheduleAutomaticPacUpdateCheck('popup-provider-change');
-  }
-
-  const previousPacMods = mv3PacMods.normalizePacMods(state.pacMods);
-  const candidateFingerprint = mv3ProxyHealth.getCandidateFingerprint(
-      previousPacMods,
-  );
-  const target = normalizePopupTabUrl(tabUrl);
-  const previousSiteMode = target.controllable ?
-    getPopupHostRuleState(previousPacMods, target.host).mode :
-    'auto';
-  const pacMods = applyPopupDraftToPacMods(previousPacMods, tabUrl, draft);
-  const nextSiteMode = target.controllable ?
-    getPopupHostRuleState(pacMods, target.host).mode :
-    'auto';
-  if (
-    mv3PacCook.getPacApplyModsIdentity(previousPacMods) !==
-    mv3PacCook.getPacApplyModsIdentity(pacMods)
-  ) {
-    invalidatePacApplyFreshness();
-  }
-  return mv3State.savePacMods(pacMods, {
-    resetProxyHealth:
+    const previousPacMods = mv3PacMods.normalizePacMods(currentState.pacMods);
+    const candidateFingerprint = mv3ProxyHealth.getCandidateFingerprint(
+        previousPacMods,
+    );
+    const previousSiteMode = target.controllable ?
+      getPopupHostRuleState(previousPacMods, target.host).mode :
+      'auto';
+    const pacMods = applyPopupDraftToPacMods(previousPacMods, tabUrl, draft);
+    const candidateError = getPopupDraftProxyCandidateError(pacMods);
+    if (candidateError) {
+      throw createProviderError('PROXY_RULE_NO_CANDIDATE', candidateError);
+    }
+    const nextSiteMode = target.controllable ?
+      getPopupHostRuleState(pacMods, target.host).mode :
+      'auto';
+    const pacModsChanged =
+      mv3PacCook.getPacApplyModsIdentity(previousPacMods) !==
+      mv3PacCook.getPacApplyModsIdentity(pacMods);
+    const resetProxyHealth = providerChanged ||
       candidateFingerprint !==
         mv3ProxyHealth.getCandidateFingerprint(pacMods) ||
-      previousSiteMode !== nextSiteMode,
+      previousSiteMode !== nextSiteMode;
+    const patch = {pacMods};
+    if (providerChanged) {
+      patch.currentPacProviderKey = providerKey;
+    }
+    if (resetProxyHealth) {
+      patch.proxyHealth = null;
+    }
+    mutation = {pacModsChanged, providerChanged};
+    return patch;
   });
+  if (mutation.pacModsChanged || mutation.providerChanged) {
+    invalidatePacApplyFreshness();
+  }
+  if (mutation.providerChanged) {
+    await scheduleAutomaticPacUpdateCheck('popup-provider-change');
+  }
+  return state;
 
 }
 
@@ -1293,18 +1332,24 @@ async function validatePopupDraftProxyCandidates(tabUrl, draft) {
 
   const state = await mv3State.loadState();
   const pacMods = applyPopupDraftToPacMods(state.pacMods, tabUrl, draft);
+  return {
+    state,
+    error: getPopupDraftProxyCandidateError(pacMods),
+  };
+
+}
+
+function getPopupDraftProxyCandidateError(pacMods) {
+
   const proxyRules = pacMods.exceptions
       .concat(pacMods.rules)
       .filter((rule) => rule.enabled && rule.action === 'PROXY');
   const explicitProxyResult = mv3PacCook.buildExplicitProxyResult(
       mv3PacMods.getProxyRuleCandidates(pacMods),
   );
-  return {
-    state,
-    error: proxyRules.length && !explicitProxyResult ?
-      NO_PROXY_CANDIDATE_MESSAGE :
-      '',
-  };
+  return proxyRules.length && !explicitProxyResult ?
+    NO_PROXY_CANDIDATE_MESSAGE :
+    '';
 
 }
 
@@ -1720,51 +1765,68 @@ function getPacAutoUpdateSummary(state) {
 
 async function runAutomaticPacUpdateIfDue(params = {}) {
 
-  let state = await mv3State.loadState();
   const trigger = params.trigger || 'watchdog';
-  if (!state.periodicUpdate.enabled) {
+  let decision;
+  const state = await mv3State.updateStateAtomically((currentState) => {
+    if (!currentState.periodicUpdate.enabled) {
+      decision = 'disabled';
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    if (!currentState.currentPacProviderKey) {
+      decision = 'no-provider';
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    const success = getEffectivePacUpdateSuccess(currentState);
+    const periodicPatch = {};
+    if (
+      success.lastSuccessfulUpdateAt &&
+      (
+        currentState.periodicUpdate.lastSuccessfulUpdateAt !==
+          success.lastSuccessfulUpdateAt ||
+        currentState.periodicUpdate.lastSuccessfulProviderKey !==
+          success.providerKey
+      )
+    ) {
+      periodicPatch.lastSuccessfulUpdateAt = success.lastSuccessfulUpdateAt;
+      periodicPatch.lastSuccessfulProviderKey = success.providerKey;
+    }
+    const effectivePeriodic = Object.assign(
+        {},
+        currentState.periodicUpdate,
+        periodicPatch,
+    );
+    if (mv3PeriodicUpdate.isUpdateDue(
+        effectivePeriodic,
+        currentState.currentPacProviderKey,
+    )) {
+      decision = 'run';
+    } else {
+      decision = 'not-due';
+      periodicPatch.status = 'scheduled';
+      periodicPatch.nextRunAt = mv3PeriodicUpdate.getDueAt(
+          effectivePeriodic,
+          currentState.currentPacProviderKey,
+      );
+    }
+    return Object.keys(periodicPatch).length ?
+      {periodicUpdate: periodicPatch} :
+      mv3State.ATOMIC_NO_CHANGE;
+  });
+  if (decision === 'disabled') {
     return createPeriodicSkip(
         'AUTO_UPDATE_DISABLED',
         'Automatic PAC updates are disabled.',
         {trigger},
     );
   }
-  if (!state.currentPacProviderKey) {
+  if (decision === 'no-provider') {
     return createPeriodicSkip(
         'PROVIDER_NOT_SELECTED',
         'Select a PAC provider before running periodic updates.',
         {trigger},
     );
   }
-  const success = getEffectivePacUpdateSuccess(state);
-  if (
-    success.lastSuccessfulUpdateAt &&
-    (
-      state.periodicUpdate.lastSuccessfulUpdateAt !==
-        success.lastSuccessfulUpdateAt ||
-      state.periodicUpdate.lastSuccessfulProviderKey !==
-        success.providerKey
-    )
-  ) {
-    await mv3State.setPeriodicUpdateState({
-      lastSuccessfulUpdateAt: success.lastSuccessfulUpdateAt,
-      lastSuccessfulProviderKey: success.providerKey,
-      nextRunAt: success.lastSuccessfulUpdateAt +
-        state.periodicUpdate.intervalMinutes * 60 * 1000,
-    });
-    state = await mv3State.loadState();
-  }
-  if (!mv3PeriodicUpdate.isUpdateDue(
-      state.periodicUpdate,
-      state.currentPacProviderKey,
-  )) {
-    await mv3State.setPeriodicUpdateState({
-      status: 'scheduled',
-      nextRunAt: mv3PeriodicUpdate.getDueAt(
-          state.periodicUpdate,
-          state.currentPacProviderKey,
-      ),
-    });
+  if (decision === 'not-due') {
     return createPeriodicSkip(
         'PAC_UPDATE_NOT_DUE',
         'Automatic PAC update is not due yet.',
@@ -2485,39 +2547,59 @@ async function recordProxyHealthFailure(details) {
       }
     }
   }
-
-  const previous = state.proxyHealth || {};
-  const targetOrigin = ifExplicitProxyRule ?
-    failureOrigin :
-    previous.targetOrigin;
-  const ifNotify = mv3ProxyHealth.shouldNotify(
-      previous,
-      errorCode,
-      candidate.type,
-      now,
-  );
-  const patch = {
-    status: 'error',
-    lastCheckedAt: now,
-    lastErrorAt: now,
-    lastErrorCode: errorCode,
-    lastErrorMessage: errorCode,
-    lastErrorUrl: failureHost,
-    candidateType: candidate.type,
-    candidateEndpoint: candidate.endpoint || null,
-    targetOrigin: targetOrigin || null,
-  };
-  if (ifNotify) {
-    patch.lastNotificationAt = now;
-    patch.lastNotificationKey = debounceKey;
+  let ifRecorded = false;
+  let ifNotify = false;
+  let latestCandidate = candidate;
+  const committedState = await mv3State.updateStateAtomically((currentState) => {
+    if (currentState.proxyApply.status !== 'applied') {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    const ifLatestExplicitProxyRule = failureHost &&
+      getPopupHostRuleState(currentState.pacMods, failureHost).mode === 'proxy';
+    latestCandidate = ifLatestExplicitProxyRule ?
+      mv3ProxyHealth.getCandidateSummary(currentState.pacMods) :
+      {type: null, endpoint: ''};
+    const previous = currentState.proxyHealth || {};
+    const targetOrigin = ifLatestExplicitProxyRule ?
+      failureOrigin :
+      previous.targetOrigin;
+    ifNotify = mv3ProxyHealth.shouldNotify(
+        previous,
+        errorCode,
+        latestCandidate.type,
+        now,
+    );
+    const patch = {
+      status: 'error',
+      lastCheckedAt: now,
+      lastErrorAt: now,
+      lastErrorCode: errorCode,
+      lastErrorMessage: errorCode,
+      lastErrorUrl: failureHost,
+      candidateType: latestCandidate.type,
+      candidateEndpoint: latestCandidate.endpoint || null,
+      targetOrigin: targetOrigin || null,
+    };
+    if (ifNotify) {
+      patch.lastNotificationAt = now;
+      patch.lastNotificationKey = mv3ProxyHealth.getNotificationKey(
+          errorCode,
+          latestCandidate.type,
+      );
+    }
+    ifRecorded = true;
+    return {proxyHealth: patch};
+  });
+  if (!ifRecorded) {
+    return {ok: false, status: 'ignored'};
   }
-  const proxyHealth = await mv3State.setProxyHealthState(patch);
+  const proxyHealth = committedState.proxyHealth;
   if (ifNotify) {
     await mv3ActionStatus.notify({
-      prefs: state.notificationPrefs,
+      prefs: committedState.notificationPrefs,
       type: 'extError',
       title: getChromeMessage('proxyHealthNotificationTitle', 'Proxy error'),
-      message: getProxyHealthMessage(candidate.type, true),
+      message: getProxyHealthMessage(latestCandidate.type, true),
     });
   }
   await updateActionStatusFromStoredState({});
@@ -2604,7 +2686,7 @@ async function runProxyHealthCheckInternal(params) {
     );
   }
 
-  const candidate = mv3ProxyHealth.getCandidateSummary(state.pacMods);
+  let candidate = mv3ProxyHealth.getCandidateSummary(state.pacMods);
   if (!candidate.type) {
     return createProxyCheckResult(
         'inconclusive',
@@ -2613,14 +2695,51 @@ async function runProxyHealthCheckInternal(params) {
         state.proxyHealth,
     );
   }
-  const previousHealth = state.proxyHealth;
   const startedAt = Date.now();
-  await mv3State.setProxyHealthState({
-    status: 'checking',
-    candidateType: candidate.type,
-    candidateEndpoint: candidate.endpoint || null,
-    targetOrigin,
+  let previousHealth;
+  let startFailure = null;
+  const startedState = await mv3State.updateStateAtomically((currentState) => {
+    if (getPopupHostRuleState(currentState.pacMods, host).mode !== 'proxy') {
+      startFailure = {
+        code: 'PROXY_CHECK_REQUIRES_PROXY_RULE',
+        message: 'Enable Proxy mode for the current site before checking.',
+      };
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    if (currentState.proxyApply.status !== 'applied') {
+      startFailure = {
+        code: 'PROXY_CHECK_NOT_APPLIED',
+        message: 'Apply proxy settings before checking.',
+      };
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    candidate = mv3ProxyHealth.getCandidateSummary(currentState.pacMods);
+    if (!candidate.type) {
+      startFailure = {
+        code: 'NO_PROXY_CANDIDATE',
+        message: 'No proxy candidate is enabled.',
+      };
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    previousHealth = currentState.proxyHealth;
+    return {
+      proxyHealth: {
+        status: 'checking',
+        lastCheckedAt: startedAt,
+        candidateType: candidate.type,
+        candidateEndpoint: candidate.endpoint || null,
+        targetOrigin,
+      },
+    };
   });
+  if (startFailure) {
+    return createProxyCheckResult(
+        'inconclusive',
+        startFailure.code,
+        startFailure.message,
+        startedState.proxyHealth,
+    );
+  }
   await updateActionStatusFromStoredState({});
 
   const controller = new AbortController();
@@ -2643,20 +2762,51 @@ async function runProxyHealthCheckInternal(params) {
       response.body.cancel().catch(() => {});
     }
     const checkedAt = Date.now();
-    const proxyHealth = await mv3State.setProxyHealthState({
-      status: 'ok',
-      lastCheckedAt: checkedAt,
-      lastSuccessAt: checkedAt,
-      lastErrorAt: null,
-      lastErrorCode: null,
-      lastErrorMessage: null,
-      lastErrorUrl: null,
-      candidateType: candidate.type,
-      candidateEndpoint: candidate.endpoint || null,
-      targetOrigin,
-      lastNotificationAt: null,
-      lastNotificationKey: null,
-    });
+    let ifSuperseded = false;
+    const committedState = await mv3State.updateStateAtomically(
+        (currentState) => {
+          const currentHealth = currentState.proxyHealth;
+          if (
+            currentHealth.status !== 'checking' ||
+            currentHealth.lastCheckedAt !== startedAt ||
+            currentHealth.targetOrigin !== targetOrigin
+          ) {
+            ifSuperseded = true;
+            return mv3State.ATOMIC_NO_CHANGE;
+          }
+          return {
+            proxyHealth: {
+              status: 'ok',
+              lastCheckedAt: checkedAt,
+              lastSuccessAt: checkedAt,
+              lastErrorAt: null,
+              lastErrorCode: null,
+              lastErrorMessage: null,
+              lastErrorUrl: null,
+              candidateType: candidate.type,
+              candidateEndpoint: candidate.endpoint || null,
+              targetOrigin,
+              lastNotificationAt: null,
+              lastNotificationKey: null,
+            },
+          };
+        },
+    );
+    const proxyHealth = committedState.proxyHealth;
+    if (ifSuperseded) {
+      const ifBrowserError = proxyHealth.status === 'error' &&
+        proxyHealth.lastErrorAt >= startedAt;
+      return createProxyCheckResult(
+          ifBrowserError ? 'error' : 'inconclusive',
+          ifBrowserError ?
+            proxyHealth.lastErrorCode :
+            'PROXY_CHECK_SUPERSEDED',
+          ifBrowserError ?
+            getProxyHealthMessage(proxyHealth.candidateType, false) :
+            'Proxy health changed while the check was running.',
+          proxyHealth,
+      );
+    }
     await updateActionStatusFromStoredState({});
     return createProxyCheckResult(
         'ok',
@@ -2666,32 +2816,52 @@ async function runProxyHealthCheckInternal(params) {
     );
   } catch (err) {
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const latest = await mv3State.loadState();
-    if (
-      latest.proxyHealth.status === 'error' &&
-      latest.proxyHealth.lastErrorAt >= startedAt &&
-      latest.proxyHealth.lastErrorUrl === host
-    ) {
+    const checkedAt = Date.now();
+    let ifBrowserError = false;
+    const committedState = await mv3State.updateStateAtomically(
+        (currentState) => {
+          const currentHealth = currentState.proxyHealth;
+          if (
+            currentHealth.status === 'error' &&
+            currentHealth.lastErrorAt >= startedAt
+          ) {
+            ifBrowserError = true;
+            return mv3State.ATOMIC_NO_CHANGE;
+          }
+          if (
+            currentHealth.status !== 'checking' ||
+            currentHealth.lastCheckedAt !== startedAt ||
+            currentHealth.targetOrigin !== targetOrigin
+          ) {
+            return mv3State.ATOMIC_NO_CHANGE;
+          }
+          const restoreError = previousHealth.status === 'error';
+          return {
+            proxyHealth: {
+              status: restoreError ? 'error' : 'unknown',
+              lastCheckedAt: checkedAt,
+              candidateType: candidate.type,
+              candidateEndpoint: candidate.endpoint || null,
+              targetOrigin,
+              lastErrorAt: restoreError ? previousHealth.lastErrorAt : null,
+              lastErrorCode: restoreError ? previousHealth.lastErrorCode : null,
+              lastErrorMessage: restoreError ?
+                previousHealth.lastErrorMessage :
+                null,
+              lastErrorUrl: restoreError ? previousHealth.lastErrorUrl : null,
+            },
+          };
+        },
+    );
+    const proxyHealth = committedState.proxyHealth;
+    if (ifBrowserError) {
       return createProxyCheckResult(
           'error',
-          latest.proxyHealth.lastErrorCode,
-          getProxyHealthMessage(latest.proxyHealth.candidateType, false),
-          latest.proxyHealth,
+          proxyHealth.lastErrorCode,
+          getProxyHealthMessage(proxyHealth.candidateType, false),
+          proxyHealth,
       );
     }
-    const checkedAt = Date.now();
-    const restoreError = previousHealth.status === 'error';
-    const proxyHealth = await mv3State.setProxyHealthState({
-      status: restoreError ? 'error' : 'unknown',
-      lastCheckedAt: checkedAt,
-      candidateType: candidate.type,
-      candidateEndpoint: candidate.endpoint || null,
-      targetOrigin,
-      lastErrorAt: restoreError ? previousHealth.lastErrorAt : null,
-      lastErrorCode: restoreError ? previousHealth.lastErrorCode : null,
-      lastErrorMessage: restoreError ? previousHealth.lastErrorMessage : null,
-      lastErrorUrl: restoreError ? previousHealth.lastErrorUrl : null,
-    });
     await updateActionStatusFromStoredState({});
     return createProxyCheckResult(
         'inconclusive',

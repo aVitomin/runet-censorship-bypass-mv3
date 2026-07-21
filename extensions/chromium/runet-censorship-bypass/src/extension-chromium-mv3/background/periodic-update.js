@@ -212,24 +212,33 @@
 
   }
 
-  async function updateNextRunState(state, status, fallbackNextRunAt) {
+  async function updateNextRunState(status, fallbackNextRunAt) {
 
-    const dueAt = getDueAt(
-        state.periodicUpdate,
-        state.currentPacProviderKey,
-    );
-    const nextStatus = status || state.periodicUpdate.status;
-    const nextRunAt = dueAt || fallbackNextRunAt || null;
-    if (
-      state.periodicUpdate.status === nextStatus &&
-      state.periodicUpdate.nextRunAt === nextRunAt
-    ) {
-      return state.periodicUpdate;
-    }
-    return mv3State.setPeriodicUpdateState({
-      status: nextStatus,
-      nextRunAt,
+    const state = await mv3State.updateStateAtomically((currentState) => {
+      const dueAt = getDueAt(
+          currentState.periodicUpdate,
+          currentState.currentPacProviderKey,
+      );
+      const nextStatus = currentState.periodicUpdate.enabled ?
+        (status || currentState.periodicUpdate.status) :
+        (currentState.periodicUpdate.status === 'running' ? 'skipped' : 'idle');
+      const nextRunAt = currentState.periodicUpdate.enabled ?
+        (dueAt || fallbackNextRunAt || null) :
+        null;
+      if (
+        currentState.periodicUpdate.status === nextStatus &&
+        currentState.periodicUpdate.nextRunAt === nextRunAt
+      ) {
+        return mv3State.ATOMIC_NO_CHANGE;
+      }
+      return {
+        periodicUpdate: {
+          status: nextStatus,
+          nextRunAt,
+        },
+      };
     });
+    return state.periodicUpdate;
 
   }
 
@@ -239,21 +248,27 @@
     const periodicUpdate = state.periodicUpdate;
     if (!periodicUpdate.enabled) {
       await clearAllAlarms();
-      return mv3State.setPeriodicUpdateState({
-        status: periodicUpdate.status === 'running' ? 'skipped' : 'idle',
-        nextRunAt: null,
+      const nextState = await mv3State.updateStateAtomically((currentState) => {
+        if (currentState.periodicUpdate.enabled) {
+          return mv3State.ATOMIC_NO_CHANGE;
+        }
+        return {
+          periodicUpdate: {
+            status: currentState.periodicUpdate.status === 'running' ?
+              'skipped' :
+              'idle',
+            nextRunAt: null,
+          },
+        };
       });
+      return nextState.periodicUpdate;
     }
     await ensureWatchdogAlarm(options);
     let dueCheck = null;
     if (isUpdateDue(periodicUpdate, state.currentPacProviderKey)) {
       dueCheck = await scheduleDueCheck(STARTUP_DELAY_MINUTES);
     }
-    return updateNextRunState(
-        state,
-        'scheduled',
-        dueCheck && dueCheck.scheduledTime,
-    );
+    return updateNextRunState('scheduled', dueCheck && dueCheck.scheduledTime);
 
   }
 
@@ -287,19 +302,22 @@
     await mv3State.setPeriodicUpdateEnabled(enabled);
     if (!enabled) {
       await clearAllAlarms();
-      await mv3State.setPeriodicUpdateState({
-        status: 'idle',
-        nextRunAt: null,
+      await mv3State.updateStateAtomically((currentState) => {
+        if (currentState.periodicUpdate.enabled) {
+          return mv3State.ATOMIC_NO_CHANGE;
+        }
+        return {
+          periodicUpdate: {
+            status: 'idle',
+            nextRunAt: null,
+          },
+        };
       });
       return getStatus();
     }
     await ensureWatchdogAlarm({startupDelay: true});
     const dueCheck = await scheduleDueCheck(STARTUP_DELAY_MINUTES);
-    await updateNextRunState(
-        await mv3State.loadState(),
-        'scheduled',
-        dueCheck && dueCheck.scheduledTime,
-    );
+    await updateNextRunState('scheduled', dueCheck && dueCheck.scheduledTime);
     return getStatus();
 
   }
@@ -312,7 +330,7 @@
     );
     if (periodicUpdate.enabled) {
       await ensureWatchdogAlarm();
-      await updateNextRunState(await mv3State.loadState(), 'scheduled');
+      await updateNextRunState('scheduled');
     }
     return getStatus();
 
@@ -349,6 +367,16 @@
       return createInProgressResult(trigger);
     }
 
+    inFlightPromise = startUpdate({trigger, applyIfSafe, execute})
+        .finally(() => {
+          inFlightPromise = null;
+        });
+    return inFlightPromise;
+
+  }
+
+  async function startUpdate({trigger, applyIfSafe, execute}) {
+
     const state = await mv3State.loadState();
     if (isRunningFresh(state.periodicUpdate)) {
       const result = createInProgressResult(trigger);
@@ -362,12 +390,7 @@
       });
       return result;
     }
-
-    inFlightPromise = runUpdateInternal({trigger, applyIfSafe, execute})
-        .finally(() => {
-          inFlightPromise = null;
-        });
-    return inFlightPromise;
+    return runUpdateInternal({trigger, applyIfSafe, execute});
 
   }
 
@@ -405,7 +428,6 @@
     }
 
     const finishedAt = Date.now();
-    const state = await mv3State.loadState();
     const ifSkipped = result && result.status === 'skipped';
     const ifSuccess = result && result.ok === true;
     const status = ifSkipped ? 'skipped' : (ifSuccess ? 'success' : 'error');
@@ -414,50 +436,54 @@
         'PERIODIC_UPDATE_FAILED',
         'Periodic PAC update failed.',
     );
-    const providerKey = result && result.providerKey ||
-      state.currentPacProviderKey;
-    const patch = {
-      status,
-      lastFinishedAt: finishedAt,
-      lastResult: result || null,
-    };
-    if (status === 'success') {
-      patch.lastSuccessfulUpdateAt =
-        result && result.successfulUpdateAt || finishedAt;
-      patch.lastSuccessfulProviderKey = providerKey || null;
-      patch.lastFailureAt = null;
-      patch.lastFailureCode = null;
-      patch.lastError = null;
-      patch.consecutiveFailures = 0;
-      patch.nextRunAt = state.periodicUpdate.enabled ?
-        patch.lastSuccessfulUpdateAt +
-          state.periodicUpdate.intervalMinutes * 60 * 1000 :
-        null;
-      await clearAlarm(RETRY_ALARM_NAME);
-    } else if (status === 'error') {
-      patch.lastFailureAt = finishedAt;
-      patch.lastFailureCode = error && error.code || 'PERIODIC_UPDATE_FAILED';
-      patch.lastError = error;
-      patch.consecutiveFailures =
-        state.periodicUpdate.consecutiveFailures + 1;
-      const retryDelay = getRetryDelayMinutes(patch.consecutiveFailures);
-      patch.nextRunAt = state.periodicUpdate.enabled ?
-        finishedAt + retryDelay * 60 * 1000 :
-        null;
-      if (state.periodicUpdate.enabled) {
-        await clearAlarm(RETRY_ALARM_NAME);
-        await scheduleRetry(patch.consecutiveFailures);
+    const finishedState = await mv3State.updateStateAtomically((currentState) => {
+      const currentPeriodic = currentState.periodicUpdate;
+      const providerKey = result && result.providerKey ||
+        currentState.currentPacProviderKey;
+      const patch = {
+        status,
+        lastFinishedAt: finishedAt,
+        lastResult: result || null,
+      };
+      if (status === 'success') {
+        patch.lastSuccessfulUpdateAt =
+          result && result.successfulUpdateAt || finishedAt;
+        patch.lastSuccessfulProviderKey = providerKey || null;
+        patch.lastFailureAt = null;
+        patch.lastFailureCode = null;
+        patch.lastError = null;
+        patch.consecutiveFailures = 0;
+        patch.nextRunAt = currentPeriodic.enabled ?
+          patch.lastSuccessfulUpdateAt +
+            currentPeriodic.intervalMinutes * 60 * 1000 :
+          null;
+      } else if (status === 'error') {
+        patch.lastFailureAt = finishedAt;
+        patch.lastFailureCode = error && error.code || 'PERIODIC_UPDATE_FAILED';
+        patch.lastError = error;
+        patch.consecutiveFailures = currentPeriodic.consecutiveFailures + 1;
+        const retryDelay = getRetryDelayMinutes(patch.consecutiveFailures);
+        patch.nextRunAt = currentPeriodic.enabled ?
+          finishedAt + retryDelay * 60 * 1000 :
+          null;
+      } else {
+        patch.lastError = currentPeriodic.lastError;
+        patch.consecutiveFailures = currentPeriodic.consecutiveFailures;
+        patch.nextRunAt = currentPeriodic.enabled ?
+          getDueAt(currentPeriodic, currentState.currentPacProviderKey) :
+          null;
       }
-    } else {
-      patch.lastError = state.periodicUpdate.lastError;
-      patch.consecutiveFailures = state.periodicUpdate.consecutiveFailures;
-      patch.nextRunAt = state.periodicUpdate.enabled ?
-        getDueAt(state.periodicUpdate, state.currentPacProviderKey) :
-        null;
+      return {periodicUpdate: patch};
+    });
+    const finishedPeriodic = finishedState.periodicUpdate;
+    if (status === 'success') {
+      await clearAlarm(RETRY_ALARM_NAME);
+    } else if (status === 'error' && finishedPeriodic.enabled) {
+      await clearAlarm(RETRY_ALARM_NAME);
+      await scheduleRetry(finishedPeriodic.consecutiveFailures);
     }
 
-    await mv3State.setPeriodicUpdateState(patch);
-    await mv3State.recordPeriodicUpdateEvent({
+    const periodicUpdate = await mv3State.recordPeriodicUpdateEvent({
       type: status,
       at: finishedAt,
       trigger,
@@ -466,11 +492,11 @@
       message: getResultMessage(status, result),
       error,
     });
-    if (state.periodicUpdate.enabled && hasAlarmApi()) {
+    if (periodicUpdate.enabled && hasAlarmApi()) {
       await ensureWatchdogAlarm();
     }
     return Object.assign({}, result, {
-      periodicUpdate: await mv3State.getPeriodicUpdateState(),
+      periodicUpdate,
     });
 
   }

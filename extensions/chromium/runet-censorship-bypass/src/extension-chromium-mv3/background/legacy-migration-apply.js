@@ -304,44 +304,52 @@
       lastError: null,
     });
 
-    let currentState;
     let plan;
     let result;
     try {
-      currentState = await mv3State.loadState();
+      const auditState = await mv3State.loadState();
       plan = await mv3LegacyMigrationAudit.runAudit({
         includeValues: false,
         includeSensitiveValues: true,
-        currentState,
+        currentState: auditState,
       });
-      result = createApplyPlan({
-        plan,
-        currentState,
-        strategy: params.strategy,
-        fields: params.fields,
+      let summary;
+      await mv3State.updateStateAtomically((currentState) => {
+        result = createApplyPlan({
+          plan,
+          currentState,
+          strategy: params.strategy,
+          fields: params.fields,
+        });
+        if (result.ok === false) {
+          return {
+            legacyMigration: {
+              applyStatus: 'error',
+              lastApplyAt: Date.now(),
+              lastError: result.error,
+              lastApplySummary: null,
+            },
+          };
+        }
+        summary = summarizeApplyResult(result);
+        return Object.assign({}, result.patch, {
+          legacyMigration: {
+            applyStatus: result.status,
+            lastApplyAt: Date.now(),
+            detectedLegacyData: plan.detected === true,
+            applied: result.appliedFields.length > 0,
+            appliedFields: result.appliedFields,
+            skippedFields: result.skippedFields,
+            conflicts: result.conflicts,
+            lastApplySummary: summary,
+            lastError: null,
+            warnings: result.warnings,
+          },
+        });
       });
       if (result.ok === false) {
-        await persistApplyFailure(result.error);
         return result;
       }
-
-      if (Object.keys(result.patch).length) {
-        await mv3State.saveStatePatch(result.patch);
-      }
-
-      const summary = summarizeApplyResult(result);
-      await mv3State.setLegacyMigrationState({
-        applyStatus: result.status,
-        lastApplyAt: Date.now(),
-        detectedLegacyData: plan.detected === true,
-        applied: result.appliedFields.length > 0,
-        appliedFields: result.appliedFields,
-        skippedFields: result.skippedFields,
-        conflicts: result.conflicts,
-        lastApplySummary: summary,
-        lastError: null,
-        warnings: result.warnings,
-      });
       return Object.assign({}, summary, {
         ok: true,
       });

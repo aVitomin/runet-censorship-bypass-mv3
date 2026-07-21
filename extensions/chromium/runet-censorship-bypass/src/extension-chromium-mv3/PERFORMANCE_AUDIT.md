@@ -20,20 +20,22 @@ means tab lookups/action API calls; `C/H` means PAC cooks/hash operations; and
 
 | Scenario | Before | After | Result |
 | --- | --- | --- | --- |
-| Cold worker startup | G/S 3/2; T/A 1/4; H 1; PR 1; alarms get/create 1/1 | G/S 2/1; other counts unchanged | Avoided an unchanged periodic-state rewrite; live proxy state and action are still reconstructed. |
+| Cold worker startup | G/S 3/2; T/A 1/4; H 1; PR 1; alarms get/create 1/1 | G/S 3/1; other counts unchanged | Avoids an unchanged periodic-state write while one queue-owned freshness read prevents alarm reconciliation from committing a derived timestamp from a stale snapshot. |
 | Warm worker RPC | RPC 1; G/S 1/0 | unchanged | No module reinitialization or durable write. |
 | Popup opening | RPC 1; tab query 1; G/S 1/0; H 1; A 0 | unchanged | Already optimal; opening the popup does not rewrite toolbar state. |
 | Full settings opening | RPC 1; G/S 2/0; H 2; alarm gets 2 | RPC 1; G/S 1/0; H 1; alarm gets 2 | Reuses the initial state and staleness calculation inside `getState`. |
 | Active-tab switch | G/S 1/0; T/A 1/4; H 1 | unchanged | Event driven, one state snapshot, no durable write. |
 | Active-tab URL completion | G/S 1/0; T/A 0/1; H 1 | unchanged | Only the changed title is written. |
-| Current site Auto to Proxy | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 3/1; T/A 1/3; H 2 | PAC modifiers and health reset are one serialized state mutation. |
-| Current site Proxy to Direct | RPC 1; G/S 5/2; T/A 1/1; H 2 | RPC 1; G/S 3/1; T/A 1/1; H 2 | Same batching; routing result is unchanged. |
-| Current site Direct to Auto | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 3/1; T/A 1/3; H 2 | Same batching; the override is removed normally. |
-| PAC refresh, changed content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 25/12; IDB R/W 2/2; C/H 1/7; PR/PW 4/1; tab gets 1 | Complete download, cook, persistence, final durable-fingerprint validation, live-control checks, and apply remain. The final freshness read replaces the transient `applying` write, so reads and hashes do not increase and one state write is avoided. |
-| PAC refresh, identical HTTP 200 content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 18/7; IDB R/W 2/0; C/H 0/5; PR/PW 1/0; tab gets 1 | Existing raw and cooked artifacts are verified, no artifact is rewritten, no cook runs, and unchanged PAC is not reapplied. |
+| Current site Auto to Proxy | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 2/1; T/A 1/3; H 2 | PAC modifiers and health reset derive from the queue's latest state and commit once. |
+| Current site Proxy to Direct | RPC 1; G/S 5/2; T/A 1/1; H 2 | RPC 1; G/S 2/1; T/A 1/1; H 2 | Same atomic derivation; routing result is unchanged. |
+| Current site Direct to Auto | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 2/1; T/A 1/3; H 2 | Same atomic derivation; the override is removed normally. |
+| Proxy-auth or periodic event append | G/S 2/1 | G/S 1/1 | The latest bounded list/counters are read and updated within one queued operation. |
+| Proven atomic no-op | n/a | G/S 1/0 | The explicit no-change result returns the normalized durable snapshot without rewriting it. |
+| PAC refresh, changed content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 21/12; IDB R/W 2/2; C/H 1/7; PR/PW 4/1; tab gets 1 | Complete download, cook, persistence, final durable-fingerprint validation, live-control checks, and apply remain. Atomic periodic completion and event writes remove redundant reads. |
+| PAC refresh, identical HTTP 200 content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 14/7; IDB R/W 2/0; C/H 0/5; PR/PW 1/0; tab gets 1 | Existing artifacts are verified, no artifact is rewritten, no cook runs, unchanged PAC is not reapplied, and periodic derived writes use one read each. |
 | PAC metadata/artifact clear | RPC 2; G/S 6/2; IDB R/W 0/2; T/A 2/6; H 1 | unchanged | Both durable artifacts and both metadata records are deliberately removed. |
 | External proxy-control change | G/S 5/2; T/A 1/4; H 1; PR/PW 1/0 | unchanged | Live state is persisted, health is reset, and the active action is refreshed. |
-| Worker restart with valid PAC | same as cold startup | G/S 2/1; IDB 0; T/A 1/4; H 1; PR 1 | Worker memory starts empty; durable state plus live Chrome proxy state reconstruct the presentation without reading PAC bodies. |
+| Worker restart with valid PAC | same as cold startup | G/S 3/1; IDB 0; T/A 1/4; H 1; PR 1 | Worker memory starts empty; durable state plus live Chrome proxy state reconstruct the presentation without reading PAC bodies. |
 
 The changed-PAC baseline is the original branch behavior measured with the same
 harness before production edits. The full-RPC baseline adds the unchanged
@@ -59,7 +61,12 @@ writes, one cook, seven hashes, four proxy reads, and one proxy write).
 - Manual periodic refresh requested the same final action refresh twice. The
   RPC now relies on the refresh already performed by the periodic operation.
 - Startup alarm reconciliation rewrote an already-correct `scheduled` state.
-  It now skips only when both status and next-run timestamp are unchanged.
+  It now rereads inside the queue and skips only when both status and next-run
+  timestamp are unchanged.
+- Derived event counters/lists, popup rules, provider-registry edits, periodic
+  timestamps/backoff, migration preconditions, and proxy-health restoration now
+  use one queue-owned read/derive/normalize/write operation. No durable snapshot
+  is cached across worker lifetimes.
 
 ## Intentionally unchanged
 

@@ -116,7 +116,7 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
           'alarmCreates',
         ];
         const expected = {
-          storageGets: 2,
+          storageGets: 3,
           storageSets: 1,
           indexedDbOpens: 0,
           tabQueries: 1,
@@ -237,7 +237,7 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
             'storageSets',
           ])).to.deep.equal({
             runtimeRpcs: 1,
-            storageGets: 3,
+            storageGets: 2,
             storageSets: 1,
           });
         }
@@ -278,7 +278,7 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
         ])).to.deep.equal({
           indexedDbReads: 2,
           indexedDbWrites: 2,
-          storageGets: 25,
+          storageGets: 21,
           storageSets: 12,
           tabGets: 1,
           pacDownloads: 1,
@@ -319,7 +319,7 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
           'proxySettingsReads',
           'proxySettingsWrites',
         ])).to.deep.equal({
-          storageGets: 18,
+          storageGets: 14,
           storageSets: 7,
           indexedDbReads: 2,
           indexedDbWrites: 0,

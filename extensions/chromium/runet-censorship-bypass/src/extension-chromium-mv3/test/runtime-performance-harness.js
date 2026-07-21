@@ -429,9 +429,9 @@ async function createRuntimeHarness(options = {}) {
     crypto: Crypto.webcrypto,
     Date,
     Error,
-    fetch: async () => {
+    fetch: options.fetch || (async () => {
       throw new Error('Unexpected network request in runtime audit harness.');
-    },
+    }),
     importScripts() {},
     Map,
     Math,

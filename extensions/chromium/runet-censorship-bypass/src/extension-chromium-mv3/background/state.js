@@ -67,7 +67,10 @@
   const MAX_LEGACY_MIGRATION_WARNINGS = 20;
   const MIN_PERIODIC_UPDATE_INTERVAL_MINUTES = 1;
   const MAX_PERIODIC_UPDATE_INTERVAL_MINUTES = 24 * 60;
+  const ATOMIC_NO_CHANGE = Object.freeze({});
   let stateOperationQueue = Promise.resolve();
+  let ifAtomicMutatorActive = false;
+  let atomicReentryError = null;
 
   const DEFAULT_STATE = Object.freeze({
     schemaVersion: 12,
@@ -221,6 +224,16 @@
   function clone(value) {
 
     return JSON.parse(JSON.stringify(value));
+
+  }
+
+  function freezeRecursively(value) {
+
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) {
+      return value;
+    }
+    Object.keys(value).forEach((key) => freezeRecursively(value[key]));
+    return Object.freeze(value);
 
   }
 
@@ -1237,6 +1250,15 @@
 
   function enqueueStateOperation(operation) {
 
+    if (ifAtomicMutatorActive) {
+      const error = new TypeError(
+          'State APIs cannot be called from an atomic state mutator.',
+      );
+      atomicReentryError = error;
+      const rejected = Promise.reject(error);
+      rejected.catch(() => undefined);
+      return rejected;
+    }
     const queued = stateOperationQueue.then(operation);
     stateOperationQueue = queued.catch(() => undefined);
     return queued;
@@ -1364,6 +1386,66 @@
 
     assertObject(patch, 'patch');
     return enqueueStateOperation(() => saveStatePatchNow(patch));
+
+  }
+
+  async function updateStateAtomically(mutator) {
+
+    if (typeof mutator !== 'function') {
+      throw new TypeError('mutator must be a function.');
+    }
+    if (mutator.constructor && mutator.constructor.name === 'AsyncFunction') {
+      throw new TypeError('atomic state mutator must return synchronously.');
+    }
+    return enqueueStateOperation(async () => {
+      const currentState = await loadStateFromStorage();
+      const workingState = freezeRecursively(clone(currentState));
+      let patch;
+      atomicReentryError = null;
+      ifAtomicMutatorActive = true;
+      try {
+        patch = mutator(workingState);
+      } finally {
+        ifAtomicMutatorActive = false;
+      }
+      if (atomicReentryError) {
+        throw atomicReentryError;
+      }
+      if (patch === ATOMIC_NO_CHANGE) {
+        return clone(currentState);
+      }
+      if (patch && typeof patch.then === 'function') {
+        Promise.resolve(patch).catch(() => undefined);
+        throw new TypeError('atomic state mutator must return synchronously.');
+      }
+      assertObject(patch, 'atomic state patch');
+      const patchPrototype = Object.getPrototypeOf(patch);
+      if (
+        patchPrototype !== null &&
+        Object.getPrototypeOf(patchPrototype) !== null
+      ) {
+        throw new TypeError('atomic state patch must be a plain object.');
+      }
+      const patchKeys = Object.keys(patch);
+      if (!patchKeys.length) {
+        throw new TypeError('atomic state patch must not be empty.');
+      }
+      if (patchKeys.some((key) =>
+        !Object.prototype.hasOwnProperty.call(DEFAULT_STATE, key),
+      )) {
+        throw new TypeError('atomic state patch contains unsupported fields.');
+      }
+      if (patchKeys.includes('schemaVersion') || patchKeys.includes('mv3')) {
+        throw new TypeError(
+            'atomic state mutator must return a patch, not complete state.',
+        );
+      }
+      const committedState = await saveStatePatchNow(
+          clone(patch),
+          currentState,
+      );
+      return clone(committedState);
+    });
 
   }
 
@@ -1690,44 +1772,47 @@
   async function recordProxyAuthEvent(event) {
 
     const normalizedEvent = normalizeProxyAuthEvent(event);
-    const currentState = await loadState();
-    const currentAuth = currentState.proxyAuth;
-    const lastEvents = currentAuth.lastEvents
-        .concat(normalizedEvent)
-        .slice(-MAX_PROXY_AUTH_EVENTS);
-    const patch = {
-      status: getProxyAuthStatusForEvent(normalizedEvent.type),
-      lastUpdatedAt: normalizedEvent.at,
-      stats: getProxyAuthStatsForEvent(currentAuth.stats, normalizedEvent),
-      lastEvents,
-    };
-    if (normalizedEvent.isProxy) {
-      patch.lastChallengeAt = normalizedEvent.at;
-    }
-    if (normalizedEvent.type === 'provided') {
-      patch.lastProvidedAt = normalizedEvent.at;
-    }
-    if (normalizedEvent.type === 'error') {
-      patch.lastError = {
-        code: 'PROXY_AUTH_ERROR',
-        message: normalizedEvent.message || 'Proxy auth error.',
-        details: null,
+    const state = await updateStateAtomically((currentState) => {
+      const currentAuth = currentState.proxyAuth;
+      const lastEvents = currentAuth.lastEvents
+          .concat(normalizedEvent)
+          .slice(-MAX_PROXY_AUTH_EVENTS);
+      const patch = {
+        status: getProxyAuthStatusForEvent(normalizedEvent.type),
+        lastUpdatedAt: normalizedEvent.at,
+        stats: getProxyAuthStatsForEvent(currentAuth.stats, normalizedEvent),
+        lastEvents,
       };
-    }
-    const state = await saveStatePatch({proxyAuth: patch});
+      if (normalizedEvent.isProxy) {
+        patch.lastChallengeAt = normalizedEvent.at;
+      }
+      if (normalizedEvent.type === 'provided') {
+        patch.lastProvidedAt = normalizedEvent.at;
+      }
+      if (normalizedEvent.type === 'error') {
+        patch.lastError = {
+          code: 'PROXY_AUTH_ERROR',
+          message: normalizedEvent.message || 'Proxy auth error.',
+          details: null,
+        };
+      }
+      return {proxyAuth: patch};
+    });
     return state.proxyAuth;
 
   }
 
   async function resetProxyAuthState() {
 
-    const currentState = await loadState();
-    const nextProxyAuth = Object.assign({}, clone(DEFAULT_STATE.proxyAuth), {
-      enabled: currentState.proxyAuth.enabled,
-      status: currentState.proxyAuth.enabled ? 'ready' : 'idle',
-      lastUpdatedAt: Date.now(),
+    const lastUpdatedAt = Date.now();
+    const state = await updateStateAtomically((currentState) => {
+      const nextProxyAuth = Object.assign({}, clone(DEFAULT_STATE.proxyAuth), {
+        enabled: currentState.proxyAuth.enabled,
+        status: currentState.proxyAuth.enabled ? 'ready' : 'idle',
+        lastUpdatedAt,
+      });
+      return {proxyAuth: nextProxyAuth};
     });
-    const state = await saveStatePatch({proxyAuth: nextProxyAuth});
     return state.proxyAuth;
 
   }
@@ -1781,14 +1866,13 @@
   async function recordPeriodicUpdateEvent(event) {
 
     const normalizedEvent = normalizePeriodicUpdateEvent(event);
-    const currentState = await loadState();
-    const lastEvents = currentState.periodicUpdate.lastEvents
-        .concat(normalizedEvent)
-        .slice(-MAX_PERIODIC_UPDATE_EVENTS);
-    const state = await saveStatePatch({
-      periodicUpdate: {
-        lastEvents,
-      },
+    const state = await updateStateAtomically((currentState) => {
+      const lastEvents = currentState.periodicUpdate.lastEvents
+          .concat(normalizedEvent)
+          .slice(-MAX_PERIODIC_UPDATE_EVENTS);
+      return {
+        periodicUpdate: {lastEvents},
+      };
     });
     return state.periodicUpdate;
 
@@ -1948,8 +2032,10 @@
 
   exports.mv3State = Object.freeze({
     STORAGE_KEY,
+    ATOMIC_NO_CHANGE,
     loadState,
     saveStatePatch,
+    updateStateAtomically,
     savePacMods,
     saveRpcPacMods,
     setPacMods,
