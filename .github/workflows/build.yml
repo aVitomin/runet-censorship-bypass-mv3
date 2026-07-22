@@ -14,12 +14,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Setup Node.jshttps://github.com/Nexeonenn/runet-censorship-bypass-mv3/actions/workflows/build.yml
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-            
+    
+    - name: Install dependencies
+      run: npm install
+        
     - name: Install extension dependencies
       run: |
         cd extensions/chromium/runet-censorship-bypass
@@ -34,7 +37,12 @@ jobs:
       run: |
         cd extensions/chromium/runet-censorship-bypass
         echo "Building extension..."
-        npx gulp buildAll || npx gulp build
+        if [ -f "node_modules/.bin/gulp" ]; then
+          ./node_modules/.bin/gulp buildAll || ./node_modules/.bin/gulp build
+        else
+          echo "Gulp not found, trying npx..."
+          npx gulp buildAll || npx gulp build
+        fi
     
     - name: Verify build
       run: |
@@ -53,10 +61,10 @@ jobs:
         path: extensions/chromium/runet-censorship-bypass/build/extension-full
         retention-days: 7
 
-    - name: UploadIP Mini Version
+    - name: Upload Mini Version
       uses: actions/upload-artifact@v4
       with:
-        name: runet-censorship-bypass-extension-Mini
+        name: runet-censorship-bypass-extension-mini
         path: extensions/chromium/runet-censorship-bypass/build/extension-mini
         retention-days: 7
 
