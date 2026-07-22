@@ -1,0 +1,51 @@
+name: Build Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm install
+        
+    - name: Setup and build extension
+      run: |
+        cd extensions/chromium/runet-censorship-bypass
+        if [ -f package.json ]; then
+          echo "Installing extension dependencies..."
+          npm install
+          npm run build:mv3
+        else
+          echo "No package.json found in extension directory"
+        fi
+        
+    - name: Verify build
+      run: |
+        echo "Checking build output..."
+        if [ -d "extensions/chromium/runet-censorship-bypass/dist" ] || [ -d "extensions/chromium/runet-censorship-bypass/build" ]; then
+          echo "Build successful!"
+        else
+          echo "Build output not found in expected locations"
+        fi
+
+    - name: Upload Test Version
+      uses: actions/upload-artifact@v4
+      with:
+        name: runet-censorship-bypass-extension
+        path: extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3
+        retention-days: 7

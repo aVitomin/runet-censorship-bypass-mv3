@@ -13,5 +13,8 @@
   "collective": {
     "type": "opencollective",
     "url": "https://opencollective.com/anticensority"
+  },
+  "devDependencies": {
+    "gulp": "^5.0.1"
   }
 }
