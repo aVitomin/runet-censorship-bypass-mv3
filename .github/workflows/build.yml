@@ -1,0 +1,68 @@
+name: Build Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.jshttps://github.com/Nexeonenn/runet-censorship-bypass-mv3/actions/workflows/build.yml
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+            
+    - name: Install extension dependencies
+      run: |
+        cd extensions/chromium/runet-censorship-bypass
+        if [ -f package.json ]; then
+          echo "Installing extension dependencies..."
+          npm install
+        else
+          echo "No package.json found in extension directory"
+        fi
+    
+    - name: Build extension
+      run: |
+        cd extensions/chromium/runet-censorship-bypass
+        echo "Building extension..."
+        npx gulp buildAll || npx gulp build
+    
+    - name: Verify build
+      run: |
+        echo "Checking build output..."
+        if [ -d "extensions/chromium/runet-censorship-bypass/dist" ] || [ -d "extensions/chromium/runet-censorship-bypass/build" ]; then
+          echo "Build successful!"
+        else
+          echo "Build output not found in expected locations"
+          find extensions/chromium/runet-censorship-bypass -name "*.js" -o -name "*.html" -o -name "manifest.json" | head -10
+        fi
+
+    - name: Upload Full Version
+      uses: actions/upload-artifact@v4
+      with:
+        name: runet-censorship-bypass-extension-full
+        path: extensions/chromium/runet-censorship-bypass/build/extension-full
+        retention-days: 7
+
+    - name: UploadIP Mini Version
+      uses: actions/upload-artifact@v4
+      with:
+        name: runet-censorship-bypass-extension-Mini
+        path: extensions/chromium/runet-censorship-bypass/build/extension-mini
+        retention-days: 7
+
+    - name: Upload Beta Version
+      uses: actions/upload-artifact@v4
+      with:
+        name: runet-censorship-bypass-extension-beta
+        path: extensions/chromium/runet-censorship-bypass/build/extension-beta
+        retention-days: 7
