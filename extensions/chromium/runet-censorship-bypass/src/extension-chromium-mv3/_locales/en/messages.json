@@ -8,6 +8,263 @@
   "popupTitle": {
     "message": "Runet Censorship Bypass"
   },
+  "popupControlLoading": {
+    "message": "Checking extension proxy state"
+  },
+  "popupLoadingState": {
+    "message": "Loading current proxy and site routing status…"
+  },
+  "popupLoadErrorTitle": {
+    "message": "Could not open the extension"
+  },
+  "popupLoadErrorHelp": {
+    "message": "Try again, or open Settings to inspect the configuration."
+  },
+  "popupRetry": {
+    "message": "Retry"
+  },
+  "popupOpenSettings": {
+    "message": "Open settings"
+  },
+  "popupExtensionControl": {
+    "message": "Extension proxy"
+  },
+  "popupControlActive": {
+    "message": "Extension proxy is on"
+  },
+  "popupControlActiveHelp": {
+    "message": "This extension currently controls Chromium proxy settings. Routing for each site is shown separately below."
+  },
+  "popupControlOff": {
+    "message": "Extension proxy is off"
+  },
+  "popupControlOffHelp": {
+    "message": "Chromium is using its system proxy settings. Your saved routing rules and downloaded data are kept."
+  },
+  "popupControlExternal": {
+    "message": "Proxy settings are controlled elsewhere"
+  },
+  "popupControlExternalHelp": {
+    "message": "Another extension or browser policy controls proxy settings. This extension will not override that ownership."
+  },
+  "popupControlApplying": {
+    "message": "Applying changes…"
+  },
+  "popupControlApplyingHelp": {
+    "message": "Saving the configuration and activating the current routing rules."
+  },
+  "popupControlClearing": {
+    "message": "Turning off extension proxy…"
+  },
+  "popupControlClearingHelp": {
+    "message": "Removing this extension's proxy settings while keeping your configuration."
+  },
+  "popupControlUpdating": {
+    "message": "Updating routing data…"
+  },
+  "popupControlUpdatingHelp": {
+    "message": "Refreshing saved routing data without changing proxy ownership."
+  },
+  "popupControlChecking": {
+    "message": "Testing proxy connection…"
+  },
+  "popupControlCheckingHelp": {
+    "message": "Waiting for a proxy-specific connection result."
+  },
+  "popupControlStale": {
+    "message": "Routing changes need to be applied"
+  },
+  "popupControlStaleActiveHelp": {
+    "message": "Saved settings are newer than the active routing rules. Apply them when ready."
+  },
+  "popupControlStaleOffHelp": {
+    "message": "Saved routing settings are ready, but the extension proxy is currently off."
+  },
+  "popupControlStaleOperation": {
+    "message": "The proxy state changed during the operation"
+  },
+  "popupControlStaleOperationHelp": {
+    "message": "A newer setting or operation took priority. Review the current state before retrying."
+  },
+  "popupControlError": {
+    "message": "The last operation needs attention"
+  },
+  "popupControlErrorHelp": {
+    "message": "The requested change was not completed. Review the message below and retry when it is safe."
+  },
+  "popupControlSetup": {
+    "message": "Setup is not complete"
+  },
+  "popupControlSetupHelp": {
+    "message": "Choose a routing source before turning on the extension proxy."
+  },
+  "popupControlActiveShort": {
+    "message": "Controlled by this extension"
+  },
+  "popupControlOffShort": {
+    "message": "System proxy settings"
+  },
+  "popupControlExternalShort": {
+    "message": "Controlled elsewhere"
+  },
+  "popupStatusActivePill": {
+    "message": "Active"
+  },
+  "popupStatusOffPill": {
+    "message": "Off"
+  },
+  "popupStatusExternalPill": {
+    "message": "External control"
+  },
+  "popupStatusWorkingPill": {
+    "message": "In progress"
+  },
+  "popupStatusStalePill": {
+    "message": "Apply required"
+  },
+  "popupStatusErrorPill": {
+    "message": "Needs attention"
+  },
+  "popupStatusPendingPill": {
+    "message": "Pending"
+  },
+  "popupHealthWorkingPill": {
+    "message": "Check passed"
+  },
+  "popupHealthWarningPill": {
+    "message": "Proxy problem"
+  },
+  "popupChooseRoutingSource": {
+    "message": "Choose routing source"
+  },
+  "popupTurnOffProxy": {
+    "message": "Turn off extension proxy"
+  },
+  "popupTurnOffProxyHelp": {
+    "message": "Use Chromium's system proxy settings. Saved rules and downloaded routing data are kept."
+  },
+  "popupCurrentSiteRouting": {
+    "message": "Routing for this site"
+  },
+  "popupCurrentTabUnavailable": {
+    "message": "Current page unavailable"
+  },
+  "popupPageCannotBeControlledHelp": {
+    "message": "A site-specific route cannot be set for this browser or internal page. The extension's global proxy state is unchanged."
+  },
+  "popupSiteModeGroup": {
+    "message": "Route for $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupAutoModeDescription": {
+    "message": "No site override. The selected routing source decides."
+  },
+  "popupProxyModeDescription": {
+    "message": "Always use an enabled proxy method for this site."
+  },
+  "popupDirectModeDescription": {
+    "message": "Always bypass the extension proxy for this site."
+  },
+  "popupProxyRouteNeedsMethod": {
+    "message": "Proxy routing needs at least one enabled Tor, WARP, or own-proxy method."
+  },
+  "popupConfigureProxyMethods": {
+    "message": "Configure proxy methods"
+  },
+  "popupHostScopeOnly": {
+    "message": "Only this hostname can be used for localhost and IP addresses."
+  },
+  "popupDomainScopeSafeHelp": {
+    "message": "Domain scope follows public-suffix boundaries."
+  },
+  "popupConnectionSummary": {
+    "message": "Connection summary"
+  },
+  "popupRoutingSource": {
+    "message": "Routing source"
+  },
+  "popupProxyMethods": {
+    "message": "Proxy methods"
+  },
+  "popupProxyMethodsCount": {
+    "message": "$COUNT$ enabled",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupProxyMethodsRequired": {
+    "message": "Required for the selected Proxy route"
+  },
+  "popupProxyMethodsOptional": {
+    "message": "None enabled; optional for Auto"
+  },
+  "popupLastHealthCheck": {
+    "message": "Last proxy check"
+  },
+  "popupLastRoutingUpdate": {
+    "message": "Routing data"
+  },
+  "popupStatusWithTime": {
+    "message": "$STATUS$ · $TIME$",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      },
+      "time": {
+        "content": "$2"
+      }
+    }
+  },
+  "popupRoutingUpdateFailed": {
+    "message": "Last update failed"
+  },
+  "popupRoutingUpdatePending": {
+    "message": "Updated $TIME$ · apply required",
+    "placeholders": {
+      "time": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupAdvancedSettings": {
+    "message": "Advanced routing settings"
+  },
+  "popupAdvancedSettingsHelp": {
+    "message": "Change the routing source or optional proxy methods. Opening this section does not save anything."
+  },
+  "popupRefreshRoutingData": {
+    "message": "Refresh data"
+  },
+  "popupRefreshRoutingDataHelp": {
+    "message": "Refresh saved routing data without applying Chromium proxy settings."
+  },
+  "popupTechnicalStatus": {
+    "message": "Technical status"
+  },
+  "popupBrowserProxyControl": {
+    "message": "Chromium proxy control"
+  },
+  "popupChangesPending": {
+    "message": "Changes are pending and are not active yet."
+  },
+  "popupStaleOperation": {
+    "message": "The operation was superseded by a newer setting or action. Review the current state and retry if needed."
+  },
+  "popupRoutingDataUpdated": {
+    "message": "Routing data updated. Active Chromium proxy settings were not changed."
+  },
+  "popupOperationCompleted": {
+    "message": "Operation completed."
+  },
+  "popupConfigurationWarning": {
+    "message": "An advanced routing setting needs attention. Open Settings for details."
+  },
   "actionTitleSite": {
     "message": "Site"
   },
@@ -225,7 +482,7 @@
     "message": "not applied"
   },
   "popupApplyChanges": {
-    "message": "Apply changes"
+    "message": "Apply"
   },
   "popupApplyChangesHelp": {
     "message": "Save, rebuild PAC, and apply proxy."

@@ -8,6 +8,263 @@
   "popupTitle": {
     "message": "Обход блокировок Рунета"
   },
+  "popupControlLoading": {
+    "message": "Проверяем состояние прокси расширения"
+  },
+  "popupLoadingState": {
+    "message": "Загружаем состояние прокси и маршрут текущего сайта…"
+  },
+  "popupLoadErrorTitle": {
+    "message": "Не удалось открыть расширение"
+  },
+  "popupLoadErrorHelp": {
+    "message": "Повторите попытку или откройте настройки, чтобы проверить конфигурацию."
+  },
+  "popupRetry": {
+    "message": "Повторить"
+  },
+  "popupOpenSettings": {
+    "message": "Открыть настройки"
+  },
+  "popupExtensionControl": {
+    "message": "Прокси расширения"
+  },
+  "popupControlActive": {
+    "message": "Прокси расширения включён"
+  },
+  "popupControlActiveHelp": {
+    "message": "Расширение управляет настройками прокси Chromium. Маршрут для каждого сайта показан отдельно ниже."
+  },
+  "popupControlOff": {
+    "message": "Прокси расширения выключен"
+  },
+  "popupControlOffHelp": {
+    "message": "Chromium использует системные настройки прокси. Сохранённые правила и загруженные данные не удалены."
+  },
+  "popupControlExternal": {
+    "message": "Настройками прокси управляет другая программа"
+  },
+  "popupControlExternalHelp": {
+    "message": "Прокси контролирует другое расширение или политика браузера. Это расширение не будет перехватывать управление."
+  },
+  "popupControlApplying": {
+    "message": "Применяем изменения…"
+  },
+  "popupControlApplyingHelp": {
+    "message": "Сохраняем конфигурацию и активируем текущие правила маршрутизации."
+  },
+  "popupControlClearing": {
+    "message": "Выключаем прокси расширения…"
+  },
+  "popupControlClearingHelp": {
+    "message": "Удаляем настройки прокси этого расширения, сохраняя конфигурацию."
+  },
+  "popupControlUpdating": {
+    "message": "Обновляем данные маршрутизации…"
+  },
+  "popupControlUpdatingHelp": {
+    "message": "Обновляем сохранённые данные, не меняя владельца настроек прокси."
+  },
+  "popupControlChecking": {
+    "message": "Проверяем подключение через прокси…"
+  },
+  "popupControlCheckingHelp": {
+    "message": "Ожидаем результат, связанный именно с прокси-подключением."
+  },
+  "popupControlStale": {
+    "message": "Изменения маршрутизации нужно применить"
+  },
+  "popupControlStaleActiveHelp": {
+    "message": "Сохранённые настройки новее активных правил маршрутизации. Примените их, когда будете готовы."
+  },
+  "popupControlStaleOffHelp": {
+    "message": "Настройки маршрутизации сохранены, но прокси расширения сейчас выключен."
+  },
+  "popupControlStaleOperation": {
+    "message": "Состояние прокси изменилось во время операции"
+  },
+  "popupControlStaleOperationHelp": {
+    "message": "Более новые настройки или другая операция получили приоритет. Перед повтором проверьте текущее состояние."
+  },
+  "popupControlError": {
+    "message": "Последняя операция требует внимания"
+  },
+  "popupControlErrorHelp": {
+    "message": "Запрошенное изменение не завершено. Прочитайте сообщение ниже и повторите попытку, когда это будет безопасно."
+  },
+  "popupControlSetup": {
+    "message": "Настройка не завершена"
+  },
+  "popupControlSetupHelp": {
+    "message": "Перед включением прокси расширения выберите источник правил."
+  },
+  "popupControlActiveShort": {
+    "message": "Управляет это расширение"
+  },
+  "popupControlOffShort": {
+    "message": "Системные настройки прокси"
+  },
+  "popupControlExternalShort": {
+    "message": "Управляет другая программа"
+  },
+  "popupStatusActivePill": {
+    "message": "Активно"
+  },
+  "popupStatusOffPill": {
+    "message": "Выключено"
+  },
+  "popupStatusExternalPill": {
+    "message": "Внешнее управление"
+  },
+  "popupStatusWorkingPill": {
+    "message": "Выполняется"
+  },
+  "popupStatusStalePill": {
+    "message": "Нужно применить"
+  },
+  "popupStatusErrorPill": {
+    "message": "Требует внимания"
+  },
+  "popupStatusPendingPill": {
+    "message": "Ожидает применения"
+  },
+  "popupHealthWorkingPill": {
+    "message": "Проверка пройдена"
+  },
+  "popupHealthWarningPill": {
+    "message": "Проблема с прокси"
+  },
+  "popupChooseRoutingSource": {
+    "message": "Выбрать источник правил"
+  },
+  "popupTurnOffProxy": {
+    "message": "Выключить прокси расширения"
+  },
+  "popupTurnOffProxyHelp": {
+    "message": "Использовать системные настройки Chromium. Сохранённые правила и загруженные данные не удаляются."
+  },
+  "popupCurrentSiteRouting": {
+    "message": "Маршрут для этого сайта"
+  },
+  "popupCurrentTabUnavailable": {
+    "message": "Текущая страница недоступна"
+  },
+  "popupPageCannotBeControlledHelp": {
+    "message": "Для служебной или внутренней страницы браузера нельзя задать отдельный маршрут. Общее состояние прокси расширения не изменяется."
+  },
+  "popupSiteModeGroup": {
+    "message": "Маршрут для сайта $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupAutoModeDescription": {
+    "message": "Для сайта нет отдельного правила. Решает выбранный источник правил."
+  },
+  "popupProxyModeDescription": {
+    "message": "Всегда использовать для этого сайта включённый способ прокси-подключения."
+  },
+  "popupDirectModeDescription": {
+    "message": "Всегда открывать этот сайт в обход прокси расширения."
+  },
+  "popupProxyRouteNeedsMethod": {
+    "message": "Для маршрута «Через прокси» нужен хотя бы один включённый способ: Tor, WARP или свой прокси."
+  },
+  "popupConfigureProxyMethods": {
+    "message": "Настроить прокси-подключения"
+  },
+  "popupHostScopeOnly": {
+    "message": "Для localhost и IP-адресов можно выбрать только этот хост."
+  },
+  "popupDomainScopeSafeHelp": {
+    "message": "Область домена учитывает границы публичных суффиксов."
+  },
+  "popupConnectionSummary": {
+    "message": "Сводка подключения"
+  },
+  "popupRoutingSource": {
+    "message": "Источник правил"
+  },
+  "popupProxyMethods": {
+    "message": "Способы прокси-подключения"
+  },
+  "popupProxyMethodsCount": {
+    "message": "Включено: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupProxyMethodsRequired": {
+    "message": "Нужны для выбранного маршрута «Через прокси»"
+  },
+  "popupProxyMethodsOptional": {
+    "message": "Не включены; для режима «Авто» необязательны"
+  },
+  "popupLastHealthCheck": {
+    "message": "Последняя проверка прокси"
+  },
+  "popupLastRoutingUpdate": {
+    "message": "Данные маршрутизации"
+  },
+  "popupStatusWithTime": {
+    "message": "$STATUS$ · $TIME$",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      },
+      "time": {
+        "content": "$2"
+      }
+    }
+  },
+  "popupRoutingUpdateFailed": {
+    "message": "Последнее обновление не выполнено"
+  },
+  "popupRoutingUpdatePending": {
+    "message": "Обновлено $TIME$ · нужно применить",
+    "placeholders": {
+      "time": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupAdvancedSettings": {
+    "message": "Расширенные настройки маршрутизации"
+  },
+  "popupAdvancedSettingsHelp": {
+    "message": "Здесь можно изменить источник правил и дополнительные способы подключения. Открытие раздела ничего не сохраняет."
+  },
+  "popupRefreshRoutingData": {
+    "message": "Обновить данные"
+  },
+  "popupRefreshRoutingDataHelp": {
+    "message": "Обновить сохранённые данные маршрутизации без применения настроек прокси Chromium."
+  },
+  "popupTechnicalStatus": {
+    "message": "Техническое состояние"
+  },
+  "popupBrowserProxyControl": {
+    "message": "Управление прокси Chromium"
+  },
+  "popupChangesPending": {
+    "message": "Изменения ожидают применения и пока не активны."
+  },
+  "popupStaleOperation": {
+    "message": "Операцию заменила более новая настройка или команда. Проверьте текущее состояние и при необходимости повторите попытку."
+  },
+  "popupRoutingDataUpdated": {
+    "message": "Данные маршрутизации обновлены. Активные настройки прокси Chromium не изменились."
+  },
+  "popupOperationCompleted": {
+    "message": "Операция завершена."
+  },
+  "popupConfigurationWarning": {
+    "message": "Расширенная настройка маршрутизации требует внимания. Подробности доступны в настройках."
+  },
   "actionTitleSite": {
     "message": "Сайт"
   },

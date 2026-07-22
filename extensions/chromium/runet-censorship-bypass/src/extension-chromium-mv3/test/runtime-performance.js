@@ -52,6 +52,7 @@ async function measurePageInitialization(page) {
 
     },
     createElement: createNode,
+    createElementNS: createNode,
     createTextNode: createNode,
     getElementById: createNode,
   };

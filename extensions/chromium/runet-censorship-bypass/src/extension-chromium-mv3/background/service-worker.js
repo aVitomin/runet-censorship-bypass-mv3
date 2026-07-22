@@ -1696,6 +1696,14 @@ async function createPopupState(tabUrl, state) {
     pacCookStatus: state.pacCook && state.pacCook.status || 'idle',
     proxyApplied: proxyApply.status === 'applied' && ifLivePacControlled,
     proxyApplyStatus: proxyApply.status || 'idle',
+    proxyControl: {
+      levelOfControl: proxyControl.levelOfControl || null,
+      canControl: proxyControl.canControl === true,
+      controlledByThisExtension:
+        proxyControl.controlledByThisExtension === true,
+      controlsPac: ifLivePacControlled,
+      checkedAt: proxyControl.checkedAt || null,
+    },
     proxyHealth: state.proxyHealth,
     autoUpdate,
     proxyCandidates: candidates,

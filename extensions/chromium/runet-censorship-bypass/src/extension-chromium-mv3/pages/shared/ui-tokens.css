@@ -1,0 +1,226 @@
+:root {
+  color-scheme: light;
+
+  --ui-color-canvas: #f4f7fb;
+  --ui-color-surface: #ffffff;
+  --ui-color-surface-subtle: #f8fafc;
+  --ui-color-text: #172033;
+  --ui-color-text-secondary: #334155;
+  --ui-color-text-muted: #64748b;
+  --ui-color-border: #d8e0ea;
+  --ui-color-divider: #e8edf3;
+  --ui-color-accent: #1d4ed8;
+  --ui-color-accent-hover: #1e40af;
+  --ui-color-accent-pressed: #1e3a8a;
+  --ui-color-success: #15803d;
+  --ui-color-success-surface: #ecfdf3;
+  --ui-color-warning: #b45309;
+  --ui-color-warning-surface: #fff7ed;
+  --ui-color-error: #b42318;
+  --ui-color-error-surface: #fef2f2;
+  --ui-color-disabled: #94a3b8;
+  --ui-color-focus: #2563eb;
+
+  --ui-space-0-5: 4px;
+  --ui-space-1: 8px;
+  --ui-space-1-5: 12px;
+  --ui-space-2: 16px;
+  --ui-space-3: 24px;
+  --ui-space-4: 32px;
+
+  --ui-radius-small: 6px;
+  --ui-radius-medium: 10px;
+  --ui-radius-large: 14px;
+  --ui-radius-pill: 999px;
+
+  --ui-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ui-font-size-caption: 12px;
+  --ui-font-size-body: 13px;
+  --ui-font-size-control: 14px;
+  --ui-font-size-heading: 16px;
+  --ui-font-size-title: 18px;
+  --ui-font-weight-medium: 600;
+  --ui-font-weight-bold: 700;
+  --ui-line-height-tight: 1.25;
+  --ui-line-height-body: 1.45;
+
+  --ui-control-height: 40px;
+  --ui-control-height-compact: 34px;
+  --ui-focus-ring: 0 0 0 3px rgb(37 99 235 / 24%);
+  --ui-shadow-elevated: 0 1px 2px rgb(15 23 42 / 8%);
+  --ui-transition-fast: 120ms ease;
+}
+
+.ui-card {
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-large);
+  background: var(--ui-color-surface);
+  box-shadow: var(--ui-shadow-elevated);
+}
+
+.ui-button,
+.ui-icon-button,
+.ui-input {
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-medium);
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface);
+  font: var(--ui-font-weight-medium) var(--ui-font-size-control) / var(--ui-line-height-tight) var(--ui-font-family);
+  transition:
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    color var(--ui-transition-fast),
+    box-shadow var(--ui-transition-fast);
+}
+
+.ui-button {
+  min-height: var(--ui-control-height);
+  padding: var(--ui-space-1) var(--ui-space-1-5);
+  cursor: pointer;
+}
+
+.ui-button:hover:not(:disabled),
+.ui-icon-button:hover:not(:disabled) {
+  border-color: var(--ui-color-text-muted);
+  background: var(--ui-color-surface-subtle);
+}
+
+.ui-button:active:not(:disabled),
+.ui-icon-button:active:not(:disabled) {
+  background: var(--ui-color-divider);
+}
+
+.ui-button.primary {
+  border-color: var(--ui-color-accent);
+  color: var(--ui-color-surface);
+  background: var(--ui-color-accent);
+}
+
+.ui-button.primary:hover:not(:disabled) {
+  border-color: var(--ui-color-accent-hover);
+  background: var(--ui-color-accent-hover);
+}
+
+.ui-button.primary:active:not(:disabled) {
+  border-color: var(--ui-color-accent-pressed);
+  background: var(--ui-color-accent-pressed);
+}
+
+.ui-button.quiet {
+  border-color: transparent;
+  color: var(--ui-color-accent);
+  background: transparent;
+}
+
+.ui-icon-button {
+  display: inline-grid;
+  width: var(--ui-control-height);
+  min-width: var(--ui-control-height);
+  height: var(--ui-control-height);
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+}
+
+.ui-button:disabled,
+.ui-icon-button:disabled,
+.ui-input:disabled {
+  color: var(--ui-color-disabled);
+  cursor: default;
+  opacity: 0.72;
+}
+
+.ui-button:focus-visible,
+.ui-icon-button:focus-visible,
+.ui-input:focus-visible,
+summary:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+  box-shadow: var(--ui-focus-ring);
+}
+
+.ui-pill {
+  display: inline-flex;
+  gap: var(--ui-space-0-5);
+  align-items: center;
+  min-height: 24px;
+  padding: 2px var(--ui-space-1);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-pill);
+  color: var(--ui-color-text-secondary);
+  background: var(--ui-color-surface-subtle);
+  font-size: var(--ui-font-size-caption);
+  font-weight: var(--ui-font-weight-medium);
+  line-height: var(--ui-line-height-tight);
+}
+
+.ui-pill::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.ui-pill.success {
+  border-color: var(--ui-color-success);
+  color: var(--ui-color-success);
+  background: var(--ui-color-success-surface);
+}
+
+.ui-pill.warning {
+  border-color: var(--ui-color-warning);
+  color: var(--ui-color-warning);
+  background: var(--ui-color-warning-surface);
+}
+
+.ui-pill.error {
+  border-color: var(--ui-color-error);
+  color: var(--ui-color-error);
+  background: var(--ui-color-error-surface);
+}
+
+.ui-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+}
+
+@media (forced-colors: active) {
+
+  .ui-card,
+  .ui-button,
+  .ui-icon-button,
+  .ui-input,
+  .ui-pill {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+
+  .ui-button.primary {
+    color: HighlightText;
+    background: Highlight;
+  }
+
+  .ui-pill::before {
+    background: currentColor;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .ui-button,
+  .ui-icon-button,
+  .ui-input {
+    transition: none;
+  }
+
+}
