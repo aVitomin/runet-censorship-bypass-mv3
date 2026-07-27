@@ -517,12 +517,6 @@
   "popupProxyCleared": {
     "message": "Proxy cleared. Browser proxy mode returned to system."
   },
-  "optionsIntro": {
-    "message": "Manage PAC updates, site rules, proxy candidates, and browser proxy activation."
-  },
-  "optionsGeneral": {
-    "message": "General"
-  },
   "optionsLanguage": {
     "message": "Language"
   },
@@ -534,9 +528,6 @@
   },
   "optionsLanguageEn": {
     "message": "English"
-  },
-  "optionsLanguageReloadNote": {
-    "message": "The page will reload after changing language."
   },
   "optionsStatusIdle": {
     "message": "idle"
@@ -574,47 +565,14 @@
   "optionsStatusSkipped": {
     "message": "skipped"
   },
-  "optionsQuickStart": {
-    "message": "Status / Quick Start"
-  },
-  "optionsQuickStartHint": {
-    "message": "After changing site or proxy rules, cook PAC again and apply it."
-  },
-  "optionsPacDownloaded": {
-    "message": "PAC downloaded"
-  },
-  "optionsPacCooked": {
-    "message": "PAC cooked"
-  },
-  "optionsProxyStatus": {
-    "message": "Proxy status"
-  },
-  "optionsPacSettingsChanged": {
-    "message": "PAC settings changed"
-  },
   "optionsYes": {
     "message": "yes"
   },
   "optionsNo": {
     "message": "no"
   },
-  "optionsPacChangedCookApply": {
-    "message": "PAC settings changed. Click Cook PAC, then Apply proxy."
-  },
-  "optionsChangePacProvider": {
-    "message": "Change PAC provider"
-  },
-  "optionsNoProviderSelected": {
-    "message": "No provider selected"
-  },
-  "optionsSaveProvider": {
-    "message": "Save provider"
-  },
   "optionsSaving": {
     "message": "Saving..."
-  },
-  "optionsPacProviderSaved": {
-    "message": "PAC provider saved."
   },
   "optionsDownloadPac": {
     "message": "Download PAC"
@@ -622,59 +580,14 @@
   "optionsDownloading": {
     "message": "Downloading..."
   },
-  "optionsCookPac": {
-    "message": "Cook PAC"
-  },
   "optionsCooking": {
     "message": "Cooking..."
-  },
-  "optionsCookPacHelp": {
-    "message": "Rebuild PAC with your current rules."
-  },
-  "optionsApplyProxy": {
-    "message": "Apply proxy"
   },
   "optionsApplying": {
     "message": "Applying..."
   },
-  "optionsApplyProxyHelp": {
-    "message": "Activate the cooked PAC in browser proxy settings."
-  },
-  "optionsPacDownloadStatus": {
-    "message": "PAC download status: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsPacCookedApplyNow": {
-    "message": "PAC cooked. You can apply proxy settings now."
-  },
-  "optionsProxyApplyStatus": {
-    "message": "Proxy apply status: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsProxyClearStatus": {
-    "message": "Proxy clear status: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
   "optionsAddSiteRule": {
     "message": "Add site rule"
-  },
-  "optionsAddSiteRuleHint": {
-    "message": "Choose whether a site should use the proxy or open directly."
-  },
-  "optionsToolbarTip": {
-    "message": "Tip: for the current tab, use the toolbar popup."
   },
   "optionsSite": {
     "message": "Site"
@@ -685,20 +598,11 @@
   "optionsOptional": {
     "message": "optional"
   },
-  "optionsAddProxyRule": {
-    "message": "Add proxy rule"
-  },
-  "optionsAddDirectRule": {
-    "message": "Add direct rule"
-  },
   "optionsAdding": {
     "message": "Adding..."
   },
   "optionsProxyRuleNoCandidate": {
     "message": "No proxy is enabled. Enable Tor, WARP, or an own proxy."
-  },
-  "optionsSiteRules": {
-    "message": "Site rules"
   },
   "optionsNoSiteRules": {
     "message": "No site rules yet."
@@ -715,14 +619,11 @@
   "optionsRemove": {
     "message": "Remove"
   },
-  "optionsLocalProxyPresets": {
-    "message": "Local proxy presets"
+  "optionsMoveUp": {
+    "message": "Move up"
   },
-  "optionsLocalProxyHint": {
-    "message": "Enable Tor, WARP, or your own proxy before adding proxy rules."
-  },
-  "optionsPasswordNotice": {
-    "message": "Passwords are saved only for proxy authentication and hidden after save."
+  "optionsMoveDown": {
+    "message": "Move down"
   },
   "optionsSaveProxySettings": {
     "message": "Save proxy settings"
@@ -731,22 +632,13 @@
     "message": "Advanced PAC rules"
   },
   "optionsAdvancedPacRulesHint": {
-    "message": "Advanced rule changes also require Cook PAC, then Apply proxy."
+    "message": "Save changes here, then use Apply configuration to activate them."
   },
   "optionsWhitelist": {
     "message": "Whitelist"
   },
   "optionsSaveAdvancedPacRules": {
     "message": "Save advanced PAC rules"
-  },
-  "optionsAdvancedJsonEditor": {
-    "message": "Advanced JSON editor"
-  },
-  "optionsSavePacModifiersJson": {
-    "message": "Save PAC modifiers JSON"
-  },
-  "optionsPacJsonInvalid": {
-    "message": "PAC modifiers JSON is invalid."
   },
   "optionsType": {
     "message": "Type"
@@ -772,14 +664,8 @@
   "optionsUsername": {
     "message": "Username"
   },
-  "optionsPassword": {
-    "message": "Password"
-  },
   "optionsDirectReplacement": {
     "message": "DIRECT replacement"
-  },
-  "optionsAddExceptionRule": {
-    "message": "Add exception rule"
   },
   "optionsAddWhitelistRow": {
     "message": "Add whitelist row"
@@ -796,29 +682,17 @@
   "optionsRemoveDirectFallbacks": {
     "message": "Remove DIRECT fallbacks"
   },
-  "optionsPeriodicUpdates": {
-    "message": "Periodic PAC updates"
-  },
   "optionsLegacyMigration": {
     "message": "Legacy MV2 migration"
   },
   "optionsNotifications": {
     "message": "Notifications"
   },
-  "optionsTorModeNote": {
-    "message": "Use one Tor mode at a time."
-  },
   "optionsLocalTorHelp": {
     "message": "Use a separately running Tor daemon/service, usually SOCKS5 127.0.0.1:9050."
   },
   "optionsTorBrowserHelp": {
     "message": "Use the Tor proxy started by Tor Browser, usually SOCKS5 127.0.0.1:9150. Tor Browser must be open."
-  },
-  "optionsPacProxyMode": {
-    "message": "PAC and own proxy behavior"
-  },
-  "optionsPacProxyModeHelp": {
-    "message": "Choose whether provider PAC proxies are used and whether own proxies are limited to your site rules."
   },
   "popupPacDownloadedAndCookedMessage": {
     "message": "PAC downloaded and cooked."
@@ -859,26 +733,8 @@
   "optionsNone": {
     "message": "none"
   },
-  "optionsDiagnostics": {
-    "message": "Diagnostics"
-  },
-  "optionsDiagnosticsHint": {
-    "message": "Technical state, previews, periodic update, and auth logs."
-  },
-  "optionsMaintenance": {
-    "message": "Maintenance"
-  },
-  "optionsMaintenanceHint": {
-    "message": "Use this only if you upgraded from the old MV2 version and want to copy old settings. This does not delete old data and does not apply proxy settings."
-  },
-  "optionsRcStatus": {
-    "message": "Technical status"
-  },
   "optionsMv3Credits": {
     "message": "MV3 migration: @aVitomin with Codex"
-  },
-  "optionsMv2RulesWarning": {
-    "message": "This advanced legacy rule is listed under About / Limitations."
   },
   "optionsAbout": {
     "message": "About"
@@ -886,56 +742,8 @@
   "optionsAboutHint": {
     "message": "Version details, credits, and non-intrusive compatibility notes."
   },
-  "optionsLimitations": {
-    "message": "Known limitations"
-  },
-  "optionsLimitationDns": {
-    "message": "Not restored: DNS monkey-patching / DNS leak PAC overrides. Disabled for safety and predictability."
-  },
-  "optionsLimitationRawReplaceDirect": {
-    "message": "Not restored: arbitrary raw replaceDirectWith PAC strings. Disabled to avoid injecting executable PAC code."
-  },
-  "optionsLimitationSecureFiltering": {
-    "message": "Not restored for RC: secure-provider-proxy filtering and HTTPS-only proxying."
-  },
-  "optionsLimitationWeightedRules": {
-    "message": "Partial: full legacy weighted exception edge cases are not restored."
-  },
-  "optionsLimitationExternalProxyQa": {
-    "message": "Pending QA: external authenticated proxy and HTTPS CONNECT."
-  },
-  "optionsLimitationTorQa": {
-    "message": "Pending QA: real Tor traffic requires Tor installed and running."
-  },
-  "optionsRestoredMv2Behavior": {
-    "message": "Restored compatibility"
-  },
-  "optionsRestoredPacProxySwitch": {
-    "message": "PAC provider proxy switch is restored: provider proxies can be enabled or disabled."
-  },
-  "optionsRestoredOwnSitesOnly": {
-    "message": "Own proxies only for own site rules is restored and enabled by default."
-  },
-  "optionsRestoredOnionTor": {
-    "message": ".onion routing through enabled Tor candidates is restored."
-  },
-  "optionsRestoredDirectPolicy": {
-    "message": "DIRECT replacement and no-DIRECT policy are available as advanced opt-in settings."
-  },
-  "optionsCredentialsRedactedWarning": {
-    "message": "Proxy passwords are hidden in PAC and used only for authentication."
-  },
-  "optionsTorMustRunWarning": {
-    "message": "Tor must be running locally."
-  },
   "optionsWarpLocalProxyWarning": {
     "message": "WARP is treated as a local proxy."
-  },
-  "optionsDirectReplacementNoCandidateWarning": {
-    "message": "DIRECT replacement needs an enabled proxy candidate."
-  },
-  "optionsNoPacOrOwnProxyWarning": {
-    "message": "PAC provider proxies are disabled and no own proxy is enabled."
   },
   "optionsEnterSite": {
     "message": "Enter a site, domain, or URL."
@@ -943,105 +751,17 @@
   "optionsEnterValidSite": {
     "message": "Enter a valid domain, host, wildcard, or URL."
   },
-  "optionsUnsupportedSiteRuleAction": {
-    "message": "Unsupported site rule action."
-  },
   "optionsDuplicateSiteRule": {
     "message": "This site already has a rule."
-  },
-  "optionsPeriodicUpdatesHint": {
-    "message": "The selected PAC provider is checked every hour and refreshed when 12 hours have elapsed. A newly cooked PAC is applied only when this extension already controls proxy settings."
-  },
-  "optionsPeriodicAuthHint": {
-    "message": "External authenticated proxy QA is still pending."
-  },
-  "optionsEnablePeriodicUpdates": {
-    "message": "Automatically update PAC every 12 hours"
-  },
-  "optionsIntervalMinutes": {
-    "message": "Interval minutes"
-  },
-  "optionsSavePeriodicUpdates": {
-    "message": "Save periodic updates"
   },
   "optionsPeriodicSettingsSaved": {
     "message": "Periodic update settings saved."
   },
-  "optionsRunUpdateNow": {
-    "message": "Run update now"
-  },
-  "optionsRunning": {
-    "message": "Running..."
-  },
-  "optionsPeriodicUpdateFailed": {
-    "message": "Periodic update failed: $MESSAGE$",
-    "placeholders": {
-      "message": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsPeriodicUpdateStatus": {
-    "message": "Periodic update status: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsClearPeriodicEvents": {
-    "message": "Clear periodic update events"
-  },
-  "optionsPeriodicEventsCleared": {
-    "message": "Periodic update events cleared."
-  },
-  "optionsInterval": {
-    "message": "Interval"
-  },
-  "optionsLastStarted": {
-    "message": "Last started"
-  },
-  "optionsLastFinished": {
-    "message": "Last finished"
-  },
   "optionsNextRun": {
     "message": "Next run"
   },
-  "optionsConsecutiveFailures": {
-    "message": "Consecutive failures"
-  },
-  "optionsAlarmScheduled": {
-    "message": "Alarm scheduled"
-  },
-  "optionsAlarmPeriod": {
-    "message": "Alarm period"
-  },
-  "optionsLastResult": {
-    "message": "Last result"
-  },
-  "optionsLastError": {
-    "message": "Last error"
-  },
-  "optionsPeriodicEvents": {
-    "message": "Periodic update events"
-  },
-  "optionsNoPeriodicEvents": {
-    "message": "No periodic update events."
-  },
-  "optionsTime": {
-    "message": "Time"
-  },
-  "optionsTrigger": {
-    "message": "Trigger"
-  },
-  "optionsMessage": {
-    "message": "Message"
-  },
   "optionsError": {
     "message": "Error"
-  },
-  "optionsLegacyMigrationHint": {
-    "message": "Use this only if you upgraded from the old MV2 version and want to copy old settings. This does not delete old data and does not apply proxy settings."
   },
   "optionsScanLegacySettings": {
     "message": "Scan legacy MV2 settings"
@@ -1052,14 +772,8 @@
   "optionsLegacyAuditCompleted": {
     "message": "Legacy MV2 migration audit completed."
   },
-  "optionsLoadMigrationPlan": {
-    "message": "Load migration plan"
-  },
   "optionsLoading": {
     "message": "Loading..."
-  },
-  "optionsLegacyPlanLoaded": {
-    "message": "Legacy MV2 migration plan loaded."
   },
   "optionsClearMigrationAudit": {
     "message": "Clear migration audit"
@@ -1082,68 +796,11 @@
   "optionsDetectedLegacyData": {
     "message": "Detected legacy data"
   },
-  "optionsInstallType": {
-    "message": "Install type"
-  },
-  "optionsChromeStorageKeys": {
-    "message": "Chrome storage keys"
-  },
-  "optionsLocalStorageKeys": {
-    "message": "localStorage keys"
-  },
-  "optionsProposedSettings": {
-    "message": "Proposed settings"
-  },
-  "optionsCannotMigrate": {
-    "message": "Cannot migrate"
-  },
-  "optionsConflicts": {
-    "message": "Conflicts"
-  },
-  "optionsWarnings": {
-    "message": "Warnings"
-  },
-  "optionsAuditError": {
-    "message": "Audit error"
-  },
-  "optionsAppliedFields": {
-    "message": "Applied fields"
-  },
-  "optionsSkippedFields": {
-    "message": "Skipped fields"
-  },
-  "optionsApplyConflicts": {
-    "message": "Apply conflicts"
-  },
-  "optionsLastApplySummary": {
-    "message": "Last apply summary"
-  },
-  "optionsAuditWarnings": {
-    "message": "Audit warnings"
-  },
-  "optionsDryRunMigrationPlan": {
-    "message": "Dry-run migration plan"
-  },
   "optionsDetected": {
     "message": "Detected"
   },
-  "optionsChromeStorageChecked": {
-    "message": "Chrome storage checked"
-  },
-  "optionsLocalStorageChecked": {
-    "message": "localStorage checked"
-  },
   "optionsSettingsAvailableForMigration": {
     "message": "Settings available for migration"
-  },
-  "optionsSettingsCannotMigrateSafely": {
-    "message": "Settings that cannot be migrated safely"
-  },
-  "optionsConflictsWithCurrentMv3": {
-    "message": "Conflicts with current MV3 state"
-  },
-  "optionsApplySelectedLegacySettings": {
-    "message": "Apply selected legacy settings"
   },
   "optionsPacUpdatePeriod": {
     "message": "PAC update period"
@@ -1169,22 +826,6 @@
   "optionsApplySelectedMigration": {
     "message": "Apply selected migration"
   },
-  "optionsMigrationApplyFailed": {
-    "message": "Migration apply failed: $MESSAGE$",
-    "placeholders": {
-      "message": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsMigrationApplyStatus": {
-    "message": "Migration apply status: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
   "optionsSaveNotifications": {
     "message": "Save notifications"
   },
@@ -1200,30 +841,10 @@
   "optionsNotifyNoControl": {
     "message": "Proxy control lost"
   },
-  "optionsLoadStateFailed": {
-    "message": "Failed to load extension state."
-  },
-  "optionsSiteRuleNotFound": {
-    "message": "Site rule was not found."
-  },
   "popupCustomProviderLabel": {
     "message": "Custom: $LABEL$",
     "placeholders": {
       "label": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsPacProviders": {
-    "message": "PAC providers"
-  },
-  "optionsPacProvidersHint": {
-    "message": "Built-in providers are read-only. Add trusted custom PAC URLs when you need another provider."
-  },
-  "optionsSelectedProviderValue": {
-    "message": "Selected provider: $PROVIDER$",
-    "placeholders": {
-      "provider": {
         "content": "$1"
       }
     }
@@ -1237,9 +858,6 @@
   "optionsNoCustomProviders": {
     "message": "No custom PAC providers configured."
   },
-  "optionsReadOnlyProvider": {
-    "message": "Built-in, read-only"
-  },
   "optionsProviderName": {
     "message": "Provider name"
   },
@@ -1249,26 +867,11 @@
   "optionsPacUrls": {
     "message": "PAC URLs"
   },
-  "optionsPacUrlsHint": {
-    "message": "One URL per line. Use HTTPS, or localhost HTTP for local testing."
-  },
   "optionsProviderDuplicateUrls": {
-    "message": "Duplicate URLs are removed automatically. Only add PAC URLs you trust."
+    "message": "Remove duplicate addresses. Each trusted PAC address should appear once."
   },
   "optionsAddCustomProvider": {
     "message": "Add custom provider"
-  },
-  "optionsUpdateCustomProvider": {
-    "message": "Save provider"
-  },
-  "optionsEditCustomProvider": {
-    "message": "Edit"
-  },
-  "optionsDeleteCustomProvider": {
-    "message": "Delete provider"
-  },
-  "optionsSelectProvider": {
-    "message": "Select"
   },
   "optionsSelected": {
     "message": "Selected"
@@ -1280,22 +883,19 @@
     "message": "Enabled"
   },
   "optionsCustomProviderAdded": {
-    "message": "Custom PAC provider added. Select it, then update PAC."
+    "message": "Custom routing source saved. Select it when you are ready to use it."
   },
   "optionsCustomProviderUpdated": {
-    "message": "Custom PAC provider updated."
-  },
-  "optionsCustomProviderUpdatedRefresh": {
-    "message": "Provider URLs changed. Update PAC, cook it, and apply proxy again."
+    "message": "Custom routing source saved. Apply the configuration to activate changes."
   },
   "optionsCustomProviderDeleted": {
-    "message": "Custom PAC provider deleted. Cached artifacts were kept."
+    "message": "Custom routing source deleted. The active proxy configuration is unchanged until you apply or turn it off."
   },
   "optionsSelectedProviderCleared": {
     "message": "The selected custom provider was disabled. Select another provider. An already applied proxy remains active until you clear or replace it."
   },
   "optionsSelectedProviderDeleted": {
-    "message": "The selected custom provider was deleted. Select another provider. Cached artifacts were kept; an already applied proxy remains active until you clear or replace it."
+    "message": "The selected custom routing source was deleted. Choose another source. An already active proxy remains active until you apply or turn it off."
   },
   "optionsConfirmDeleteCustomProvider": {
     "message": "Delete custom provider $PROVIDER$?",
@@ -1308,23 +908,8 @@
   "optionsDeleting": {
     "message": "Deleting..."
   },
-  "optionsProviderLabelRequired": {
-    "message": "Enter a provider name."
-  },
-  "optionsProviderLabelTooLong": {
-    "message": "Provider name is too long."
-  },
-  "optionsProviderDescriptionTooLong": {
-    "message": "Provider description is too long."
-  },
   "optionsProviderUrlRequired": {
     "message": "Add at least one PAC URL."
-  },
-  "optionsProviderInvalidUrl": {
-    "message": "One of the PAC URLs is invalid."
-  },
-  "optionsProviderInvalidScheme": {
-    "message": "PAC URLs must use HTTPS. Localhost HTTP is allowed for testing."
   },
   "optionsProviderUrlCredentials": {
     "message": "PAC URLs must not contain a username or password."
@@ -1436,12 +1021,6 @@
   "proxyHealthGenericShort": {
     "message": "Configured proxy is unavailable"
   },
-  "optionsReliability": {
-    "message": "Reliability"
-  },
-  "optionsReliabilityHint": {
-    "message": "PAC refresh and proxy connectivity status. Automatic refresh never enables a cleared proxy."
-  },
   "optionsAutoUpdateEveryTwelveHours": {
     "message": "Automatically update PAC every 12 hours"
   },
@@ -1456,5 +1035,623 @@
   },
   "periodicUpdateNotificationBody": {
     "message": "The automatic PAC update failed. Open settings for details."
+  },
+  "optionsPageTitle": {
+    "message": "Runet Censorship Bypass settings"
+  },
+  "optionsPageSubtitle": {
+    "message": "Manage how sites are routed and which proxy connections are available."
+  },
+  "optionsNavigationLabel": {
+    "message": "Settings sections"
+  },
+  "optionsNavOverview": {
+    "message": "Overview"
+  },
+  "optionsNavRoutingSources": {
+    "message": "Routing sources"
+  },
+  "optionsNavSiteRules": {
+    "message": "Site rules"
+  },
+  "optionsNavProxyMethods": {
+    "message": "Proxy methods"
+  },
+  "optionsNavUpdatesHealth": {
+    "message": "Updates and health"
+  },
+  "optionsNavDiagnostics": {
+    "message": "Diagnostics"
+  },
+  "optionsNavAdvanced": {
+    "message": "Advanced"
+  },
+  "optionsOverviewDescription": {
+    "message": "See whether the extension proxy is active and what needs attention."
+  },
+  "optionsRoutingSourcesDescription": {
+    "message": "Choose where automatic routing decisions come from and manage trusted custom sources."
+  },
+  "optionsSiteRulesDescription": {
+    "message": "Override automatic routing for exact hosts or a domain and its subdomains."
+  },
+  "optionsProxyMethodsDescription": {
+    "message": "Configure the proxy connections available to explicit Proxy rules."
+  },
+  "optionsUpdatesHealthDescription": {
+    "message": "Control automatic routing-data refreshes and check a configured proxy connection."
+  },
+  "optionsDiagnosticsDescriptionNew": {
+    "message": "Review safe, user-focused checks before opening sanitized expert details."
+  },
+  "optionsAdvancedDescriptionNew": {
+    "message": "Manage uncommon routing policies, maintenance, and expert operations."
+  },
+  "optionsLoadingPage": {
+    "message": "Loading saved configuration and current proxy status…"
+  },
+  "optionsLoadFailedTitle": {
+    "message": "Could not load settings"
+  },
+  "optionsLoadFailedHelp": {
+    "message": "Try again. No settings were changed."
+  },
+  "optionsConfirmLanguageWithDrafts": {
+    "message": "Changing the language reloads this page and discards unsaved edits. Continue?"
+  },
+  "optionsActiveRoutingSource": {
+    "message": "Active routing source"
+  },
+  "optionsSavedConfiguration": {
+    "message": "Saved configuration"
+  },
+  "optionsApplyRequired": {
+    "message": "Apply required"
+  },
+  "optionsConfigurationCurrent": {
+    "message": "Matches active rules"
+  },
+  "optionsStateActive": {
+    "message": "Active"
+  },
+  "optionsStateOff": {
+    "message": "Off"
+  },
+  "optionsStateExternal": {
+    "message": "Controlled elsewhere"
+  },
+  "optionsStateApplying": {
+    "message": "In progress"
+  },
+  "optionsStateNeedsApply": {
+    "message": "Apply needed"
+  },
+  "optionsStateNeedsAttention": {
+    "message": "Needs attention"
+  },
+  "optionsControlErrorHelp": {
+    "message": "The last proxy operation failed. Review the configuration and try again."
+  },
+  "optionsChooseSourceTitle": {
+    "message": "Choose a routing source"
+  },
+  "optionsChooseSourceHelp": {
+    "message": "A routing source is required before the extension proxy can be turned on."
+  },
+  "optionsGoToRoutingSources": {
+    "message": "Choose source"
+  },
+  "optionsBuiltInProvidersHelp": {
+    "message": "Built-in sources are maintained by the extension and cannot be edited."
+  },
+  "optionsBuiltIn": {
+    "message": "Built in"
+  },
+  "optionsUseSource": {
+    "message": "Use source"
+  },
+  "optionsRoutingSourceSaved": {
+    "message": "Routing source saved. Apply the configuration to activate it."
+  },
+  "optionsNoDescription": {
+    "message": "No description provided."
+  },
+  "optionsOneSourceAddress": {
+    "message": "$COUNT$ source address",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManySourceAddresses": {
+    "message": "$COUNT$ source addresses",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsNoCustomProvidersHelp": {
+    "message": "Add a custom source only when you trust its PAC addresses."
+  },
+  "optionsPacUrlsSafeHelp": {
+    "message": "One HTTPS address per line. Loopback HTTP is allowed for local testing. Full addresses stay inside this editor."
+  },
+  "optionsCustomProviderEnabledHelp": {
+    "message": "Disabled sources remain saved but cannot be selected."
+  },
+  "optionsSaveSource": {
+    "message": "Save source"
+  },
+  "optionsDuplicateSource": {
+    "message": "Duplicate"
+  },
+  "optionsDeleteSource": {
+    "message": "Delete source"
+  },
+  "optionsCustomSourceTrustHelp": {
+    "message": "Add only PAC addresses you trust. A PAC controls routing decisions in Chromium."
+  },
+  "optionsSaveAndUse": {
+    "message": "Save and use"
+  },
+  "optionsSaveOnly": {
+    "message": "Save only"
+  },
+  "optionsProviderNameRequired": {
+    "message": "Enter a source name."
+  },
+  "optionsProviderUrlInvalid": {
+    "message": "Enter a valid PAC address."
+  },
+  "optionsProviderUrlScheme": {
+    "message": "Use HTTPS. HTTP is allowed only for a loopback address."
+  },
+  "optionsProviderSaveFailed": {
+    "message": "Could not save this routing source. Check the fields and try again."
+  },
+  "optionsSourceSavedAndSelected": {
+    "message": "Routing source saved and selected. Apply the configuration to activate it."
+  },
+  "optionsSourceSavedNotSelected": {
+    "message": "Routing source saved, but it could not be selected. Review the source list and try selecting it again."
+  },
+  "optionsProviderCopyName": {
+    "message": "$NAME$ copy",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsConfirmDeleteSelectedSource": {
+    "message": "Delete selected source $NAME$? The source selection will be cleared and the extension proxy will not be reapplied automatically.",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsAddSiteRuleTaskHelp": {
+    "message": "Use Proxy or Direct for an exception. Auto is represented by having no rule."
+  },
+  "optionsSiteLimitationsHelp": {
+    "message": "IP addresses and localhost can use exact rules only. Domain-wide rules require a valid domain suffix. Internationalized domains are shown in their normalized browser form."
+  },
+  "optionsSiteOrDomain": {
+    "message": "Site or domain scope"
+  },
+  "optionsSiteScopeHelp": {
+    "message": "Use example.com for an exact host or *.example.com for the domain and its subdomains. URLs are normalized to a host."
+  },
+  "optionsRoute": {
+    "message": "Route"
+  },
+  "optionsSiteRouteHelp": {
+    "message": "This rule affects only the matching site scope; it does not turn the extension proxy on or off."
+  },
+  "optionsNormalizedScopePending": {
+    "message": "The normalized scope will appear here."
+  },
+  "optionsNormalizedScopePreview": {
+    "message": "Normalized scope: $SCOPE$",
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsAddRule": {
+    "message": "Add rule"
+  },
+  "optionsOneSiteRule": {
+    "message": "$COUNT$ rule",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManySiteRules": {
+    "message": "$COUNT$ rules",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsNoSiteRulesHelp": {
+    "message": "Auto routing follows the selected routing source. Add a rule only for an exception."
+  },
+  "optionsFilterSiteRules": {
+    "message": "Filter rules"
+  },
+  "optionsFilterSiteRulesPlaceholder": {
+    "message": "Search by scope, route, or note"
+  },
+  "optionsGoToProxyMethods": {
+    "message": "Configure proxy methods"
+  },
+  "optionsDomainScope": {
+    "message": "Domain and subdomains"
+  },
+  "optionsExactHostScope": {
+    "message": "Exact host"
+  },
+  "optionsNormalizedScope": {
+    "message": "Normalized scope"
+  },
+  "optionsAutoRemovesRuleHelp": {
+    "message": "Choosing Auto removes this saved exception so the routing source decides."
+  },
+  "optionsDisabledRuleHelp": {
+    "message": "A disabled rule remains saved but does not affect routing."
+  },
+  "optionsSaveRule": {
+    "message": "Save rule"
+  },
+  "optionsRemoveRule": {
+    "message": "Remove rule"
+  },
+  "optionsConfirmRemoveRule": {
+    "message": "Remove the rule for $SCOPE$?",
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsRuleSavedApplyRequired": {
+    "message": "Site rule saved. Apply the configuration to activate it."
+  },
+  "optionsRuleRemovedApplyRequired": {
+    "message": "Site rule removed. Apply the configuration to activate the change."
+  },
+  "optionsProxyMethodAvailability": {
+    "message": "Proxy-method availability"
+  },
+  "optionsOneProxyMethod": {
+    "message": "$COUNT$ enabled method",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManyProxyMethods": {
+    "message": "$COUNT$ enabled methods",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsProxyHealthAuthSeparateHelp": {
+    "message": "Connection availability and successful proxy authentication are separate checks."
+  },
+  "optionsProxyMethodPolicy": {
+    "message": "Routing-source and own-proxy scope"
+  },
+  "optionsDirectReplacementHelp": {
+    "message": "Advanced: allow this method to replace a Direct result only when that policy is enabled."
+  },
+  "optionsProxyStringHelp": {
+    "message": "Use the existing PAC proxy-string format. Candidate order is not changed here."
+  },
+  "optionsOwnProxyEditorHelp": {
+    "message": "Own proxies are optional. Passwords are stored locally for authentication and are never shown after saving."
+  },
+  "optionsNoOwnProxies": {
+    "message": "No own proxies"
+  },
+  "optionsNoOwnProxiesHelp": {
+    "message": "Add one only when you need an explicit Proxy route or an advanced replacement method."
+  },
+  "optionsPasswordAction": {
+    "message": "Password"
+  },
+  "optionsKeepSavedPassword": {
+    "message": "Keep saved password"
+  },
+  "optionsReplacePassword": {
+    "message": "Replace password"
+  },
+  "optionsRemovePassword": {
+    "message": "Remove password"
+  },
+  "optionsNoPassword": {
+    "message": "No password"
+  },
+  "optionsSetPassword": {
+    "message": "Set password"
+  },
+  "optionsPasswordIntentHelp": {
+    "message": "Choose explicitly whether to keep, replace, or remove the stored password."
+  },
+  "optionsNewPassword": {
+    "message": "New password"
+  },
+  "optionsPasswordNotShownHelp": {
+    "message": "The saved password is not displayed. This field is used only for replacement."
+  },
+  "optionsProxyHostRequired": {
+    "message": "Enter a proxy host."
+  },
+  "optionsProxyPortInvalid": {
+    "message": "Enter a port from 1 to 65535."
+  },
+  "optionsPasswordRequiredForReplace": {
+    "message": "Enter the replacement password."
+  },
+  "optionsPasswordEndpointChanged": {
+    "message": "Choose Replace or Remove password when changing the proxy type, host, or port."
+  },
+  "optionsProxyMethodsSavedApplyRequired": {
+    "message": "Proxy methods saved. Apply the configuration to activate routing changes."
+  },
+  "optionsAutomaticUpdates": {
+    "message": "Automatic routing-data updates"
+  },
+  "optionsAutoUpdateSafetyHelp": {
+    "message": "Automatic updates never turn on an extension proxy that you turned off."
+  },
+  "optionsSaveUpdateSettings": {
+    "message": "Save update settings"
+  },
+  "optionsUpdateRoutingRules": {
+    "message": "Update routing rules"
+  },
+  "optionsUpdatingRoutingRules": {
+    "message": "Updating routing rules…"
+  },
+  "optionsUpdateSkipped": {
+    "message": "The update was skipped because another operation or safety condition took priority."
+  },
+  "optionsRoutingRulesUpdated": {
+    "message": "Routing rules updated. Existing proxy ownership was preserved."
+  },
+  "optionsConnectionHealth": {
+    "message": "Connection health"
+  },
+  "optionsLastProxyCheck": {
+    "message": "Last proxy check"
+  },
+  "optionsCheckedMethod": {
+    "message": "Checked method"
+  },
+  "optionsHealthCheckNeedsProxyRuleHelp": {
+    "message": "A meaningful check requires an applied Proxy rule and a previously known target site."
+  },
+  "optionsSystemCheck": {
+    "message": "System check"
+  },
+  "optionsProxyOwnership": {
+    "message": "Proxy ownership"
+  },
+  "optionsLastApplyResult": {
+    "message": "Last apply result"
+  },
+  "optionsShowExpertDetails": {
+    "message": "Show sanitized expert details"
+  },
+  "optionsExpertDetailsRedactionHelp": {
+    "message": "These details omit PAC bodies, source addresses, credentials, hashes, artifact references, and raw browser errors."
+  },
+  "optionsControlLevel": {
+    "message": "Control availability"
+  },
+  "optionsDownloadStatus": {
+    "message": "Routing-data download"
+  },
+  "optionsCookStatus": {
+    "message": "Routing-rule preparation"
+  },
+  "optionsHealthCode": {
+    "message": "Health issue"
+  },
+  "optionsUpdateStatus": {
+    "message": "Automatic update status"
+  },
+  "optionsControlLevelThisExtension": {
+    "message": "Controlled by this extension"
+  },
+  "optionsControlLevelAvailable": {
+    "message": "Available to this extension"
+  },
+  "optionsControlLevelOther": {
+    "message": "Controlled by another extension"
+  },
+  "optionsControlLevelPolicy": {
+    "message": "Restricted by browser policy"
+  },
+  "optionsHealthCodeConnection": {
+    "message": "Proxy connection failed"
+  },
+  "optionsHealthCodeTunnel": {
+    "message": "Secure tunnel failed"
+  },
+  "optionsHealthCodeAuthentication": {
+    "message": "Proxy authentication needs attention"
+  },
+  "optionsHealthCodeGeneric": {
+    "message": "Proxy connection needs attention"
+  },
+  "optionsStatusUnknown": {
+    "message": "Unknown"
+  },
+  "optionsWhitelistHelpNew": {
+    "message": "Allowlist entries follow the existing exact-host and wildcard matching rules."
+  },
+  "optionsNoWhitelistRules": {
+    "message": "No allowlist entries are configured."
+  },
+  "optionsReplaceDirectWarningNew": {
+    "message": "Broadens proxy use by replacing eligible Direct results with enabled replacement methods."
+  },
+  "optionsNoDirectWarningNew": {
+    "message": "Removes Direct fallbacks from provider results. This does not change Chromium's mandatory:false behavior."
+  },
+  "optionsPatternRequired": {
+    "message": "Enter a host pattern."
+  },
+  "optionsAdvancedRulesSavedApplyRequired": {
+    "message": "Advanced routing rules saved. Apply the configuration to activate them."
+  },
+  "optionsExpertOperations": {
+    "message": "Expert routing operations"
+  },
+  "optionsExpertOperationsHelp": {
+    "message": "Normal use needs only Apply configuration. These individual stages are for controlled troubleshooting."
+  },
+  "optionsRebuildRoutingRules": {
+    "message": "Rebuild routing rules"
+  },
+  "optionsActivatePreparedRules": {
+    "message": "Activate prepared rules"
+  },
+  "optionsRoutingRulesDownloaded": {
+    "message": "Routing data downloaded and validated."
+  },
+  "optionsRoutingRulesRebuilt": {
+    "message": "Routing rules rebuilt."
+  },
+  "optionsPreparedRulesActivated": {
+    "message": "Prepared routing rules activated."
+  },
+  "optionsLegacyMigrationSafeHelp": {
+    "message": "Migration is audit-first, selected-field-only, and non-destructive. It neither deletes legacy data nor applies proxy settings."
+  },
+  "optionsConfirmClearMigrationAudit": {
+    "message": "Clear the saved migration audit result? Legacy data will not be deleted."
+  },
+  "optionsMigrationFieldUnavailable": {
+    "message": "No safely migratable value was found for this field."
+  },
+  "optionsMigrationDoesNotApplyHelp": {
+    "message": "Migrated settings are saved only. Review and apply them separately."
+  },
+  "optionsMigrationAppliedSafely": {
+    "message": "Selected legacy settings were migrated. Proxy settings were not applied."
+  },
+  "optionsAboutBehaviorBoundary": {
+    "message": "This interface changes presentation and saved settings only; PAC routing and security rules remain authoritative in the background."
+  },
+  "optionsConfigurationActions": {
+    "message": "Configuration status and actions"
+  },
+  "optionsConflictTitle": {
+    "message": "Saved settings changed while you were editing"
+  },
+  "optionsConflictHelp": {
+    "message": "Your draft is preserved. Review it against the latest saved state before trying again."
+  },
+  "optionsConflictActionHelp": {
+    "message": "Review the preserved draft or discard all local changes."
+  },
+  "optionsConflictError": {
+    "message": "This draft is based on older settings. It was kept so you can review it."
+  },
+  "optionsReviewConflict": {
+    "message": "Review conflict"
+  },
+  "optionsOneUnsavedDraft": {
+    "message": "$COUNT$ section has unsaved changes",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManyUnsavedDrafts": {
+    "message": "$COUNT$ sections have unsaved changes",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSaveSectionBeforeApply": {
+    "message": "Save or discard local section edits before applying the configuration."
+  },
+  "optionsReviewChanges": {
+    "message": "Review changes"
+  },
+  "optionsDiscardAllChanges": {
+    "message": "Discard all"
+  },
+  "optionsConfirmDiscardAll": {
+    "message": "Discard all unsaved edits on this page? Saved settings will not change."
+  },
+  "optionsDraftsDiscarded": {
+    "message": "Unsaved edits discarded."
+  },
+  "optionsExternalActionHelp": {
+    "message": "Resolve the other extension or policy before applying this configuration."
+  },
+  "optionsCheckAgain": {
+    "message": "Check again"
+  },
+  "optionsOperationInProgressHelp": {
+    "message": "Wait for the current operation to finish before starting another one."
+  },
+  "optionsChooseSourceBeforeApply": {
+    "message": "Select a trusted routing source before applying the configuration."
+  },
+  "optionsSavedAndActive": {
+    "message": "Saved settings are active"
+  },
+  "optionsTurnOffKeepsSettings": {
+    "message": "Turning off the extension proxy keeps rules and downloaded routing data."
+  },
+  "optionsReadyToApply": {
+    "message": "Configuration is ready"
+  },
+  "optionsApplyWorkflowHelp": {
+    "message": "Apply configuration updates, validates, prepares, verifies, and activates routing rules as one protected workflow."
+  },
+  "optionsApplyConfiguration": {
+    "message": "Apply configuration"
+  },
+  "optionsApplyingConfiguration": {
+    "message": "Applying configuration…"
+  },
+  "optionsConfigurationApplied": {
+    "message": "Configuration applied successfully."
+  },
+  "optionsConfigurationTurnedOff": {
+    "message": "Extension proxy turned off. Saved settings were kept."
+  },
+  "optionsValidationFailed": {
+    "message": "Fix the highlighted fields. Your draft was kept."
+  },
+  "optionsApplyFailedSafe": {
+    "message": "Could not apply the configuration. Saved settings and local drafts were kept."
+  },
+  "optionsOperationFailedSafe": {
+    "message": "The operation could not be completed. Your local edits were kept."
+  },
+  "optionsRefreshFailedDraftsKept": {
+    "message": "Could not refresh the background state. Your unsaved edits remain on this page."
   }
 }

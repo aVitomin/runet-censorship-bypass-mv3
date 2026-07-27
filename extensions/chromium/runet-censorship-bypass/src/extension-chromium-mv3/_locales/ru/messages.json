@@ -517,12 +517,6 @@
   "popupProxyCleared": {
     "message": "Прокси сброшен. Браузер вернулся к системному режиму прокси."
   },
-  "optionsIntro": {
-    "message": "Управляйте обновлением PAC, правилами сайтов, прокси-кандидатами и применением прокси в браузере."
-  },
-  "optionsGeneral": {
-    "message": "Общие"
-  },
   "optionsLanguage": {
     "message": "Язык"
   },
@@ -534,9 +528,6 @@
   },
   "optionsLanguageEn": {
     "message": "English"
-  },
-  "optionsLanguageReloadNote": {
-    "message": "После смены языка страница будет обновлена."
   },
   "optionsStatusIdle": {
     "message": "ожидание"
@@ -574,47 +565,14 @@
   "optionsStatusSkipped": {
     "message": "пропущено"
   },
-  "optionsQuickStart": {
-    "message": "Статус / быстрый старт"
-  },
-  "optionsQuickStartHint": {
-    "message": "После изменения правил сайтов или прокси пересоберите PAC и примените его."
-  },
-  "optionsPacDownloaded": {
-    "message": "PAC скачан"
-  },
-  "optionsPacCooked": {
-    "message": "PAC собран"
-  },
-  "optionsProxyStatus": {
-    "message": "Статус прокси"
-  },
-  "optionsPacSettingsChanged": {
-    "message": "Настройки PAC изменены"
-  },
   "optionsYes": {
     "message": "да"
   },
   "optionsNo": {
     "message": "нет"
   },
-  "optionsPacChangedCookApply": {
-    "message": "Настройки PAC изменены. Нажмите «Собрать PAC», затем «Применить прокси»."
-  },
-  "optionsChangePacProvider": {
-    "message": "Изменить поставщика PAC"
-  },
-  "optionsNoProviderSelected": {
-    "message": "Поставщик не выбран"
-  },
-  "optionsSaveProvider": {
-    "message": "Сохранить поставщика"
-  },
   "optionsSaving": {
     "message": "Сохранение..."
-  },
-  "optionsPacProviderSaved": {
-    "message": "Поставщик PAC сохранен."
   },
   "optionsDownloadPac": {
     "message": "Скачать PAC"
@@ -622,59 +580,14 @@
   "optionsDownloading": {
     "message": "Скачивание..."
   },
-  "optionsCookPac": {
-    "message": "Собрать PAC"
-  },
   "optionsCooking": {
     "message": "Сборка..."
-  },
-  "optionsCookPacHelp": {
-    "message": "Пересобрать PAC с текущими правилами."
-  },
-  "optionsApplyProxy": {
-    "message": "Применить прокси"
   },
   "optionsApplying": {
     "message": "Применение..."
   },
-  "optionsApplyProxyHelp": {
-    "message": "Активировать собранный PAC в настройках прокси браузера."
-  },
-  "optionsPacDownloadStatus": {
-    "message": "Статус скачивания PAC: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsPacCookedApplyNow": {
-    "message": "PAC собран. Теперь можно применить настройки прокси."
-  },
-  "optionsProxyApplyStatus": {
-    "message": "Статус применения прокси: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsProxyClearStatus": {
-    "message": "Статус сброса прокси: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
   "optionsAddSiteRule": {
     "message": "Добавить правило сайта"
-  },
-  "optionsAddSiteRuleHint": {
-    "message": "Выберите, открывать сайт через прокси или напрямую."
-  },
-  "optionsToolbarTip": {
-    "message": "Совет: для текущей вкладки используйте значок расширения на панели."
   },
   "optionsSite": {
     "message": "Сайт"
@@ -685,20 +598,11 @@
   "optionsOptional": {
     "message": "необязательно"
   },
-  "optionsAddProxyRule": {
-    "message": "Добавить правило прокси"
-  },
-  "optionsAddDirectRule": {
-    "message": "Добавить прямое правило"
-  },
   "optionsAdding": {
     "message": "Добавление..."
   },
   "optionsProxyRuleNoCandidate": {
     "message": "Не выбран ни один прокси. Включите Tor, WARP или свой прокси."
-  },
-  "optionsSiteRules": {
-    "message": "Правила сайтов"
   },
   "optionsNoSiteRules": {
     "message": "Правил сайтов пока нет."
@@ -715,14 +619,11 @@
   "optionsRemove": {
     "message": "Удалить"
   },
-  "optionsLocalProxyPresets": {
-    "message": "Локальные прокси"
+  "optionsMoveUp": {
+    "message": "Переместить выше"
   },
-  "optionsLocalProxyHint": {
-    "message": "Включите Tor, WARP или свой прокси перед добавлением прокси-правил."
-  },
-  "optionsPasswordNotice": {
-    "message": "Пароли сохраняются только для прокси-аутентификации и скрываются после сохранения."
+  "optionsMoveDown": {
+    "message": "Переместить ниже"
   },
   "optionsSaveProxySettings": {
     "message": "Сохранить настройки прокси"
@@ -731,22 +632,13 @@
     "message": "Расширенные PAC-правила"
   },
   "optionsAdvancedPacRulesHint": {
-    "message": "Изменения расширенных правил тоже требуют «Собрать PAC», затем «Применить прокси»."
+    "message": "Сохраните изменения здесь, затем активируйте их кнопкой «Применить конфигурацию»."
   },
   "optionsWhitelist": {
     "message": "Белый список"
   },
   "optionsSaveAdvancedPacRules": {
     "message": "Сохранить расширенные PAC-правила"
-  },
-  "optionsAdvancedJsonEditor": {
-    "message": "Расширенный JSON-редактор"
-  },
-  "optionsSavePacModifiersJson": {
-    "message": "Сохранить JSON модификаторов PAC"
-  },
-  "optionsPacJsonInvalid": {
-    "message": "JSON модификаторов PAC некорректен."
   },
   "optionsType": {
     "message": "Тип"
@@ -772,14 +664,8 @@
   "optionsUsername": {
     "message": "Имя пользователя"
   },
-  "optionsPassword": {
-    "message": "Пароль"
-  },
   "optionsDirectReplacement": {
     "message": "Замена DIRECT"
-  },
-  "optionsAddExceptionRule": {
-    "message": "Добавить правило-исключение"
   },
   "optionsAddWhitelistRow": {
     "message": "Добавить строку белого списка"
@@ -796,29 +682,17 @@
   "optionsRemoveDirectFallbacks": {
     "message": "Удалять fallback DIRECT"
   },
-  "optionsPeriodicUpdates": {
-    "message": "Периодические обновления PAC"
-  },
   "optionsLegacyMigration": {
     "message": "Миграция из MV2"
   },
   "optionsNotifications": {
     "message": "Уведомления"
   },
-  "optionsTorModeNote": {
-    "message": "Включайте только один режим Tor."
-  },
   "optionsLocalTorHelp": {
     "message": "Использовать отдельно запущенную службу Tor, обычно SOCKS5 127.0.0.1:9050."
   },
   "optionsTorBrowserHelp": {
     "message": "Использовать прокси, который запускает Tor Browser, обычно SOCKS5 127.0.0.1:9150. Tor Browser должен быть открыт."
-  },
-  "optionsPacProxyMode": {
-    "message": "PAC и свои прокси"
-  },
-  "optionsPacProxyModeHelp": {
-    "message": "Выберите, использовать ли прокси из PAC и ограничивать ли свои прокси вашими правилами сайтов."
   },
   "popupPacDownloadedAndCookedMessage": {
     "message": "PAC скачан и собран."
@@ -859,26 +733,8 @@
   "optionsNone": {
     "message": "нет"
   },
-  "optionsDiagnostics": {
-    "message": "Диагностика"
-  },
-  "optionsDiagnosticsHint": {
-    "message": "Техническое состояние, предпросмотр, периодические обновления и журналы аутентификации."
-  },
-  "optionsMaintenance": {
-    "message": "Обслуживание"
-  },
-  "optionsMaintenanceHint": {
-    "message": "Используйте это только если вы обновились со старой MV2-версии и хотите перенести старые настройки. Это не удаляет старые данные и не применяет прокси."
-  },
-  "optionsRcStatus": {
-    "message": "Технический статус"
-  },
   "optionsMv3Credits": {
     "message": "Миграция на MV3: @aVitomin with Codex"
-  },
-  "optionsMv2RulesWarning": {
-    "message": "Это старое расширенное правило описано в разделе «О расширении / Ограничения»."
   },
   "optionsAbout": {
     "message": "О расширении"
@@ -886,56 +742,8 @@
   "optionsAboutHint": {
     "message": "Версия, благодарности и ненавязчивые заметки о совместимости."
   },
-  "optionsLimitations": {
-    "message": "Известные ограничения"
-  },
-  "optionsLimitationDns": {
-    "message": "Не восстановлено: DNS monkey-patching / PAC-переопределения утечек DNS. Отключено ради безопасности и предсказуемости."
-  },
-  "optionsLimitationRawReplaceDirect": {
-    "message": "Не восстановлено: произвольная PAC-строка replaceDirectWith. Отключено, чтобы не внедрять исполняемый PAC-код."
-  },
-  "optionsLimitationSecureFiltering": {
-    "message": "Не восстановлено для RC: фильтрация безопасных прокси поставщика и проксирование только HTTPS."
-  },
-  "optionsLimitationWeightedRules": {
-    "message": "Частично: сложные старые weighted-исключения восстановлены не полностью."
-  },
-  "optionsLimitationExternalProxyQa": {
-    "message": "Ожидает QA: внешний прокси с аутентификацией и HTTPS CONNECT."
-  },
-  "optionsLimitationTorQa": {
-    "message": "Ожидает QA: реальный трафик через Tor требует установленного и запущенного Tor."
-  },
-  "optionsRestoredMv2Behavior": {
-    "message": "Восстановленная совместимость"
-  },
-  "optionsRestoredPacProxySwitch": {
-    "message": "Переключатель прокси из PAC восстановлен: прокси поставщика можно включать или отключать."
-  },
-  "optionsRestoredOwnSitesOnly": {
-    "message": "Режим «свои прокси только для своих правил сайтов» восстановлен и включен по умолчанию."
-  },
-  "optionsRestoredOnionTor": {
-    "message": "Маршрутизация .onion через включенные Tor-кандидаты восстановлена."
-  },
-  "optionsRestoredDirectPolicy": {
-    "message": "Замена DIRECT и политика без DIRECT доступны как расширенные настройки по выбору."
-  },
-  "optionsCredentialsRedactedWarning": {
-    "message": "Пароли прокси скрыты в PAC и используются только для аутентификации."
-  },
-  "optionsTorMustRunWarning": {
-    "message": "Tor должен быть запущен локально."
-  },
   "optionsWarpLocalProxyWarning": {
     "message": "WARP используется как локальный прокси."
-  },
-  "optionsDirectReplacementNoCandidateWarning": {
-    "message": "Для замены DIRECT нужен включенный прокси-кандидат."
-  },
-  "optionsNoPacOrOwnProxyWarning": {
-    "message": "Прокси из PAC отключены, и свой прокси не включен."
   },
   "optionsEnterSite": {
     "message": "Введите сайт, домен или URL."
@@ -943,105 +751,17 @@
   "optionsEnterValidSite": {
     "message": "Введите корректный домен, хост, wildcard или URL."
   },
-  "optionsUnsupportedSiteRuleAction": {
-    "message": "Неподдерживаемое действие правила сайта."
-  },
   "optionsDuplicateSiteRule": {
     "message": "Для этого сайта уже есть правило."
-  },
-  "optionsPeriodicUpdatesHint": {
-    "message": "Выбранный PAC-поставщик проверяется каждый час и обновляется через 12 часов. Новый PAC применяется, только если расширение уже управляет прокси."
-  },
-  "optionsPeriodicAuthHint": {
-    "message": "QA внешнего прокси с аутентификацией еще ожидает проверки."
-  },
-  "optionsEnablePeriodicUpdates": {
-    "message": "Автоматически обновлять PAC каждые 12 часов"
-  },
-  "optionsIntervalMinutes": {
-    "message": "Интервал в минутах"
-  },
-  "optionsSavePeriodicUpdates": {
-    "message": "Сохранить периодические обновления"
   },
   "optionsPeriodicSettingsSaved": {
     "message": "Настройки периодических обновлений сохранены."
   },
-  "optionsRunUpdateNow": {
-    "message": "Запустить обновление сейчас"
-  },
-  "optionsRunning": {
-    "message": "Выполнение..."
-  },
-  "optionsPeriodicUpdateFailed": {
-    "message": "Периодическое обновление не выполнено: $MESSAGE$",
-    "placeholders": {
-      "message": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsPeriodicUpdateStatus": {
-    "message": "Статус периодического обновления: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsClearPeriodicEvents": {
-    "message": "Очистить события периодических обновлений"
-  },
-  "optionsPeriodicEventsCleared": {
-    "message": "События периодических обновлений очищены."
-  },
-  "optionsInterval": {
-    "message": "Интервал"
-  },
-  "optionsLastStarted": {
-    "message": "Последний запуск"
-  },
-  "optionsLastFinished": {
-    "message": "Последнее завершение"
-  },
   "optionsNextRun": {
     "message": "Следующий запуск"
   },
-  "optionsConsecutiveFailures": {
-    "message": "Ошибок подряд"
-  },
-  "optionsAlarmScheduled": {
-    "message": "Планировщик включен"
-  },
-  "optionsAlarmPeriod": {
-    "message": "Период планировщика"
-  },
-  "optionsLastResult": {
-    "message": "Последний результат"
-  },
-  "optionsLastError": {
-    "message": "Последняя ошибка"
-  },
-  "optionsPeriodicEvents": {
-    "message": "События периодических обновлений"
-  },
-  "optionsNoPeriodicEvents": {
-    "message": "Событий периодических обновлений нет."
-  },
-  "optionsTime": {
-    "message": "Время"
-  },
-  "optionsTrigger": {
-    "message": "Триггер"
-  },
-  "optionsMessage": {
-    "message": "Сообщение"
-  },
   "optionsError": {
     "message": "Ошибка"
-  },
-  "optionsLegacyMigrationHint": {
-    "message": "Используйте это только если вы обновились со старой MV2-версии и хотите перенести старые настройки. Это не удаляет старые данные и не применяет прокси."
   },
   "optionsScanLegacySettings": {
     "message": "Сканировать старые настройки MV2"
@@ -1052,14 +772,8 @@
   "optionsLegacyAuditCompleted": {
     "message": "Аудит миграции MV2 завершен."
   },
-  "optionsLoadMigrationPlan": {
-    "message": "Загрузить план миграции"
-  },
   "optionsLoading": {
     "message": "Загрузка..."
-  },
-  "optionsLegacyPlanLoaded": {
-    "message": "План миграции MV2 загружен."
   },
   "optionsClearMigrationAudit": {
     "message": "Очистить аудит миграции"
@@ -1082,68 +796,11 @@
   "optionsDetectedLegacyData": {
     "message": "Найдены старые данные"
   },
-  "optionsInstallType": {
-    "message": "Тип установки"
-  },
-  "optionsChromeStorageKeys": {
-    "message": "Ключи Chrome storage"
-  },
-  "optionsLocalStorageKeys": {
-    "message": "Ключи localStorage"
-  },
-  "optionsProposedSettings": {
-    "message": "Предлагаемые настройки"
-  },
-  "optionsCannotMigrate": {
-    "message": "Нельзя перенести"
-  },
-  "optionsConflicts": {
-    "message": "Конфликты"
-  },
-  "optionsWarnings": {
-    "message": "Предупреждения"
-  },
-  "optionsAuditError": {
-    "message": "Ошибка аудита"
-  },
-  "optionsAppliedFields": {
-    "message": "Примененные поля"
-  },
-  "optionsSkippedFields": {
-    "message": "Пропущенные поля"
-  },
-  "optionsApplyConflicts": {
-    "message": "Конфликты применения"
-  },
-  "optionsLastApplySummary": {
-    "message": "Сводка последнего применения"
-  },
-  "optionsAuditWarnings": {
-    "message": "Предупреждения аудита"
-  },
-  "optionsDryRunMigrationPlan": {
-    "message": "План миграции без применения"
-  },
   "optionsDetected": {
     "message": "Найдено"
   },
-  "optionsChromeStorageChecked": {
-    "message": "Chrome storage проверен"
-  },
-  "optionsLocalStorageChecked": {
-    "message": "localStorage проверен"
-  },
   "optionsSettingsAvailableForMigration": {
     "message": "Настройки, доступные для миграции"
-  },
-  "optionsSettingsCannotMigrateSafely": {
-    "message": "Настройки, которые нельзя безопасно перенести"
-  },
-  "optionsConflictsWithCurrentMv3": {
-    "message": "Конфликты с текущим состоянием MV3"
-  },
-  "optionsApplySelectedLegacySettings": {
-    "message": "Применить выбранные старые настройки"
   },
   "optionsPacUpdatePeriod": {
     "message": "Период обновления PAC"
@@ -1169,22 +826,6 @@
   "optionsApplySelectedMigration": {
     "message": "Применить выбранную миграцию"
   },
-  "optionsMigrationApplyFailed": {
-    "message": "Применение миграции не выполнено: $MESSAGE$",
-    "placeholders": {
-      "message": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsMigrationApplyStatus": {
-    "message": "Статус применения миграции: $STATUS$.",
-    "placeholders": {
-      "status": {
-        "content": "$1"
-      }
-    }
-  },
   "optionsSaveNotifications": {
     "message": "Сохранить уведомления"
   },
@@ -1200,30 +841,10 @@
   "optionsNotifyNoControl": {
     "message": "Потеря управления прокси"
   },
-  "optionsLoadStateFailed": {
-    "message": "Не удалось загрузить состояние расширения."
-  },
-  "optionsSiteRuleNotFound": {
-    "message": "Правило сайта не найдено."
-  },
   "popupCustomProviderLabel": {
     "message": "Свой: $LABEL$",
     "placeholders": {
       "label": {
-        "content": "$1"
-      }
-    }
-  },
-  "optionsPacProviders": {
-    "message": "PAC-поставщики"
-  },
-  "optionsPacProvidersHint": {
-    "message": "Встроенные поставщики доступны только для чтения. Добавляйте доверенные адреса PAC, если нужен другой поставщик."
-  },
-  "optionsSelectedProviderValue": {
-    "message": "Выбранный поставщик: $PROVIDER$",
-    "placeholders": {
-      "provider": {
         "content": "$1"
       }
     }
@@ -1237,9 +858,6 @@
   "optionsNoCustomProviders": {
     "message": "Свои PAC-поставщики не настроены."
   },
-  "optionsReadOnlyProvider": {
-    "message": "Встроенный, только чтение"
-  },
   "optionsProviderName": {
     "message": "Название поставщика"
   },
@@ -1249,26 +867,11 @@
   "optionsPacUrls": {
     "message": "Адреса PAC"
   },
-  "optionsPacUrlsHint": {
-    "message": "Один адрес в строке. Используйте HTTPS или HTTP localhost для локальной проверки."
-  },
   "optionsProviderDuplicateUrls": {
-    "message": "Повторяющиеся адреса удаляются автоматически. Добавляйте только доверенные PAC."
+    "message": "Удалите повторяющиеся адреса. Каждый доверенный PAC-адрес должен встречаться один раз."
   },
   "optionsAddCustomProvider": {
     "message": "Добавить своего поставщика"
-  },
-  "optionsUpdateCustomProvider": {
-    "message": "Сохранить поставщика"
-  },
-  "optionsEditCustomProvider": {
-    "message": "Изменить"
-  },
-  "optionsDeleteCustomProvider": {
-    "message": "Удалить поставщика"
-  },
-  "optionsSelectProvider": {
-    "message": "Выбрать"
   },
   "optionsSelected": {
     "message": "Выбран"
@@ -1280,22 +883,19 @@
     "message": "Включен"
   },
   "optionsCustomProviderAdded": {
-    "message": "Свой PAC-поставщик добавлен. Выберите его и обновите PAC."
+    "message": "Свой источник маршрутизации сохранён. Выберите его, когда будете готовы использовать."
   },
   "optionsCustomProviderUpdated": {
-    "message": "Свой PAC-поставщик обновлен."
-  },
-  "optionsCustomProviderUpdatedRefresh": {
-    "message": "Адреса поставщика изменены. Обновите и приготовьте PAC, затем снова примените прокси."
+    "message": "Свой источник маршрутизации сохранён. Примените конфигурацию, чтобы активировать изменения."
   },
   "optionsCustomProviderDeleted": {
-    "message": "Свой PAC-поставщик удален. Кэшированные артефакты сохранены."
+    "message": "Свой источник маршрутизации удалён. Активная конфигурация прокси не изменится, пока вы не примените настройки или не отключите её."
   },
   "optionsSelectedProviderCleared": {
     "message": "Выбранный свой поставщик отключен. Выберите другого поставщика. Уже примененный прокси останется активным, пока вы не сбросите или не замените его."
   },
   "optionsSelectedProviderDeleted": {
-    "message": "Выбранный свой поставщик удален. Выберите другого поставщика. Кэшированные артефакты сохранены; уже примененный прокси останется активным, пока вы не сбросите или не замените его."
+    "message": "Выбранный свой источник маршрутизации удалён. Выберите другой источник. Уже активный прокси останется активным, пока вы не примените настройки или не отключите его."
   },
   "optionsConfirmDeleteCustomProvider": {
     "message": "Удалить своего поставщика $PROVIDER$?",
@@ -1308,23 +908,8 @@
   "optionsDeleting": {
     "message": "Удаление..."
   },
-  "optionsProviderLabelRequired": {
-    "message": "Введите название поставщика."
-  },
-  "optionsProviderLabelTooLong": {
-    "message": "Название поставщика слишком длинное."
-  },
-  "optionsProviderDescriptionTooLong": {
-    "message": "Описание поставщика слишком длинное."
-  },
   "optionsProviderUrlRequired": {
     "message": "Добавьте хотя бы один адрес PAC."
-  },
-  "optionsProviderInvalidUrl": {
-    "message": "Один из адресов PAC некорректен."
-  },
-  "optionsProviderInvalidScheme": {
-    "message": "Адреса PAC должны использовать HTTPS. Для проверки разрешен HTTP localhost."
   },
   "optionsProviderUrlCredentials": {
     "message": "Адрес PAC не должен содержать имя пользователя или пароль."
@@ -1436,12 +1021,6 @@
   "proxyHealthGenericShort": {
     "message": "Настроенный прокси не отвечает"
   },
-  "optionsReliability": {
-    "message": "Надежность"
-  },
-  "optionsReliabilityHint": {
-    "message": "Статус обновления PAC и подключения через прокси. Автообновление не включает сброшенный прокси."
-  },
   "optionsAutoUpdateEveryTwelveHours": {
     "message": "Автоматически обновлять PAC каждые 12 часов"
   },
@@ -1456,5 +1035,623 @@
   },
   "periodicUpdateNotificationBody": {
     "message": "Не удалось автоматически обновить PAC. Подробности доступны в настройках."
+  },
+  "optionsPageTitle": {
+    "message": "Настройки Runet Censorship Bypass"
+  },
+  "optionsPageSubtitle": {
+    "message": "Настройте маршрутизацию сайтов и доступные способы подключения через прокси."
+  },
+  "optionsNavigationLabel": {
+    "message": "Разделы настроек"
+  },
+  "optionsNavOverview": {
+    "message": "Обзор"
+  },
+  "optionsNavRoutingSources": {
+    "message": "Источники правил"
+  },
+  "optionsNavSiteRules": {
+    "message": "Правила сайтов"
+  },
+  "optionsNavProxyMethods": {
+    "message": "Прокси-подключения"
+  },
+  "optionsNavUpdatesHealth": {
+    "message": "Обновления и проверка"
+  },
+  "optionsNavDiagnostics": {
+    "message": "Диагностика"
+  },
+  "optionsNavAdvanced": {
+    "message": "Дополнительно"
+  },
+  "optionsOverviewDescription": {
+    "message": "Проверьте, включён ли прокси расширения и что требует внимания."
+  },
+  "optionsRoutingSourcesDescription": {
+    "message": "Выберите источник автоматических решений о маршрутизации и управляйте доверенными пользовательскими источниками."
+  },
+  "optionsSiteRulesDescription": {
+    "message": "Переопределяйте автоматическую маршрутизацию для точного хоста или домена с поддоменами."
+  },
+  "optionsProxyMethodsDescription": {
+    "message": "Настройте подключения, доступные для явных правил «Через прокси»."
+  },
+  "optionsUpdatesHealthDescription": {
+    "message": "Управляйте автообновлением правил и проверяйте настроенное прокси-подключение."
+  },
+  "optionsDiagnosticsDescriptionNew": {
+    "message": "Сначала просмотрите понятные безопасные проверки, затем при необходимости откройте технические сведения."
+  },
+  "optionsAdvancedDescriptionNew": {
+    "message": "Управляйте редкими политиками маршрутизации, обслуживанием и экспертными операциями."
+  },
+  "optionsLoadingPage": {
+    "message": "Загрузка сохранённой конфигурации и текущего состояния прокси…"
+  },
+  "optionsLoadFailedTitle": {
+    "message": "Не удалось загрузить настройки"
+  },
+  "optionsLoadFailedHelp": {
+    "message": "Повторите попытку. Настройки не изменились."
+  },
+  "optionsConfirmLanguageWithDrafts": {
+    "message": "При смене языка страница перезагрузится, а несохранённые изменения будут потеряны. Продолжить?"
+  },
+  "optionsActiveRoutingSource": {
+    "message": "Активный источник правил"
+  },
+  "optionsSavedConfiguration": {
+    "message": "Сохранённая конфигурация"
+  },
+  "optionsApplyRequired": {
+    "message": "Требуется применение"
+  },
+  "optionsConfigurationCurrent": {
+    "message": "Соответствует активным правилам"
+  },
+  "optionsStateActive": {
+    "message": "Активно"
+  },
+  "optionsStateOff": {
+    "message": "Выключено"
+  },
+  "optionsStateExternal": {
+    "message": "Управляется извне"
+  },
+  "optionsStateApplying": {
+    "message": "Выполняется"
+  },
+  "optionsStateNeedsApply": {
+    "message": "Нужно применить"
+  },
+  "optionsStateNeedsAttention": {
+    "message": "Требует внимания"
+  },
+  "optionsControlErrorHelp": {
+    "message": "Последняя операция с прокси завершилась ошибкой. Проверьте конфигурацию и повторите попытку."
+  },
+  "optionsChooseSourceTitle": {
+    "message": "Выберите источник правил"
+  },
+  "optionsChooseSourceHelp": {
+    "message": "Без источника правил прокси расширения нельзя включить."
+  },
+  "optionsGoToRoutingSources": {
+    "message": "Выбрать источник"
+  },
+  "optionsBuiltInProvidersHelp": {
+    "message": "Встроенные источники поддерживаются расширением и недоступны для редактирования."
+  },
+  "optionsBuiltIn": {
+    "message": "Встроенный"
+  },
+  "optionsUseSource": {
+    "message": "Выбрать источник"
+  },
+  "optionsRoutingSourceSaved": {
+    "message": "Источник правил сохранён. Примените конфигурацию, чтобы активировать его."
+  },
+  "optionsNoDescription": {
+    "message": "Описание не указано."
+  },
+  "optionsOneSourceAddress": {
+    "message": "Адресов источника: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManySourceAddresses": {
+    "message": "Адресов источника: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsNoCustomProvidersHelp": {
+    "message": "Добавляйте пользовательский источник только тогда, когда доверяете его PAC-адресам."
+  },
+  "optionsPacUrlsSafeHelp": {
+    "message": "Один HTTPS-адрес в строке. Loopback HTTP разрешён для локального тестирования. Полные адреса видны только в этом редакторе."
+  },
+  "optionsCustomProviderEnabledHelp": {
+    "message": "Отключённый источник остаётся сохранённым, но выбрать его нельзя."
+  },
+  "optionsSaveSource": {
+    "message": "Сохранить источник"
+  },
+  "optionsDuplicateSource": {
+    "message": "Создать копию"
+  },
+  "optionsDeleteSource": {
+    "message": "Удалить источник"
+  },
+  "optionsCustomSourceTrustHelp": {
+    "message": "Добавляйте только доверенные PAC-адреса: PAC управляет решениями о маршрутизации в Chromium."
+  },
+  "optionsSaveAndUse": {
+    "message": "Сохранить и выбрать"
+  },
+  "optionsSaveOnly": {
+    "message": "Только сохранить"
+  },
+  "optionsProviderNameRequired": {
+    "message": "Укажите название источника."
+  },
+  "optionsProviderUrlInvalid": {
+    "message": "Укажите корректный PAC-адрес."
+  },
+  "optionsProviderUrlScheme": {
+    "message": "Используйте HTTPS. HTTP разрешён только для loopback-адреса."
+  },
+  "optionsProviderSaveFailed": {
+    "message": "Не удалось сохранить источник правил. Проверьте поля и повторите попытку."
+  },
+  "optionsSourceSavedAndSelected": {
+    "message": "Источник правил сохранён и выбран. Примените конфигурацию, чтобы активировать его."
+  },
+  "optionsSourceSavedNotSelected": {
+    "message": "Источник правил сохранён, но выбрать его не удалось. Проверьте список и повторите выбор."
+  },
+  "optionsProviderCopyName": {
+    "message": "$NAME$ — копия",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsConfirmDeleteSelectedSource": {
+    "message": "Удалить выбранный источник «$NAME$»? Выбор будет сброшен, а прокси расширения не включится автоматически.",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsAddSiteRuleTaskHelp": {
+    "message": "Используйте «Через прокси» или «Напрямую» для исключения. Режиму «Авто» соответствует отсутствие правила."
+  },
+  "optionsSiteLimitationsHelp": {
+    "message": "Для IP-адресов и localhost доступны только точные правила. Правило для домена требует корректной доменной зоны. Интернациональные домены показываются в нормализованном браузером виде."
+  },
+  "optionsSiteOrDomain": {
+    "message": "Сайт или область домена"
+  },
+  "optionsSiteScopeHelp": {
+    "message": "example.com задаёт точный хост, а *.example.com — домен и его поддомены. URL преобразуется в имя хоста."
+  },
+  "optionsRoute": {
+    "message": "Маршрут"
+  },
+  "optionsSiteRouteHelp": {
+    "message": "Правило действует только для указанной области сайта и не включает или выключает прокси расширения."
+  },
+  "optionsNormalizedScopePending": {
+    "message": "Здесь появится нормализованная область."
+  },
+  "optionsNormalizedScopePreview": {
+    "message": "Нормализованная область: $SCOPE$",
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsAddRule": {
+    "message": "Добавить правило"
+  },
+  "optionsOneSiteRule": {
+    "message": "Правил: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManySiteRules": {
+    "message": "Правил: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsNoSiteRulesHelp": {
+    "message": "В режиме «Авто» решение принимает источник правил. Добавляйте правило только для исключения."
+  },
+  "optionsFilterSiteRules": {
+    "message": "Фильтр правил"
+  },
+  "optionsFilterSiteRulesPlaceholder": {
+    "message": "Поиск по области, маршруту или примечанию"
+  },
+  "optionsGoToProxyMethods": {
+    "message": "Настроить прокси-подключения"
+  },
+  "optionsDomainScope": {
+    "message": "Домен и поддомены"
+  },
+  "optionsExactHostScope": {
+    "message": "Точный хост"
+  },
+  "optionsNormalizedScope": {
+    "message": "Нормализованная область"
+  },
+  "optionsAutoRemovesRuleHelp": {
+    "message": "При выборе «Авто» исключение удаляется, и решение снова принимает источник правил."
+  },
+  "optionsDisabledRuleHelp": {
+    "message": "Отключённое правило остаётся сохранённым, но не влияет на маршрутизацию."
+  },
+  "optionsSaveRule": {
+    "message": "Сохранить правило"
+  },
+  "optionsRemoveRule": {
+    "message": "Удалить правило"
+  },
+  "optionsConfirmRemoveRule": {
+    "message": "Удалить правило для $SCOPE$?",
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsRuleSavedApplyRequired": {
+    "message": "Правило сайта сохранено. Примените конфигурацию, чтобы активировать его."
+  },
+  "optionsRuleRemovedApplyRequired": {
+    "message": "Правило сайта удалено. Примените конфигурацию, чтобы активировать изменение."
+  },
+  "optionsProxyMethodAvailability": {
+    "message": "Доступность прокси-подключений"
+  },
+  "optionsOneProxyMethod": {
+    "message": "Включённых способов: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManyProxyMethods": {
+    "message": "Включённых способов: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsProxyHealthAuthSeparateHelp": {
+    "message": "Доступность подключения и успешная прокси-аутентификация проверяются отдельно."
+  },
+  "optionsProxyMethodPolicy": {
+    "message": "Область источника правил и своих прокси"
+  },
+  "optionsDirectReplacementHelp": {
+    "message": "Для опытных пользователей: разрешить этому способу заменять результат «Напрямую» только при включённой соответствующей политике."
+  },
+  "optionsProxyStringHelp": {
+    "message": "Используйте существующий формат строки прокси для PAC. Порядок подключений здесь не меняется."
+  },
+  "optionsOwnProxyEditorHelp": {
+    "message": "Свои прокси необязательны. Пароли хранятся локально для аутентификации и после сохранения не показываются."
+  },
+  "optionsNoOwnProxies": {
+    "message": "Свои прокси не настроены"
+  },
+  "optionsNoOwnProxiesHelp": {
+    "message": "Добавьте прокси, только если он нужен для явного маршрута или расширенной замены подключения."
+  },
+  "optionsPasswordAction": {
+    "message": "Пароль"
+  },
+  "optionsKeepSavedPassword": {
+    "message": "Сохранить текущий пароль"
+  },
+  "optionsReplacePassword": {
+    "message": "Заменить пароль"
+  },
+  "optionsRemovePassword": {
+    "message": "Удалить пароль"
+  },
+  "optionsNoPassword": {
+    "message": "Без пароля"
+  },
+  "optionsSetPassword": {
+    "message": "Задать пароль"
+  },
+  "optionsPasswordIntentHelp": {
+    "message": "Явно выберите: сохранить, заменить или удалить записанный пароль."
+  },
+  "optionsNewPassword": {
+    "message": "Новый пароль"
+  },
+  "optionsPasswordNotShownHelp": {
+    "message": "Сохранённый пароль не отображается. Это поле используется только для замены."
+  },
+  "optionsProxyHostRequired": {
+    "message": "Укажите хост прокси."
+  },
+  "optionsProxyPortInvalid": {
+    "message": "Укажите порт от 1 до 65535."
+  },
+  "optionsPasswordRequiredForReplace": {
+    "message": "Введите новый пароль."
+  },
+  "optionsPasswordEndpointChanged": {
+    "message": "При изменении типа, хоста или порта выберите замену или удаление сохранённого пароля."
+  },
+  "optionsProxyMethodsSavedApplyRequired": {
+    "message": "Прокси-подключения сохранены. Примените конфигурацию, чтобы активировать изменения маршрутизации."
+  },
+  "optionsAutomaticUpdates": {
+    "message": "Автообновление данных маршрутизации"
+  },
+  "optionsAutoUpdateSafetyHelp": {
+    "message": "Автообновление не включает прокси расширения, который вы выключили."
+  },
+  "optionsSaveUpdateSettings": {
+    "message": "Сохранить настройки обновлений"
+  },
+  "optionsUpdateRoutingRules": {
+    "message": "Обновить правила маршрутизации"
+  },
+  "optionsUpdatingRoutingRules": {
+    "message": "Обновление правил маршрутизации…"
+  },
+  "optionsUpdateSkipped": {
+    "message": "Обновление пропущено: другая операция или условие безопасности имеет приоритет."
+  },
+  "optionsRoutingRulesUpdated": {
+    "message": "Правила маршрутизации обновлены. Текущее управление прокси не изменилось."
+  },
+  "optionsConnectionHealth": {
+    "message": "Состояние подключения"
+  },
+  "optionsLastProxyCheck": {
+    "message": "Последняя проверка прокси"
+  },
+  "optionsCheckedMethod": {
+    "message": "Проверенный способ"
+  },
+  "optionsHealthCheckNeedsProxyRuleHelp": {
+    "message": "Для содержательной проверки нужно применённое правило «Через прокси» и ранее известный целевой сайт."
+  },
+  "optionsSystemCheck": {
+    "message": "Проверка системы"
+  },
+  "optionsProxyOwnership": {
+    "message": "Управление прокси"
+  },
+  "optionsLastApplyResult": {
+    "message": "Результат последнего применения"
+  },
+  "optionsShowExpertDetails": {
+    "message": "Показать безопасные технические сведения"
+  },
+  "optionsExpertDetailsRedactionHelp": {
+    "message": "Здесь нет содержимого PAC, адресов источников, учётных данных, хешей, ссылок на артефакты и исходных ошибок браузера."
+  },
+  "optionsControlLevel": {
+    "message": "Доступность управления"
+  },
+  "optionsDownloadStatus": {
+    "message": "Загрузка данных маршрутизации"
+  },
+  "optionsCookStatus": {
+    "message": "Подготовка правил маршрутизации"
+  },
+  "optionsHealthCode": {
+    "message": "Проблема подключения"
+  },
+  "optionsUpdateStatus": {
+    "message": "Состояние автообновления"
+  },
+  "optionsControlLevelThisExtension": {
+    "message": "Управляет это расширение"
+  },
+  "optionsControlLevelAvailable": {
+    "message": "Доступно этому расширению"
+  },
+  "optionsControlLevelOther": {
+    "message": "Управляет другое расширение"
+  },
+  "optionsControlLevelPolicy": {
+    "message": "Ограничено политикой браузера"
+  },
+  "optionsHealthCodeConnection": {
+    "message": "Не удалось подключиться к прокси"
+  },
+  "optionsHealthCodeTunnel": {
+    "message": "Не удалось создать защищённый туннель"
+  },
+  "optionsHealthCodeAuthentication": {
+    "message": "Прокси-аутентификация требует внимания"
+  },
+  "optionsHealthCodeGeneric": {
+    "message": "Прокси-подключение требует внимания"
+  },
+  "optionsStatusUnknown": {
+    "message": "Неизвестно"
+  },
+  "optionsWhitelistHelpNew": {
+    "message": "Для списка исключений сохраняются существующие правила точного хоста и шаблона с поддоменами."
+  },
+  "optionsNoWhitelistRules": {
+    "message": "В списке исключений нет записей."
+  },
+  "optionsReplaceDirectWarningNew": {
+    "message": "Расширяет использование прокси: подходящие результаты «Напрямую» заменяются включёнными способами подключения."
+  },
+  "optionsNoDirectWarningNew": {
+    "message": "Удаляет резервное прямое подключение из результатов источника. Политика Chromium mandatory:false не меняется."
+  },
+  "optionsPatternRequired": {
+    "message": "Укажите шаблон хоста."
+  },
+  "optionsAdvancedRulesSavedApplyRequired": {
+    "message": "Дополнительные правила сохранены. Примените конфигурацию, чтобы активировать их."
+  },
+  "optionsExpertOperations": {
+    "message": "Экспертные операции с правилами"
+  },
+  "optionsExpertOperationsHelp": {
+    "message": "В обычной работе достаточно действия «Применить конфигурацию». Отдельные этапы нужны только для контролируемой диагностики."
+  },
+  "optionsRebuildRoutingRules": {
+    "message": "Пересобрать правила маршрутизации"
+  },
+  "optionsActivatePreparedRules": {
+    "message": "Активировать подготовленные правила"
+  },
+  "optionsRoutingRulesDownloaded": {
+    "message": "Данные маршрутизации загружены и проверены."
+  },
+  "optionsRoutingRulesRebuilt": {
+    "message": "Правила маршрутизации пересобраны."
+  },
+  "optionsPreparedRulesActivated": {
+    "message": "Подготовленные правила маршрутизации активированы."
+  },
+  "optionsLegacyMigrationSafeHelp": {
+    "message": "Сначала выполняется аудит; переносятся только выбранные поля без удаления старых данных. Миграция не применяет настройки прокси."
+  },
+  "optionsConfirmClearMigrationAudit": {
+    "message": "Очистить сохранённый результат аудита миграции? Старые данные удалены не будут."
+  },
+  "optionsMigrationFieldUnavailable": {
+    "message": "Для этого поля не найдено значение, которое можно безопасно перенести."
+  },
+  "optionsMigrationDoesNotApplyHelp": {
+    "message": "Перенесённые настройки только сохраняются. Проверьте и примените их отдельно."
+  },
+  "optionsMigrationAppliedSafely": {
+    "message": "Выбранные старые настройки перенесены. Настройки прокси не применялись."
+  },
+  "optionsAboutBehaviorBoundary": {
+    "message": "Этот интерфейс меняет только представление и сохранённые настройки; правила маршрутизации и безопасности остаются под контролем фоновой части."
+  },
+  "optionsConfigurationActions": {
+    "message": "Состояние и действия с конфигурацией"
+  },
+  "optionsConflictTitle": {
+    "message": "Сохранённые настройки изменились во время редактирования"
+  },
+  "optionsConflictHelp": {
+    "message": "Черновик сохранён. Сравните его с актуальными настройками перед повторной попыткой."
+  },
+  "optionsConflictActionHelp": {
+    "message": "Проверьте сохранённый черновик или отмените все локальные изменения."
+  },
+  "optionsConflictError": {
+    "message": "Черновик основан на более старых настройках. Он сохранён для проверки."
+  },
+  "optionsReviewConflict": {
+    "message": "Проверить конфликт"
+  },
+  "optionsOneUnsavedDraft": {
+    "message": "Разделов с несохранёнными изменениями: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsManyUnsavedDrafts": {
+    "message": "Разделов с несохранёнными изменениями: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSaveSectionBeforeApply": {
+    "message": "Сохраните или отмените локальные изменения разделов перед применением конфигурации."
+  },
+  "optionsReviewChanges": {
+    "message": "Проверить изменения"
+  },
+  "optionsDiscardAllChanges": {
+    "message": "Отменить все"
+  },
+  "optionsConfirmDiscardAll": {
+    "message": "Отменить все несохранённые изменения на этой странице? Сохранённые настройки не изменятся."
+  },
+  "optionsDraftsDiscarded": {
+    "message": "Несохранённые изменения отменены."
+  },
+  "optionsExternalActionHelp": {
+    "message": "Перед применением устраните конфликт с другим расширением или политикой."
+  },
+  "optionsCheckAgain": {
+    "message": "Проверить снова"
+  },
+  "optionsOperationInProgressHelp": {
+    "message": "Дождитесь завершения текущей операции, прежде чем запускать следующую."
+  },
+  "optionsChooseSourceBeforeApply": {
+    "message": "Перед применением конфигурации выберите доверенный источник правил."
+  },
+  "optionsSavedAndActive": {
+    "message": "Сохранённые настройки активны"
+  },
+  "optionsTurnOffKeepsSettings": {
+    "message": "При выключении прокси расширения правила и загруженные данные сохраняются."
+  },
+  "optionsReadyToApply": {
+    "message": "Конфигурация готова"
+  },
+  "optionsApplyWorkflowHelp": {
+    "message": "Применение обновляет, проверяет, подготавливает и активирует правила в рамках одной защищённой операции."
+  },
+  "optionsApplyConfiguration": {
+    "message": "Применить конфигурацию"
+  },
+  "optionsApplyingConfiguration": {
+    "message": "Применение конфигурации…"
+  },
+  "optionsConfigurationApplied": {
+    "message": "Конфигурация успешно применена."
+  },
+  "optionsConfigurationTurnedOff": {
+    "message": "Прокси расширения выключен. Сохранённые настройки не удалены."
+  },
+  "optionsValidationFailed": {
+    "message": "Исправьте выделенные поля. Черновик сохранён."
+  },
+  "optionsApplyFailedSafe": {
+    "message": "Не удалось применить конфигурацию. Сохранённые настройки и локальные черновики не потеряны."
+  },
+  "optionsOperationFailedSafe": {
+    "message": "Не удалось выполнить операцию. Локальные изменения сохранены."
+  },
+  "optionsRefreshFailedDraftsKept": {
+    "message": "Не удалось обновить состояние фоновой части. Несохранённые изменения остались на странице."
   }
 }

@@ -5,25 +5,34 @@
   const rpc = window.mv3Rpc;
   const root = document.getElementById('app-root');
   const REDACTED_PASSWORD = '***';
-  const LEGACY_MIGRATION_FIELDS = Object.freeze([
-    {
-      key: 'currentPacProviderKey',
-      labelKey: 'popupPacProvider',
-    },
-    {
-      key: 'pacUpdatePeriodInMinutes',
-      labelKey: 'optionsPacUpdatePeriod',
-    },
-    {
-      key: 'pacMods',
-      labelKey: 'optionsPacModifiers',
-    },
-    {
-      key: 'notificationPrefs',
-      labelKey: 'optionsNotificationPrefs',
-    },
+  const NAV_ITEMS = Object.freeze([
+    ['overview', 'optionsNavOverview'],
+    ['routing-sources', 'optionsNavRoutingSources'],
+    ['site-rules', 'optionsNavSiteRules'],
+    ['proxy-methods', 'optionsNavProxyMethods'],
+    ['updates-health', 'optionsNavUpdatesHealth'],
+    ['diagnostics', 'optionsNavDiagnostics'],
+    ['advanced', 'optionsNavAdvanced'],
   ]);
-  let latestLegacyMigrationPlan = null;
+  const LEGACY_MIGRATION_FIELDS = Object.freeze([
+    ['currentPacProviderKey', 'popupPacProvider'],
+    ['pacUpdatePeriodInMinutes', 'optionsPacUpdatePeriod'],
+    ['pacMods', 'optionsPacModifiers'],
+    ['notificationPrefs', 'optionsNotificationPrefs'],
+  ]);
+  const state = {
+    snapshot: null,
+    requestSerial: 0,
+    drafts: new Map(),
+    pending: new Set(),
+    openDisclosures: new Set(),
+    activeSection: 'overview',
+    message: null,
+    retry: null,
+    latestMigrationPlan: null,
+    listenersInstalled: false,
+  };
+  let fieldId = 0;
 
   function t(key, substitutions) {
 
@@ -47,109 +56,8 @@
   function appendText(parent, tagName, text, className) {
 
     const node = append(parent, tagName, className);
-    node.textContent = text;
+    node.textContent = text === null || text === undefined ? '' : String(text);
     return node;
-
-  }
-
-  function getSelectedProviderKey(form) {
-
-    const selected = form.querySelector('input[name="provider"]:checked');
-    return selected && selected.value ? selected.value : null;
-
-  }
-
-  function setButtonBusy(button, ifBusy) {
-
-    button.disabled = ifBusy;
-    button.textContent = ifBusy ? button.dataset.busyText : button.dataset.idleText;
-
-  }
-
-  function formatValue(value) {
-
-    if (value === null || value === undefined || value === '') {
-      return t('optionsNone');
-    }
-    return String(value);
-
-  }
-
-  function localizeStatusValue(value) {
-
-    const status = String(value || 'idle');
-    const keys = {
-      idle: 'optionsStatusIdle',
-      downloading: 'optionsStatusDownloading',
-      success: 'optionsStatusSuccess',
-      error: 'optionsStatusError',
-      not_modified: 'optionsStatusNotModified',
-      cooking: 'optionsStatusCooking',
-      applying: 'optionsStatusApplying',
-      applied: 'popupApplied',
-      clearing: 'optionsStatusClearing',
-      cleared: 'optionsStatusCleared',
-      scheduled: 'optionsStatusScheduled',
-      running: 'optionsStatusRunning',
-      skipped: 'optionsStatusSkipped',
-    };
-    return keys[status] ? t(keys[status]) : status;
-
-  }
-
-  function appendDefinition(list, label, value) {
-
-    appendText(list, 'dt', label);
-    appendText(list, 'dd', formatValue(value));
-
-  }
-
-  function formatTime(value) {
-
-    if (!value) {
-      return t('optionsNone');
-    }
-    return new Date(value).toLocaleString();
-
-  }
-
-  function localizeWarning(message) {
-
-    const text = String(message || '');
-    if (text === 'No proxy is enabled. Enable Tor, WARP, or an own proxy.') {
-      return t('popupNoProxyCandidate');
-    }
-    if (text.includes('host-pattern matching')) {
-      return t('optionsMv2RulesWarning');
-    }
-    if (text.includes('no proxy candidates are enabled')) {
-      return t('optionsProxyRuleNoCandidate');
-    }
-    if (text.includes('credentials are removed from cooked PAC')) {
-      return t('optionsCredentialsRedactedWarning');
-    }
-    if (text.includes('Tor itself must be running locally')) {
-      return t('optionsTorMustRunWarning');
-    }
-    if (text.includes('WARP is treated')) {
-      return t('optionsWarpLocalProxyWarning');
-    }
-    if (text.includes('replaceDirectWithProxy is enabled')) {
-      return t('optionsDirectReplacementNoCandidateWarning');
-    }
-    if (text.includes('PAC provider proxies are disabled')) {
-      return t('optionsNoPacOrOwnProxyWarning');
-    }
-    return text;
-
-  }
-
-  function localizeOperationError(error) {
-
-    if (error && error.code === 'PROXY_RULE_NO_CANDIDATE') {
-      return t('popupNoProxyCandidate');
-    }
-    return error && error.message || t('optionsStatusError');
 
   }
 
@@ -165,285 +73,890 @@
 
   }
 
-  async function refresh(message, ifError) {
+  function formatTime(value) {
 
+    if (!value) {
+      return t('optionsNone');
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ?
+      t('optionsNone') :
+      date.toLocaleString();
+
+  }
+
+  function formatCount(count, singularKey, pluralKey) {
+
+    const value = Number(count) || 0;
+    return t(value === 1 ? singularKey : pluralKey, [String(value)]);
+
+  }
+
+  function setMessage(text, tone = 'info', retry) {
+
+    state.message = text ? {text: String(text), tone} : null;
+    state.retry = typeof retry === 'function' ? retry : null;
+    updateMessageBanner();
+
+  }
+
+  function getSafeError(error, context) {
+
+    const code = error && error.code || '';
+    const message = String(error && error.message || '');
+    const keys = {
+      CUSTOM_PROVIDER_LABEL_REQUIRED: 'optionsProviderNameRequired',
+      CUSTOM_PROVIDER_URL_REQUIRED: 'optionsProviderUrlRequired',
+      CUSTOM_PROVIDER_URL_INVALID: 'optionsProviderUrlInvalid',
+      CUSTOM_PROVIDER_URL_SCHEME: 'optionsProviderUrlScheme',
+      CUSTOM_PROVIDER_URL_CREDENTIALS: 'optionsProviderUrlCredentials',
+      CUSTOM_PROVIDER_TOO_MANY_URLS: 'optionsProviderTooManyUrls',
+      CUSTOM_PROVIDER_NOT_FOUND: 'optionsProviderNotFound',
+      BUILT_IN_PROVIDER_READ_ONLY: 'optionsProviderBuiltInReadOnly',
+      PROXY_RULE_NO_CANDIDATE: 'popupNoProxyCandidate',
+      PAC_APPLY_STALE: 'optionsConflictError',
+    };
+    if (keys[code]) {
+      return t(keys[code]);
+    }
+    if (/stale|revision/i.test(message)) {
+      return t('optionsConflictError');
+    }
+    if (context === 'provider') {
+      return t('optionsProviderSaveFailed');
+    }
+    if (context === 'validation') {
+      return t('optionsValidationFailed');
+    }
+    if (context === 'apply') {
+      return t('optionsApplyFailedSafe');
+    }
+    return t('optionsOperationFailedSafe');
+
+  }
+
+  function getPacRevision(snapshot = state.snapshot) {
+
+    const pacMods = snapshot && snapshot.state && snapshot.state.pacMods;
+    return Number.isSafeInteger(pacMods && pacMods.credentialRevision) ?
+      pacMods.credentialRevision :
+      null;
+
+  }
+
+  function getDraftRemoteSignature(key, snapshot = state.snapshot) {
+
+    if (!snapshot) {
+      return null;
+    }
+    if (key.startsWith('provider:') && key !== 'provider:add') {
+      const providerKey = key.slice('provider:'.length);
+      const provider = (snapshot.providers || []).find((entry) =>
+        entry.key === providerKey,
+      );
+      return JSON.stringify(provider ? {
+        key: provider.key,
+        label: provider.label,
+        description: provider.description || '',
+        urls: provider.urls || [],
+        enabled: provider.enabled !== false,
+      } : {missing: true});
+    }
+    if (key === 'updates') {
+      const autoUpdate = snapshot.reliability &&
+        snapshot.reliability.autoUpdate || {};
+      return JSON.stringify({enabled: autoUpdate.enabled === true});
+    }
+    if (key === 'notifications') {
+      return JSON.stringify(
+          snapshot.state && snapshot.state.notificationPrefs || {},
+      );
+    }
+    if (key === 'migration') {
+      return JSON.stringify(
+          snapshot.state && snapshot.state.legacyMigration || {},
+      );
+    }
+    return null;
+
+  }
+
+  function hasDirtyDrafts() {
+
+    return Array.from(state.drafts.values()).some((draft) => draft.dirty);
+
+  }
+
+  function getDirtyDrafts() {
+
+    return Array.from(state.drafts.entries())
+        .filter((entry) => entry[1].dirty);
+
+  }
+
+  function serializeForm(form) {
+
+    return Array.from(form.querySelectorAll('input, select, textarea'))
+        .filter((input) => !['button', 'submit'].includes(input.type))
+        .map((input) => ({
+          name: input.name || '',
+          type: input.type || input.tagName.toLowerCase(),
+          value: input.value,
+          checked: input.checked === true,
+        }));
+
+  }
+
+  function restoreForm(form, values) {
+
+    const inputs = Array.from(
+        form.querySelectorAll('input, select, textarea'),
+    ).filter((input) => !['button', 'submit'].includes(input.type));
+    (values || []).forEach((saved, index) => {
+      const input = inputs[index];
+      if (!input || input.name !== saved.name || input.type !== saved.type) {
+        return;
+      }
+      if (['checkbox', 'radio'].includes(input.type)) {
+        input.checked = saved.checked === true;
+      } else {
+        input.value = saved.value;
+      }
+    });
+
+  }
+
+  function bindDraftForm(form, key, options = {}) {
+
+    form.dataset.draftKey = key;
+    let draft = state.drafts.get(key);
+    const baseline = serializeForm(form);
+    if (!draft) {
+      draft = {
+        baseline,
+        values: baseline,
+        dirty: false,
+        conflict: false,
+        pacRevision: options.usesPacMods ? getPacRevision() : null,
+        usesPacMods: options.usesPacMods === true,
+        remoteSignature: getDraftRemoteSignature(key),
+      };
+      state.drafts.set(key, draft);
+    } else if (draft.dirty) {
+      restoreForm(form, draft.values);
+    } else {
+      draft.baseline = baseline;
+      draft.values = baseline;
+      draft.pacRevision = options.usesPacMods ? getPacRevision() : null;
+      draft.conflict = false;
+      draft.remoteSignature = getDraftRemoteSignature(key);
+    }
+    const record = () => {
+      const current = serializeForm(form);
+      draft.values = current;
+      draft.dirty = JSON.stringify(current) !== JSON.stringify(draft.baseline);
+      if (!draft.dirty) {
+        draft.conflict = false;
+      }
+      updateDraftPresentation();
+    };
+    form.addEventListener('input', record);
+    form.addEventListener('change', record);
+    return draft;
+
+  }
+
+  function markDraftDirty(form) {
+
+    const key = form && form.dataset && form.dataset.draftKey;
+    const draft = key && state.drafts.get(key);
+    if (!draft) {
+      return;
+    }
+    draft.values = serializeForm(form);
+    draft.dirty = true;
+    updateDraftPresentation();
+
+  }
+
+  function markDraftClean(key, form) {
+
+    const values = form ? serializeForm(form) : [];
+    state.drafts.set(key, {
+      baseline: values,
+      values,
+      dirty: false,
+      conflict: false,
+      pacRevision: getPacRevision(),
+      usesPacMods: state.drafts.get(key) &&
+        state.drafts.get(key).usesPacMods === true,
+      remoteSignature: getDraftRemoteSignature(key),
+    });
+    updateDraftPresentation();
+
+  }
+
+  function discardAllDrafts() {
+
+    state.drafts.clear();
+    setMessage(t('optionsDraftsDiscarded'), 'info');
+    render();
+
+  }
+
+  function captureDraftForms() {
+
+    if (typeof root.querySelectorAll !== 'function') {
+      return;
+    }
+    root.querySelectorAll('form[data-draft-key]').forEach((form) => {
+      const draft = state.drafts.get(form.dataset.draftKey);
+      if (draft && draft.dirty) {
+        draft.values = serializeForm(form);
+      }
+    });
+
+  }
+
+  function markRemoteConflicts(previousRevision, nextRevision, nextSnapshot) {
+
+    const pacChanged = previousRevision !== null &&
+      nextRevision !== null && previousRevision !== nextRevision;
+    state.drafts.forEach((draft, key) => {
+      if (!draft.dirty) {
+        return;
+      }
+      if (draft.usesPacMods && pacChanged) {
+        draft.conflict = true;
+        return;
+      }
+      const nextSignature = getDraftRemoteSignature(key, nextSnapshot);
+      if (
+        draft.remoteSignature !== null &&
+        nextSignature !== null &&
+        draft.remoteSignature !== nextSignature
+      ) {
+        draft.conflict = true;
+      }
+    });
+
+  }
+
+  function getFocusToken() {
+
+    const active = document.activeElement;
+    if (!active || !root.contains(active)) {
+      return null;
+    }
+    const stableKey = active.dataset.focusKey || active.id ||
+      active.name || null;
+    if (stableKey) {
+      return {stableKey};
+    }
+    const form = active.closest('form[data-draft-key]');
+    const section = active.closest('[data-options-section]');
+    const scope = form || section || root;
+    const label = String(active.textContent || '').trim();
+    const matches = Array.from(scope.querySelectorAll('button, summary, a'))
+        .filter((node) =>
+          node.tagName === active.tagName &&
+          String(node.type || '') === String(active.type || '') &&
+          String(node.textContent || '').trim() === label,
+        );
+    const index = matches.indexOf(active);
+    return index === -1 ? null : {
+      draftKey: form && form.dataset.draftKey || null,
+      section: section && section.dataset.optionsSection || null,
+      tagName: active.tagName,
+      type: String(active.type || ''),
+      label,
+      index,
+    };
+
+  }
+
+  function restoreFocus(token) {
+
+    if (!token) {
+      return;
+    }
+    let target = null;
+    if (token.stableKey) {
+      const candidates = root.querySelectorAll(
+          '[data-focus-key], [id], [name]',
+      );
+      target = Array.from(candidates).find((node) =>
+        node.dataset.focusKey === token.stableKey ||
+        node.id === token.stableKey ||
+        node.name === token.stableKey,
+      );
+    } else {
+      let scope = root;
+      if (token.draftKey) {
+        scope = Array.from(root.querySelectorAll('form[data-draft-key]'))
+            .find((form) => form.dataset.draftKey === token.draftKey) || root;
+      } else if (token.section) {
+        scope = Array.from(root.querySelectorAll('[data-options-section]'))
+            .find((section) =>
+              section.dataset.optionsSection === token.section,
+            ) || root;
+      }
+      target = Array.from(scope.querySelectorAll('button, summary, a'))
+          .filter((node) =>
+            node.tagName === token.tagName &&
+            String(node.type || '') === token.type &&
+            String(node.textContent || '').trim() === token.label,
+          )[token.index] || null;
+    }
+    if (target && !target.hidden && !target.disabled) {
+      target.focus();
+    }
+
+  }
+
+  async function refresh(options = {}) {
+
+    const serial = ++state.requestSerial;
+    const focusToken = options.restoreFocus === false ? null : getFocusToken();
+    captureDraftForms();
+    const previousRevision = getPacRevision();
     try {
       const snapshot = await rpc.callBackground('getState');
+      if (serial !== state.requestSerial) {
+        return;
+      }
       await window.mv3I18n.init(snapshot.state && snapshot.state.uiLanguage);
-      render(snapshot, message, ifError);
-    } catch (err) {
-      renderError(err);
+      if (serial !== state.requestSerial) {
+        return;
+      }
+      markRemoteConflicts(
+          previousRevision,
+          getPacRevision(snapshot),
+          snapshot,
+      );
+      state.snapshot = snapshot;
+      if (options.message) {
+        state.message = {
+          text: options.message,
+          tone: options.tone || 'success',
+        };
+      }
+      if (hasDirtyDrafts() && root.querySelector('.options-shell')) {
+        updateLiveState();
+        updateDraftPresentation();
+      } else {
+        render();
+        restoreFocus(focusToken);
+      }
+    } catch (error) {
+      if (serial !== state.requestSerial) {
+        return;
+      }
+      if (state.snapshot) {
+        setMessage(
+            t('optionsRefreshFailedDraftsKept'),
+            'error',
+            () => refresh(),
+        );
+      } else {
+        renderLoadError();
+      }
     }
 
   }
 
-  function render(snapshot, message, ifError) {
+  async function runOperation(key, button, action, options = {}) {
 
-    const state = snapshot.state;
+    if (state.pending.has(key)) {
+      return null;
+    }
+    state.pending.add(key);
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (button.dataset.busyText) {
+        button.textContent = button.dataset.busyText;
+      }
+    }
+    updateDraftPresentation();
+    try {
+      const result = await action();
+      const acceptedStatuses = options.acceptStatuses || [];
+      if (
+        result &&
+        result.ok === false &&
+        !acceptedStatuses.includes(result.status)
+      ) {
+        const operationError = new Error('Operation rejected.');
+        operationError.code = result.error && result.error.code ||
+          result.code || result.status;
+        throw operationError;
+      }
+      state.retry = null;
+      return result;
+    } catch (error) {
+      const message = getSafeError(error, options.context);
+      setMessage(
+          message,
+          'error',
+          options.retry ? () => options.retry() : null,
+      );
+      if (/stale|revision/i.test(String(error && error.message || '')) ||
+          error && error.code === 'PAC_APPLY_STALE') {
+        const draft = options.draftKey &&
+          state.drafts.get(options.draftKey);
+        if (draft) {
+          draft.conflict = true;
+        }
+      }
+      return null;
+    } finally {
+      state.pending.delete(key);
+      if (button && button.parentNode) {
+        button.removeAttribute('aria-busy');
+        button.disabled = false;
+        if (button.dataset.idleText) {
+          button.textContent = button.dataset.idleText;
+        }
+      }
+      updateDraftPresentation();
+    }
+
+  }
+
+  function installGlobalListeners() {
+
+    if (state.listenersInstalled) {
+      return;
+    }
+    state.listenersInstalled = true;
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('hashchange', () => {
+        activateSection(getSectionFromHash(), true);
+      });
+      window.addEventListener('beforeunload', (event) => {
+        if (!hasDirtyDrafts()) {
+          return;
+        }
+        event.preventDefault();
+        event.returnValue = '';
+      });
+    }
+    if (typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          refresh();
+        }
+      });
+    }
+    if (
+      chrome.storage && chrome.storage.onChanged &&
+      typeof chrome.storage.onChanged.addListener === 'function'
+    ) {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === 'local' && changes && changes.mv3State) {
+          refresh();
+        }
+      });
+    }
+    if (
+      chrome.proxy && chrome.proxy.settings &&
+      chrome.proxy.settings.onChange &&
+      typeof chrome.proxy.settings.onChange.addListener === 'function'
+    ) {
+      chrome.proxy.settings.onChange.addListener(() => {
+        refresh();
+      });
+    }
+
+  }
+
+  function getSectionFromHash() {
+
+    const section = String(window.location.hash || '').replace(/^#/, '');
+    return NAV_ITEMS.some((item) => item[0] === section) ?
+      section :
+      'overview';
+
+  }
+
+  function activateSection(sectionId, moveFocus) {
+
+    const next = NAV_ITEMS.some((item) => item[0] === sectionId) ?
+      sectionId :
+      'overview';
+    state.activeSection = next;
+    root.querySelectorAll('[data-options-section]').forEach((section) => {
+      section.hidden = section.dataset.optionsSection !== next;
+    });
+    root.querySelectorAll('.options-nav a').forEach((link) => {
+      if (link.dataset.section === next) {
+        link.setAttribute('aria-current', 'page');
+      } else {
+        link.removeAttribute('aria-current');
+      }
+    });
+    const select = root.querySelector('#options-section-select');
+    if (select) {
+      select.value = next;
+    }
+    if (moveFocus) {
+      const heading = root.querySelector(`#${next}-heading`);
+      if (heading) {
+        heading.setAttribute('tabindex', '-1');
+        heading.focus();
+      }
+    }
+
+  }
+
+  function renderLoading() {
+
     root.replaceChildren();
-    document.title = t('popupTitle');
-
-    appendText(root, 'h1', t('popupTitle'));
-    appendText(
-        root,
-        'p',
-        t('optionsIntro'),
-        'notice',
-    );
-
-    if (message) {
-      appendText(root, 'p', message, ifError ? 'status error' : 'status');
-    }
-
-    renderGeneralSection(root, state);
-    renderQuickStartSection(root, snapshot);
-    renderReliabilitySection(root, snapshot);
-    renderPacProvidersSection(root, state, snapshot.providers || []);
-    renderSiteRulesSection(root, state.pacMods, snapshot.stale);
-    renderLocalProxySection(root, state.pacMods);
-    renderAdvancedPacRulesSection(root, state.pacMods);
-    renderAboutSection(root);
-    renderDebugDiagnosticsSection(root, snapshot);
-    renderMaintenanceSection(root, snapshot);
-    renderFooter(root);
+    root.setAttribute('aria-busy', 'true');
+    const card = append(root, 'section', 'loading-shell ui-card');
+    appendText(card, 'h1', t('popupTitle'));
+    appendText(card, 'p', t('optionsLoadingPage'));
+    append(card, 'div', 'loading-line short');
+    append(card, 'div', 'loading-line');
+    append(card, 'div', 'loading-line');
 
   }
 
-  function renderQuickStartSection(parent, snapshot) {
+  function renderLoadError() {
 
-    const state = snapshot.state;
-    const staleInfo = snapshot.stale && snapshot.stale.cookedPac;
-    const proxySnapshot = snapshot.proxy || {};
-    const proxyApply = proxySnapshot.proxyApply || state.proxyApply;
-    const section = append(parent, 'section', 'panel primary-panel');
-    appendText(section, 'h2', t('optionsQuickStart'));
-    appendText(
-        section,
-        'p',
-        t('optionsQuickStartHint'),
-        'notice',
+    root.replaceChildren();
+    root.removeAttribute('aria-busy');
+    const card = append(root, 'section', 'loading-shell ui-card');
+    appendText(card, 'h1', t('optionsLoadFailedTitle'));
+    appendText(card, 'p', t('optionsLoadFailedHelp'));
+    const button = createButton(
+        card,
+        t('popupRetry'),
+        'primary',
     );
-
-    const statusGrid = append(section, 'div', 'status-grid');
-    appendStatusItem(
-        statusGrid,
-        t('popupPacProvider'),
-        getProviderLabelByKey(state.currentPacProviderKey, snapshot.providers || []),
-    );
-    appendStatusItem(statusGrid, t('optionsPacDownloaded'), state.pacCache.rawPacSha256 ?
-      t('optionsYes') : t('optionsNo'));
-    appendStatusItem(statusGrid, t('optionsPacCooked'), state.cookedPacCache.cookedPacSha256 ?
-      t('optionsYes') : t('optionsNo'));
-    appendStatusItem(
-        statusGrid,
-        t('optionsProxyStatus'),
-        localizeStatusValue(proxyApply.status || 'idle'),
-    );
-    appendStatusItem(statusGrid, t('optionsPacSettingsChanged'), staleInfo && staleInfo.stale ?
-      t('optionsYes') : t('optionsNo'));
-
-    renderProviderPicker(section, state, snapshot.providers || []);
-    renderQuickActionButtons(section, state, staleInfo);
-
-    if (state.pacCook.warnings && state.pacCook.warnings.length) {
-      appendText(
-          section,
-          'p',
-          state.pacCook.warnings.map(localizeWarning).join(' '),
-          'status warning',
-      );
-    }
-    if (staleInfo && staleInfo.stale) {
-      appendText(
-          section,
-          'p',
-          t('optionsPacChangedCookApply'),
-          'status warning',
-      );
-    }
+    button.onclick = () => refresh({restoreFocus: false});
 
   }
 
-  function appendStatusItem(parent, label, value) {
+  function render() {
 
-    const item = append(parent, 'div', 'status-item');
-    appendText(item, 'span', label, 'status-label');
-    appendText(item, 'strong', formatValue(value));
+    if (!state.snapshot) {
+      renderLoading();
+      return;
+    }
+    fieldId = 0;
+    root.replaceChildren();
+    root.removeAttribute('aria-busy');
+    document.title = t('optionsPageTitle');
+    const shell = append(root, 'div', 'options-shell');
+    renderHeader(shell);
+    renderMessageBanner(shell);
+    const layout = append(shell, 'div', 'options-layout');
+    renderNavigation(layout);
+    const main = append(layout, 'div', 'options-main');
+    renderMobileNavigation(main);
+    renderOverviewSection(main);
+    renderRoutingSourcesSection(main);
+    renderSiteRulesSection(main);
+    renderProxyMethodsSection(main);
+    renderUpdatesHealthSection(main);
+    renderDiagnosticsSection(main);
+    renderAdvancedSection(main);
+    renderGlobalActionBar(main);
+    const footer = append(main, 'footer', 'options-footer');
+    appendText(footer, 'p', t('optionsMv3Credits'));
+    append(shell, 'div', 'ui-sr-only').setAttribute('aria-live', 'polite');
+    activateSection(getSectionFromHash(), false);
+    updateDraftPresentation();
 
   }
 
-  function renderReliabilitySection(parent, snapshot) {
+  function renderHeader(parent) {
 
-    const reliability = snapshot.reliability || {};
-    const autoUpdate = reliability.autoUpdate || {};
-    const proxyHealth = reliability.proxyHealth || {};
-    const section = append(parent, 'section', 'panel reliability-panel');
-    appendText(section, 'h2', t('optionsReliability'));
-    appendText(section, 'p', t('optionsReliabilityHint'), 'notice');
-
-    const enabledLabel = append(section, 'label');
-    const enabledInput = document.createElement('input');
-    enabledInput.type = 'checkbox';
-    enabledInput.checked = autoUpdate.enabled === true;
-    enabledLabel.appendChild(enabledInput);
-    enabledLabel.appendChild(document.createTextNode(
-        ` ${t('optionsAutoUpdateEveryTwelveHours')}`,
-    ));
-    enabledInput.onchange = async () => {
-      enabledInput.disabled = true;
-      try {
-        await rpc.callBackground('setPeriodicUpdateEnabled', {
-          enabled: enabledInput.checked,
-        });
-        await refresh(t('optionsPeriodicSettingsSaved'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const statusGrid = append(section, 'div', 'status-grid');
-    appendStatusItem(
-        statusGrid,
-        t('optionsLastSuccessfulPacUpdate'),
-        formatTime(autoUpdate.lastSuccessfulUpdateAt),
-    );
-    appendStatusItem(
-        statusGrid,
-        t('optionsNextAutomaticPacUpdate'),
-        autoUpdate.enabled ?
-          formatTime(autoUpdate.nextUpdateAt) :
-          t('optionsDisabled'),
-    );
-    appendStatusItem(
-        statusGrid,
-        t('popupProxyHealth'),
-        localizeProxyHealthStatus(proxyHealth.status),
-    );
-
-    if (autoUpdate.error) {
-      appendText(section, 'p', t('popupPacUpdateFailed'), 'status warning');
-    }
-    if (proxyHealth.status === 'error') {
-      const error = appendText(
-          section,
-          'p',
-          getLocalizedProxyHealthError(proxyHealth),
-          'status error',
-      );
-      error.title = proxyHealth.lastErrorCode || '';
-    }
-    const checkButton = append(section, 'button');
-    checkButton.type = 'button';
-    checkButton.dataset.idleText = proxyHealth.status === 'error' ?
-      t('popupCheckProxyAgain') :
-      t('popupCheckProxy');
-    checkButton.dataset.busyText = t('popupProxyHealthChecking');
-    checkButton.textContent = checkButton.dataset.idleText;
-    checkButton.onclick = async () => {
-      setButtonBusy(checkButton, true);
-      try {
-        const result = await rpc.callBackground('checkProxyHealth', {});
-        await refresh(localizeProxyCheckResult(result), result.status !== 'ok');
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-  }
-
-  function localizeProxyHealthStatus(status) {
-
-    if (status === 'checking') {
-      return t('popupProxyHealthChecking');
-    }
-    if (status === 'ok') {
-      return t('popupProxyHealthOk');
-    }
-    if (status === 'error') {
-      return t('popupProxyHealthError');
-    }
-    return t('popupProxyHealthUnknown');
-
-  }
-
-  function getLocalizedProxyHealthError(proxyHealth) {
-
-    if (proxyHealth.candidateType === 'torBrowser') {
-      return t('proxyHealthTorBrowserError');
-    }
-    if (proxyHealth.candidateType === 'localTor') {
-      return t('proxyHealthLocalTorError');
-    }
-    return t('proxyHealthGenericError');
-
-  }
-
-  function localizeProxyCheckResult(result) {
-
-    if (result.status === 'ok') {
-      return t('popupProxyCheckSucceeded');
-    }
-    if (result.status === 'error') {
-      return getLocalizedProxyHealthError(result.proxyHealth || {});
-    }
-    if (result.code === 'PROXY_CHECK_REQUIRES_PROXY_RULE') {
-      return t('popupProxyCheckRequiresProxyRule');
-    }
-    if (result.code === 'PROXY_CHECK_NOT_APPLIED') {
-      return t('popupProxyCheckNotApplied');
-    }
-    if (result.code === 'NO_PROXY_CANDIDATE') {
-      return t('popupNoProxyCandidate');
-    }
-    return t('popupProxyCheckInconclusive');
-
-  }
-
-  function renderGeneralSection(parent, state) {
-
-    const details = append(parent, 'details', 'panel');
-    appendText(details, 'summary', t('optionsGeneral'));
-    appendText(details, 'p', t('optionsLanguageReloadNote'), 'notice');
-    const label = append(details, 'label', 'field-row');
-    appendText(label, 'span', t('optionsLanguage'));
-    const select = append(label, 'select');
+    const header = append(parent, 'header', 'options-header');
+    const copy = append(header, 'div', 'options-header-copy');
+    appendText(copy, 'h1', t('optionsPageTitle'));
+    appendText(copy, 'p', t('optionsPageSubtitle'), 'options-subtitle');
+    const language = append(header, 'label', 'language-field');
+    appendText(language, 'span', t('optionsLanguage'));
+    const select = append(language, 'select', 'ui-input');
+    select.setAttribute('aria-label', t('optionsLanguage'));
     [
       ['auto', t('optionsLanguageAuto')],
       ['ru', t('optionsLanguageRu')],
       ['en', t('optionsLanguageEn')],
-    ].forEach(([value, labelText]) => {
-      const option = document.createElement('option');
+    ].forEach(([value, label]) => {
+      const option = appendText(select, 'option', label);
       option.value = value;
-      option.textContent = labelText;
-      select.appendChild(option);
     });
-    select.value = state.uiLanguage || 'auto';
+    select.value = state.snapshot.state.uiLanguage || 'auto';
     select.onchange = async () => {
-      await rpc.callBackground('setUiLanguage', {language: select.value});
-      window.location.reload();
+      if (hasDirtyDrafts() && !window.confirm(
+          t('optionsConfirmLanguageWithDrafts'),
+      )) {
+        select.value = state.snapshot.state.uiLanguage || 'auto';
+        return;
+      }
+      const result = await runOperation(
+          'language',
+          select,
+          () => rpc.callBackground('setUiLanguage', {
+            language: select.value,
+          }),
+      );
+      if (result) {
+        window.location.reload();
+      }
     };
 
   }
 
-  function getProviderLabelByKey(providerKey, providers) {
+  function renderNavigation(parent) {
 
-    if (!providerKey) {
-      return t('popupNotSelected');
+    const nav = append(parent, 'nav', 'options-nav ui-card');
+    nav.setAttribute('aria-label', t('optionsNavigationLabel'));
+    NAV_ITEMS.forEach(([id, labelKey]) => {
+      const link = appendText(nav, 'a', t(labelKey));
+      link.href = `#${id}`;
+      link.dataset.section = id;
+      link.dataset.focusKey = `nav-${id}`;
+      link.onclick = (event) => {
+        event.preventDefault();
+        navigateTo(id);
+      };
+    });
+
+  }
+
+  function renderMobileNavigation(parent) {
+
+    const label = append(parent, 'label', 'mobile-nav');
+    appendText(label, 'span', t('optionsNavigationLabel'), 'field-label');
+    const select = append(label, 'select', 'ui-input');
+    select.id = 'options-section-select';
+    NAV_ITEMS.forEach(([id, labelKey]) => {
+      const option = appendText(select, 'option', t(labelKey));
+      option.value = id;
+    });
+    select.value = state.activeSection;
+    select.onchange = () => {
+      window.location.hash = select.value;
+      activateSection(select.value, true);
+    };
+
+  }
+
+  function createPageSection(parent, id, titleKey, descriptionKey) {
+
+    const section = append(parent, 'section', 'page-section');
+    section.dataset.optionsSection = id;
+    section.id = id;
+    section.setAttribute('aria-labelledby', `${id}-heading`);
+    const header = append(section, 'header', 'section-header');
+    const heading = appendText(header, 'h2', t(titleKey));
+    heading.id = `${id}-heading`;
+    appendText(header, 'p', t(descriptionKey), 'section-description');
+    return section;
+
+  }
+
+  function createButton(parent, label, variant = '', busyText) {
+
+    const button = appendText(
+        parent,
+        'button',
+        label,
+        `ui-button${variant ? ` ${variant}` : ''}`,
+    );
+    button.type = 'button';
+    button.dataset.idleText = label;
+    button.dataset.busyText = busyText || label;
+    return button;
+
+  }
+
+  function createDetails(parent, key, summary) {
+
+    const details = append(parent, 'details', 'disclosure');
+    details.open = state.openDisclosures.has(key);
+    appendText(details, 'summary', summary);
+    details.addEventListener('toggle', () => {
+      if (details.open) {
+        state.openDisclosures.add(key);
+      } else {
+        state.openDisclosures.delete(key);
+      }
+    });
+    const content = append(details, 'div', 'disclosure-content');
+    return {details, content};
+
+  }
+
+  function renderMessageBanner(parent) {
+
+    const banner = append(parent, 'div', 'status-banner info');
+    banner.id = 'options-message';
+    banner.setAttribute('role', 'status');
+    populateMessageBanner(banner);
+
+  }
+
+  function updateMessageBanner() {
+
+    const banner = root.querySelector('#options-message');
+    if (!banner) {
+      return;
     }
-    const provider = providers.find((item) => item.key === providerKey);
-    return provider ? getProviderLabel(provider) : providerKey;
+    banner.replaceChildren();
+    populateMessageBanner(banner);
+
+  }
+
+  function populateMessageBanner(banner) {
+
+    if (!state.message) {
+      banner.hidden = true;
+      return;
+    }
+    banner.hidden = false;
+    banner.className = `status-banner ${state.message.tone}`;
+    appendText(banner, 'span', state.message.text);
+    if (state.retry) {
+      const retry = createButton(banner, t('popupRetry'), 'quiet');
+      retry.onclick = () => state.retry && state.retry();
+    }
+
+  }
+
+  function deriveControlView() {
+
+    const snapshot = state.snapshot || {};
+    const stored = snapshot.state || {};
+    const proxy = snapshot.proxy || {};
+    const control = proxy.proxyControl || stored.proxyControl || {};
+    const apply = proxy.proxyApply || stored.proxyApply || {};
+    const stale = proxy.stale && proxy.stale.cookedPac ||
+      snapshot.stale && snapshot.stale.cookedPac || {};
+    const rawMode = control.rawValue && control.rawValue.mode;
+    const controlsPac = control.controlledByThisExtension === true &&
+      rawMode === 'pac_script';
+    const external = control.controlledByThisExtension !== true &&
+      control.canControl !== true &&
+      ['controlled_by_other_extensions', 'not_controllable']
+          .includes(control.levelOfControl);
+    const busyStatus = String(apply.status || 'idle');
+    if (external) {
+      return {
+        kind: 'external',
+        tone: 'error',
+        title: t('popupControlExternal'),
+        help: t('popupControlExternalHelp'),
+        controlsPac: false,
+        external: true,
+        busy: false,
+        stale: Boolean(stale.stale),
+      };
+    }
+    if (busyStatus === 'applying') {
+      return {
+        kind: 'applying',
+        tone: 'warning',
+        title: t('popupControlApplying'),
+        help: t('popupControlApplyingHelp'),
+        controlsPac,
+        external: false,
+        busy: true,
+        stale: Boolean(stale.stale),
+      };
+    }
+    if (busyStatus === 'clearing') {
+      return {
+        kind: 'clearing',
+        tone: 'warning',
+        title: t('popupControlClearing'),
+        help: t('popupControlClearingHelp'),
+        controlsPac,
+        external: false,
+        busy: true,
+        stale: Boolean(stale.stale),
+      };
+    }
+    if (busyStatus === 'error') {
+      return {
+        kind: 'error',
+        tone: 'error',
+        title: t('popupControlError'),
+        help: t('optionsControlErrorHelp'),
+        controlsPac,
+        external: false,
+        busy: false,
+        stale: Boolean(stale.stale),
+      };
+    }
+    if (stale.stale) {
+      return {
+        kind: 'stale',
+        tone: 'warning',
+        title: t('popupControlStale'),
+        help: controlsPac ?
+          t('popupControlStaleActiveHelp') :
+          t('popupControlStaleOffHelp'),
+        controlsPac,
+        external: false,
+        busy: false,
+        stale: true,
+      };
+    }
+    if (apply.status === 'applied' && controlsPac) {
+      return {
+        kind: 'active',
+        tone: 'success',
+        title: t('popupControlActive'),
+        help: t('popupControlActiveHelp'),
+        controlsPac: true,
+        external: false,
+        busy: false,
+        stale: false,
+      };
+    }
+    return {
+      kind: 'off',
+      tone: 'neutral',
+      title: t('popupControlOff'),
+      help: t('popupControlOffHelp'),
+      controlsPac: false,
+      external: false,
+      busy: false,
+      stale: false,
+    };
+
+  }
+
+  function getProviders() {
+
+    return Array.isArray(state.snapshot && state.snapshot.providers) ?
+      state.snapshot.providers :
+      [];
 
   }
 
   function getProviderLabel(provider) {
 
-    if (provider.type === 'custom') {
-      return t('popupCustomProviderLabel', [provider.label || provider.key]);
+    if (!provider) {
+      return t('popupNotSelected');
     }
     if (provider.key === 'onlyOwnSites') {
       return t('providerOnlyOwnSitesLabel');
     }
     return provider.label || provider.key;
+
+  }
+
+  function getSelectedProvider() {
+
+    const key = state.snapshot.state.currentPacProviderKey;
+    return getProviders().find((provider) => provider.key === key) || null;
 
   }
 
@@ -458,729 +971,804 @@
     if (provider.key === 'onlyOwnSites') {
       return t('providerOnlyOwnSitesDescription');
     }
-    return provider.description || '';
+    return provider.description || t('optionsNoDescription');
 
   }
 
-  function renderProviderPicker(parent, state, providers) {
+  function getHealthView() {
 
-    const details = append(parent, 'details', 'provider-picker');
-    appendText(details, 'summary', t('optionsChangePacProvider'));
-    const form = append(details, 'form');
-    const noneLabel = append(form, 'label', 'provider');
-    const noneInput = document.createElement('input');
-    noneInput.type = 'radio';
-    noneInput.name = 'provider';
-    noneInput.value = '';
-    noneInput.checked = state.currentPacProviderKey === null;
-    noneLabel.appendChild(noneInput);
-    noneLabel.appendChild(document.createTextNode(` ${t('optionsNoProviderSelected')}`));
-
-    providers.filter((provider) => provider.enabled !== false)
-        .forEach((provider) => {
-          const label = append(form, 'label', 'provider');
-          const input = document.createElement('input');
-          input.type = 'radio';
-          input.name = 'provider';
-          input.value = provider.key;
-          input.checked = state.currentPacProviderKey === provider.key;
-          label.appendChild(input);
-          label.appendChild(document.createTextNode(
-              ` ${getProviderLabel(provider)}`,
-          ));
-          appendText(
-              label,
-              'span',
-              getProviderDescription(provider),
-              'provider-description',
-          );
-        });
-
-    const saveButton = append(form, 'button');
-    saveButton.type = 'button';
-    saveButton.dataset.idleText = t('optionsSaveProvider');
-    saveButton.dataset.busyText = t('optionsSaving');
-    saveButton.textContent = saveButton.dataset.idleText;
-    saveButton.onclick = async () => {
-      setButtonBusy(saveButton, true);
-      try {
-        await rpc.callBackground(
-            'setCurrentPacProvider',
-            {providerKey: getSelectedProviderKey(form)},
-        );
-        await refresh(t('optionsPacProviderSaved'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
+    const health = state.snapshot.reliability &&
+      state.snapshot.reliability.proxyHealth || {};
+    if (health.status === 'ok') {
+      return {tone: 'success', text: t('popupProxyHealthOk')};
+    }
+    if (health.status === 'error') {
+      return {tone: 'error', text: t('popupProxyHealthError')};
+    }
+    if (health.status === 'checking') {
+      return {tone: 'warning', text: t('popupProxyHealthChecking')};
+    }
+    return {tone: '', text: t('popupProxyHealthUnknown')};
 
   }
 
-  function renderPacProvidersSection(parent, state, providers) {
+  function appendSummaryItem(parent, label, value, liveKey) {
 
-    const section = append(parent, 'section', 'panel');
-    appendText(section, 'h2', t('optionsPacProviders'));
-    appendText(section, 'p', t('optionsPacProvidersHint'), 'notice');
-    appendText(
-        section,
-        'p',
-        t('optionsSelectedProviderValue', [
-          getProviderLabelByKey(state.currentPacProviderKey, providers),
-        ]),
-        'provider-selected-status',
+    const item = append(parent, 'div', 'summary-item');
+    appendText(item, 'span', label, 'compact-label');
+    const output = appendText(item, 'span', value, 'summary-value');
+    if (liveKey) {
+      output.dataset.liveValue = liveKey;
+    }
+    return output;
+
+  }
+
+  function renderOverviewSection(parent) {
+
+    const section = createPageSection(
+        parent,
+        'overview',
+        'optionsNavOverview',
+        'optionsOverviewDescription',
     );
+    const view = deriveControlView();
+    const card = append(section, 'div', `settings-card ui-card status-card ${
+      view.tone
+    }`);
+    const heading = append(card, 'div', 'status-heading');
+    const titleWrap = append(heading, 'div');
+    const title = appendText(titleWrap, 'div', view.title, 'status-title');
+    title.dataset.liveValue = 'control-title';
+    const help = appendText(titleWrap, 'p', view.help, 'status-copy');
+    help.dataset.liveValue = 'control-help';
+    const pill = appendText(
+        heading,
+        'span',
+        getControlPillLabel(view),
+        `ui-pill ${view.tone === 'neutral' ? '' : view.tone}`,
+    );
+    pill.dataset.liveValue = 'control-pill';
+    const grid = append(card, 'div', 'summary-grid');
+    appendSummaryItem(
+        grid,
+        t('optionsActiveRoutingSource'),
+        getProviderLabel(getSelectedProvider()),
+        'provider',
+    );
+    appendSummaryItem(
+        grid,
+        t('popupProxyHealth'),
+        getHealthView().text,
+        'health',
+    );
+    const autoUpdate = state.snapshot.reliability &&
+      state.snapshot.reliability.autoUpdate || {};
+    appendSummaryItem(
+        grid,
+        t('optionsLastSuccessfulPacUpdate'),
+        formatTime(autoUpdate.lastSuccessfulUpdateAt),
+        'updated',
+    );
+    appendSummaryItem(
+        grid,
+        t('optionsSavedConfiguration'),
+        view.stale ? t('optionsApplyRequired') : t('optionsConfigurationCurrent'),
+        'freshness',
+    );
+    if (!getSelectedProvider()) {
+      const warning = append(card, 'div', 'status-banner warning');
+      warning.setAttribute('role', 'status');
+      appendText(warning, 'strong', t('optionsChooseSourceTitle'));
+      appendText(warning, 'p', t('optionsChooseSourceHelp'));
+      const button = createButton(
+          warning,
+          t('optionsGoToRoutingSources'),
+          'quiet',
+      );
+      button.onclick = () => navigateTo('routing-sources');
+    }
 
-    appendText(section, 'h3', t('optionsBuiltInProviders'));
-    const builtInList = append(section, 'div', 'provider-management-list');
-    providers.filter((provider) => provider.type === 'builtIn')
-        .forEach((provider) => {
-          renderBuiltInProviderRow(builtInList, state, provider);
-        });
+  }
 
-    appendText(section, 'h3', t('optionsCustomProviders'));
-    const customProviders = providers.filter((provider) =>
+  function getControlPillLabel(view) {
+
+    const keys = {
+      active: 'optionsStateActive',
+      off: 'optionsStateOff',
+      external: 'optionsStateExternal',
+      applying: 'optionsStateApplying',
+      clearing: 'optionsStateApplying',
+      stale: 'optionsStateNeedsApply',
+      error: 'optionsStateNeedsAttention',
+    };
+    return t(keys[view.kind] || 'optionsStateOff');
+
+  }
+
+  function navigateTo(section) {
+
+    window.location.hash = section;
+    activateSection(section, true);
+
+  }
+
+  function updateLiveState() {
+
+    const view = deriveControlView();
+    const values = {
+      'control-title': view.title,
+      'control-help': view.help,
+      'control-pill': getControlPillLabel(view),
+      'provider': getProviderLabel(getSelectedProvider()),
+      'health': getHealthView().text,
+      'updated': formatTime(
+          state.snapshot.reliability &&
+          state.snapshot.reliability.autoUpdate &&
+          state.snapshot.reliability.autoUpdate.lastSuccessfulUpdateAt,
+      ),
+      'freshness': view.stale ?
+        t('optionsApplyRequired') :
+        t('optionsConfigurationCurrent'),
+    };
+    root.querySelectorAll('[data-live-value]').forEach((node) => {
+      if (Object.prototype.hasOwnProperty.call(
+          values,
+          node.dataset.liveValue,
+      )) {
+        node.textContent = values[node.dataset.liveValue];
+      }
+    });
+    updateMessageBanner();
+    const bar = root.querySelector('#global-action-bar');
+    if (bar) {
+      bar.replaceChildren();
+      renderGlobalActionBarContents(bar);
+    }
+
+  }
+
+  function renderRoutingSourcesSection(parent) {
+
+    const section = createPageSection(
+        parent,
+        'routing-sources',
+        'optionsNavRoutingSources',
+        'optionsRoutingSourcesDescription',
+    );
+    const providers = getProviders();
+    const builtIn = providers.filter((provider) =>
+      provider.type === 'builtIn',
+    );
+    const custom = providers.filter((provider) =>
       provider.type === 'custom',
     );
-    if (!customProviders.length) {
-      appendText(section, 'p', t('optionsNoCustomProviders'), 'notice');
+    const builtInCard = append(section, 'div', 'settings-card ui-card');
+    appendText(builtInCard, 'h3', t('optionsBuiltInProviders'));
+    appendText(
+        builtInCard,
+        'p',
+        t('optionsBuiltInProvidersHelp'),
+        'section-description',
+    );
+    const list = append(builtInCard, 'div', 'settings-list');
+    builtIn.forEach((provider) => renderProviderRow(list, provider));
+    const customCard = append(section, 'div', 'settings-card ui-card');
+    const customHeader = append(customCard, 'div', 'card-header');
+    appendText(customHeader, 'h3', t('optionsCustomProviders'));
+    if (!custom.length) {
+      const empty = append(customCard, 'div', 'empty-state');
+      appendText(empty, 'p', t('optionsNoCustomProviders'), 'item-title');
+      appendText(empty, 'p', t('optionsNoCustomProvidersHelp'));
     } else {
-      const customList = append(section, 'div', 'provider-management-list');
-      customProviders.forEach((provider) => {
-        renderCustomProviderEditor(customList, state, provider);
+      const customList = append(customCard, 'div', 'settings-list');
+      custom.forEach((provider) =>
+        renderCustomProviderEditor(customList, provider),
+      );
+    }
+    renderAddProviderEditor(customCard);
+
+  }
+
+  function renderProviderRow(parent, provider) {
+
+    const selected = state.snapshot.state.currentPacProviderKey === provider.key;
+    const row = append(parent, 'article', 'item-row');
+    const header = append(row, 'div', 'item-header');
+    const copy = append(header, 'div');
+    appendText(copy, 'div', getProviderLabel(provider), 'item-title');
+    appendText(copy, 'p', getProviderDescription(provider), 'item-meta');
+    appendText(
+        header,
+        'span',
+        selected ? t('optionsSelected') : t('optionsBuiltIn'),
+        selected ? 'ui-pill success' : 'scope-badge',
+    );
+    const actions = append(row, 'div', 'provider-actions');
+    const useButton = createButton(
+        actions,
+        selected ? t('optionsSelected') : t('optionsUseSource'),
+        selected ? '' : 'primary',
+        t('optionsSaving'),
+    );
+    useButton.disabled = selected || provider.enabled === false;
+    useButton.onclick = () => selectProvider(provider.key, useButton);
+
+  }
+
+  async function selectProvider(providerKey, button) {
+
+    const result = await runOperation(
+        'select-provider',
+        button,
+        () => rpc.callBackground('setCurrentPacProvider', {providerKey}),
+        {context: 'provider'},
+    );
+    if (result) {
+      await refresh({
+        message: t('optionsRoutingSourceSaved'),
+        tone: 'success',
       });
     }
-    renderAddCustomProviderForm(section);
 
   }
 
-  function renderBuiltInProviderRow(parent, state, provider) {
+  function renderCustomProviderEditor(parent, provider) {
 
-    const row = append(parent, 'div', 'provider-management-row');
-    const header = append(row, 'div', 'provider-management-header');
-    appendText(header, 'strong', getProviderLabel(provider));
-    appendText(header, 'span', t('optionsReadOnlyProvider'), 'provider-badge');
-    appendText(row, 'p', getProviderDescription(provider), 'provider-description');
-    renderProviderUrls(row, provider.urls);
-    appendSelectProviderButton(row, state, provider);
-
-  }
-
-  function renderCustomProviderEditor(parent, state, provider) {
-
-    const details = append(parent, 'details', 'provider-management-row provider-editor');
-    const summary = append(details, 'summary', 'provider-management-header');
-    appendText(summary, 'strong', provider.label);
+    const disclosure = createDetails(
+        parent,
+        `provider-${provider.key}`,
+        getProviderLabel(provider),
+    );
+    const summary = append(disclosure.content, 'div', 'item-header');
     appendText(
         summary,
         'span',
-        `${provider.enabled ? t('optionsEnabled') : t('optionsDisabled')} · ` +
-          t('optionsEditCustomProvider'),
-        'provider-badge',
+        formatCount(
+            (provider.urls || []).length,
+            'optionsOneSourceAddress',
+            'optionsManySourceAddresses',
+        ),
+        'item-meta',
     );
-    const form = append(details, 'form', 'provider-form');
+    appendText(
+        summary,
+        'span',
+        provider.enabled ? t('optionsEnabled') : t('optionsDisabled'),
+        provider.enabled ? 'ui-pill success' : 'scope-badge',
+    );
+    const form = append(disclosure.content, 'form', 'field-grid');
     form.onsubmit = (event) => event.preventDefault();
-    const labelInput = appendTextInput(
+    const key = `provider:${provider.key}`;
+    const name = appendField(
         form,
+        'text',
         `provider.${provider.key}.label`,
         t('optionsProviderName'),
         provider.label,
+        {required: true},
     );
-    const descriptionInput = appendTextInput(
+    appendField(
         form,
+        'text',
         `provider.${provider.key}.description`,
         t('optionsProviderDescription'),
-        provider.description,
+        provider.description || '',
     );
-    const urlsInput = appendTextareaInput(
+    const urls = appendField(
         form,
+        'textarea',
         `provider.${provider.key}.urls`,
         t('optionsPacUrls'),
-        provider.urls.join('\n'),
+        (provider.urls || []).join('\n'),
+        {
+          full: true,
+          help: t('optionsPacUrlsSafeHelp'),
+          required: true,
+        },
     );
-    appendText(form, 'p', t('optionsPacUrlsHint'), 'note');
-    const enabledInput = appendCheckbox(
+    const enabled = appendCheckbox(
         form,
         `provider.${provider.key}.enabled`,
         t('optionsCustomProviderEnabled'),
-        provider.enabled,
+        provider.enabled !== false,
+        t('optionsCustomProviderEnabledHelp'),
+        'full',
     );
-    const actions = append(form, 'div', 'provider-actions');
-    const updateButton = append(actions, 'button');
-    updateButton.type = 'button';
-    updateButton.dataset.idleText = t('optionsUpdateCustomProvider');
-    updateButton.dataset.busyText = t('optionsSaving');
-    updateButton.textContent = updateButton.dataset.idleText;
-    updateButton.onclick = async () => {
-      setButtonBusy(updateButton, true);
-      try {
-        const result = await rpc.callBackground('updateCustomPacProvider', {
-          key: provider.key,
-          label: labelInput.value,
-          description: descriptionInput.value,
-          urls: splitProviderUrls(urlsInput.value),
-          enabled: enabledInput.checked,
-        });
-        const message = result.selectedProviderCleared ?
-          t('optionsSelectedProviderCleared') :
-          result.cacheMetadataCleared ?
-            t('optionsCustomProviderUpdatedRefresh') :
-            t('optionsCustomProviderUpdated');
-        await refresh(message);
-      } catch (err) {
-        await refresh(localizeProviderError(err), true);
-      }
-    };
-    appendSelectProviderButton(actions, state, provider);
-    const deleteButton = append(actions, 'button');
-    deleteButton.type = 'button';
-    deleteButton.className = 'danger';
-    deleteButton.dataset.idleText = t('optionsDeleteCustomProvider');
-    deleteButton.dataset.busyText = t('optionsDeleting');
-    deleteButton.textContent = deleteButton.dataset.idleText;
-    deleteButton.onclick = async () => {
-      if (!window.confirm(t('optionsConfirmDeleteCustomProvider', [provider.label]))) {
-        return;
-      }
-      setButtonBusy(deleteButton, true);
-      try {
-        const result = await rpc.callBackground('deleteCustomPacProvider', {
-          key: provider.key,
-        });
-        await refresh(
-            result.selectedProviderCleared ?
-              t('optionsSelectedProviderDeleted') :
-              t('optionsCustomProviderDeleted'),
-        );
-      } catch (err) {
-        await refresh(localizeProviderError(err), true);
-      }
-    };
+    const actions = append(form, 'div', 'provider-actions full');
+    const save = createButton(
+        actions,
+        t('optionsSaveSource'),
+        'primary',
+        t('optionsSaving'),
+    );
+    save.onclick = () => saveCustomProvider({
+      provider,
+      form,
+      draftKey: key,
+      name,
+      urls,
+      enabled,
+      button: save,
+    });
+    const duplicate = createButton(
+        actions,
+        t('optionsDuplicateSource'),
+        'quiet',
+    );
+    duplicate.onclick = () => copyProviderToAddDraft(provider);
+    const use = createButton(
+        actions,
+        state.snapshot.state.currentPacProviderKey === provider.key ?
+          t('optionsSelected') :
+          t('optionsUseSource'),
+        'quiet',
+        t('optionsSaving'),
+    );
+    use.disabled = state.snapshot.state.currentPacProviderKey === provider.key ||
+      provider.enabled === false;
+    use.onclick = () => selectProvider(provider.key, use);
+    const remove = createButton(
+        actions,
+        t('optionsDeleteSource'),
+        'danger quiet',
+        t('optionsDeleting'),
+    );
+    remove.onclick = () => deleteCustomProvider(provider, remove);
+    bindDraftForm(form, key);
+    renderDraftConflict(form, key);
 
   }
 
-  function renderAddCustomProviderForm(parent) {
+  function renderAddProviderEditor(parent) {
 
-    const details = append(parent, 'details', 'provider-add-form');
-    appendText(details, 'summary', t('optionsAddCustomProvider'));
-    const form = append(details, 'form', 'provider-form');
+    const disclosure = createDetails(
+        parent,
+        'provider-add',
+        t('optionsAddCustomProvider'),
+    );
+    appendText(
+        disclosure.content,
+        'p',
+        t('optionsCustomSourceTrustHelp'),
+        'status-banner warning',
+    );
+    const form = append(disclosure.content, 'form', 'field-grid');
     form.onsubmit = (event) => event.preventDefault();
-    const labelInput = appendTextInput(
+    const name = appendField(
         form,
+        'text',
         'newProvider.label',
         t('optionsProviderName'),
         '',
+        {required: true},
     );
-    const descriptionInput = appendTextInput(
+    appendField(
         form,
+        'text',
         'newProvider.description',
         t('optionsProviderDescription'),
         '',
     );
-    const urlsInput = appendTextareaInput(
+    const urls = appendField(
         form,
+        'textarea',
         'newProvider.urls',
         t('optionsPacUrls'),
         '',
+        {
+          full: true,
+          help: t('optionsPacUrlsSafeHelp'),
+          required: true,
+          placeholder: 'https://example.com/proxy.pac',
+        },
     );
-    urlsInput.placeholder = 'https://example.com/proxy.pac';
-    appendText(form, 'p', t('optionsPacUrlsHint'), 'note');
-    appendText(form, 'p', t('optionsProviderDuplicateUrls'), 'note');
-    const addButton = append(form, 'button');
-    addButton.type = 'button';
-    addButton.dataset.idleText = t('optionsAddCustomProvider');
-    addButton.dataset.busyText = t('optionsAdding');
-    addButton.textContent = addButton.dataset.idleText;
-    addButton.onclick = async () => {
-      setButtonBusy(addButton, true);
-      try {
-        await rpc.callBackground('addCustomPacProvider', {
-          label: labelInput.value,
-          description: descriptionInput.value,
-          urls: splitProviderUrls(urlsInput.value),
-        });
-        await refresh(t('optionsCustomProviderAdded'));
-      } catch (err) {
-        await refresh(localizeProviderError(err), true);
-      }
-    };
-
-  }
-
-  function renderProviderUrls(parent, urls) {
-
-    const list = append(parent, 'ul', 'provider-url-list');
-    (urls || []).forEach((url) => {
-      appendText(list, 'li', url);
-    });
-
-  }
-
-  function appendSelectProviderButton(parent, state, provider) {
-
-    const button = append(parent, 'button');
-    button.type = 'button';
-    const ifSelected = state.currentPacProviderKey === provider.key;
-    button.dataset.idleText = ifSelected ?
-      t('optionsSelected') :
-      t('optionsSelectProvider');
-    button.dataset.busyText = t('optionsSaving');
-    button.textContent = button.dataset.idleText;
-    button.disabled = ifSelected || provider.enabled === false;
-    button.onclick = async () => {
-      setButtonBusy(button, true);
-      try {
-        await rpc.callBackground('setCurrentPacProvider', {
-          providerKey: provider.key,
-        });
-        await refresh(t('optionsPacProviderSaved'));
-      } catch (err) {
-        await refresh(localizeProviderError(err), true);
-      }
-    };
-    return button;
+    const actions = append(form, 'div', 'provider-actions full');
+    const saveAndUse = createButton(
+        actions,
+        t('optionsSaveAndUse'),
+        'primary',
+        t('optionsSaving'),
+    );
+    const saveOnly = createButton(
+        actions,
+        t('optionsSaveOnly'),
+        '',
+        t('optionsSaving'),
+    );
+    saveAndUse.onclick = () => addCustomProvider(
+        form,
+        name,
+        urls,
+        saveAndUse,
+        true,
+    );
+    saveOnly.onclick = () => addCustomProvider(
+        form,
+        name,
+        urls,
+        saveOnly,
+        false,
+    );
+    bindDraftForm(form, 'provider:add');
 
   }
 
   function splitProviderUrls(value) {
 
-    return String(value || '').split(/\r?\n/g)
+    return String(value || '').split(/[\n,]+/g)
         .map((url) => url.trim())
         .filter(Boolean);
 
   }
 
-  function localizeProviderError(error) {
+  function validateProviderForm(form, nameInput, urlsInput) {
 
-    const messages = {
-      CUSTOM_PROVIDER_LABEL_REQUIRED: 'optionsProviderLabelRequired',
-      CUSTOM_PROVIDER_LABEL_TOO_LONG: 'optionsProviderLabelTooLong',
-      CUSTOM_PROVIDER_DESCRIPTION_TOO_LONG: 'optionsProviderDescriptionTooLong',
-      CUSTOM_PROVIDER_URL_REQUIRED: 'optionsProviderUrlRequired',
-      CUSTOM_PROVIDER_URL_INVALID: 'optionsProviderInvalidUrl',
-      CUSTOM_PROVIDER_URL_SCHEME: 'optionsProviderInvalidScheme',
-      CUSTOM_PROVIDER_URL_CREDENTIALS: 'optionsProviderUrlCredentials',
-      CUSTOM_PROVIDER_TOO_MANY_URLS: 'optionsProviderTooManyUrls',
-      CUSTOM_PROVIDER_NOT_FOUND: 'optionsProviderNotFound',
-      BUILT_IN_PROVIDER_READ_ONLY: 'optionsProviderBuiltInReadOnly',
-    };
-    const key = error && messages[error.code];
-    return key ? t(key) : error && error.message || t('popupOperationFailed');
-
-  }
-
-  function renderQuickActionButtons(parent, state, staleInfo) {
-
-    const actions = append(parent, 'div', 'quick-actions');
-    appendActionButton(actions, t('optionsDownloadPac'), t('optionsDownloading'), async () => {
-      const result = await rpc.callBackground('downloadPac', {});
-      if (result.ok === false) {
-        throw new Error(result.error.message);
-      }
-      return t('optionsPacDownloadStatus', [localizeStatusValue(result.status)]);
-    });
-    appendActionButton(actions, t('optionsCookPac'), t('optionsCooking'), async () => {
-      const result = await rpc.callBackground('cookPac', {});
-      if (result.ok === false) {
-        throw new Error(localizeOperationError(result.error));
-      }
-      return t('optionsPacCookedApplyNow');
-    }, t('optionsCookPacHelp'));
-    const applyButton = appendActionButton(
-        actions,
-        t('optionsApplyProxy'),
-        t('optionsApplying'),
-        async () => {
-          const result = await rpc.callBackground('applyCookedPac', {});
-          if (result.ok === false) {
-            throw new Error(result.error.message);
-          }
-          return t('optionsProxyApplyStatus', [localizeStatusValue(result.status)]);
-        },
-        t('optionsApplyProxyHelp'),
-    );
-    applyButton.disabled = !state.cookedPacCache.cookedPacSha256 ||
-      Boolean(staleInfo && staleInfo.stale);
-    appendActionButton(actions, t('popupClearProxy'), t('popupClearing'), async () => {
-      const result = await rpc.callBackground('clearProxy', {});
-      if (result.ok === false) {
-        throw new Error(result.error.message);
-      }
-      return t('optionsProxyClearStatus', [localizeStatusValue(result.status)]);
-    });
-
-  }
-
-  function appendActionButton(parent, idleText, busyText, action, title) {
-
-    const button = append(parent, 'button');
-    button.type = 'button';
-    button.dataset.idleText = idleText;
-    button.dataset.busyText = busyText;
-    button.textContent = idleText;
-    if (title) {
-      button.title = title;
+    clearValidation(form);
+    let valid = true;
+    if (!nameInput.value.trim()) {
+      showFieldError(nameInput, t('optionsProviderNameRequired'));
+      valid = false;
     }
-    button.onclick = async () => {
-      setButtonBusy(button, true);
+    const urls = splitProviderUrls(urlsInput.value);
+    if (!urls.length) {
+      showFieldError(urlsInput, t('optionsProviderUrlRequired'));
+      return null;
+    }
+    const seen = new Set();
+    for (const value of urls) {
       try {
-        await refresh(await action());
-      } catch (err) {
-        await refresh(err.message, true);
+        const parsed = new URL(value);
+        const loopback = parsed.hostname === 'localhost' ||
+          parsed.hostname === '::1' ||
+          parsed.hostname.startsWith('127.');
+        if (parsed.username || parsed.password) {
+          showFieldError(urlsInput, t('optionsProviderUrlCredentials'));
+          return null;
+        }
+        if (parsed.protocol !== 'https:' &&
+            !(parsed.protocol === 'http:' && loopback)) {
+          showFieldError(urlsInput, t('optionsProviderUrlScheme'));
+          return null;
+        }
+      } catch (error) {
+        showFieldError(urlsInput, t('optionsProviderUrlInvalid'));
+        return null;
       }
-    };
-    return button;
-
-  }
-
-  function renderSiteRulesSection(parent, pacMods, staleSnapshot) {
-
-    const section = append(parent, 'section', 'panel');
-    appendText(section, 'h2', t('optionsAddSiteRule'));
-    appendText(
-        section,
-        'p',
-        t('optionsAddSiteRuleHint'),
-    );
-    appendText(
-        section,
-        'p',
-        t('optionsToolbarTip'),
-        'notice',
-    );
-
-    const form = append(section, 'form', 'site-rule-form');
-    const siteInput = appendTextInput(
-        form,
-        'siteRule.pattern',
-        t('optionsSite'),
-        '',
-    );
-    siteInput.placeholder = 'example.com, https://example.com/path, *.example.com';
-    const noteInput = appendTextInput(form, 'siteRule.note', t('optionsNote'), '');
-    noteInput.placeholder = t('optionsOptional');
-    const addProxyButton = append(form, 'button');
-    addProxyButton.type = 'button';
-    addProxyButton.dataset.idleText = t('optionsAddProxyRule');
-    addProxyButton.dataset.busyText = t('optionsAdding');
-    addProxyButton.textContent = addProxyButton.dataset.idleText;
-    const addDirectButton = append(form, 'button');
-    addDirectButton.type = 'button';
-    addDirectButton.dataset.idleText = t('optionsAddDirectRule');
-    addDirectButton.dataset.busyText = t('optionsAdding');
-    addDirectButton.textContent = addDirectButton.dataset.idleText;
-    addProxyButton.onclick = () => addSiteRuleFromForm(
-        addProxyButton,
-        pacMods,
-        siteInput,
-        noteInput,
-        'PROXY',
-    );
-    addDirectButton.onclick = () => addSiteRuleFromForm(
-        addDirectButton,
-        pacMods,
-        siteInput,
-        noteInput,
-        'DIRECT',
-    );
-
-    if (hasProxySiteRules(pacMods) && !getProxyRuleCandidateCount(pacMods)) {
-      appendText(
-          section,
-          'p',
-          t('optionsProxyRuleNoCandidate'),
-          'status warning',
-      );
+      if (seen.has(value)) {
+        showFieldError(urlsInput, t('optionsProviderDuplicateUrls'));
+        return null;
+      }
+      seen.add(value);
     }
-
-    renderSiteRules(section, pacMods, staleSnapshot);
-
-  }
-
-  async function addSiteRuleFromForm(button, pacMods, siteInput, noteInput, action) {
-
-    setButtonBusy(button, true);
-    try {
-      const pattern = normalizeSiteRuleInput(siteInput.value);
-      await addSiteRule({
-        pacMods,
-        pattern,
-        action,
-        note: noteInput.value.trim(),
-      });
-      await refresh(t('optionsPacChangedCookApply'));
-    } catch (err) {
-      await refresh(err.message, true);
+    if (!valid) {
+      nameInput.focus();
+      return null;
     }
+    return urls;
 
   }
 
-  function renderSiteRules(parent, pacMods, staleSnapshot) {
+  async function saveCustomProvider(options) {
 
-    appendText(parent, 'h3', t('optionsSiteRules'));
-    const rules = getSiteRules(pacMods);
-    if (!rules.length) {
-      appendText(parent, 'p', t('optionsNoSiteRules'));
+    const urls = validateProviderForm(
+        options.form,
+        options.name,
+        options.urls,
+    );
+    if (!urls) {
+      setMessage(t('optionsValidationFailed'), 'error');
       return;
     }
-    const list = append(parent, 'div', 'site-rule-list');
-    rules.forEach((rule, index) => renderSiteRuleRow(list, pacMods, rule, index));
-    const staleInfo = staleSnapshot && staleSnapshot.cookedPac;
-    if (staleInfo && staleInfo.stale) {
-      appendText(
-          parent,
-          'p',
-          t('optionsPacChangedCookApply'),
-          'status warning',
-      );
+    const description = options.form.querySelector(
+        `[name="provider.${options.provider.key}.description"]`,
+    );
+    const result = await runOperation(
+        `provider:${options.provider.key}:save`,
+        options.button,
+        () => rpc.callBackground('updateCustomPacProvider', {
+          key: options.provider.key,
+          label: options.name.value.trim(),
+          description: description.value.trim(),
+          urls,
+          enabled: options.enabled.checked,
+        }),
+        {
+          context: 'provider',
+          draftKey: options.draftKey,
+          retry: () => saveCustomProvider(options),
+        },
+    );
+    if (result) {
+      markDraftClean(options.draftKey, options.form);
+      await refresh({
+        message: result.selectedProviderCleared ?
+          t('optionsSelectedProviderCleared') :
+          t('optionsCustomProviderUpdated'),
+        tone: 'success',
+      });
     }
 
   }
 
-  function renderSiteRuleRow(parent, pacMods, rule, index) {
+  async function addCustomProvider(form, name, urlsInput, button, ifUse) {
 
-    const row = append(parent, 'div', 'site-rule-row');
-    const enabledLabel = append(row, 'label');
-    const enabledInput = document.createElement('input');
-    enabledInput.type = 'checkbox';
-    enabledInput.checked = rule.enabled !== false;
-    enabledLabel.appendChild(enabledInput);
-    enabledLabel.appendChild(document.createTextNode(` ${t('optionsEnabled')}`));
-    appendText(row, 'span', rule.pattern, 'site-rule-pattern');
-    appendText(
-        row,
-        'span',
-        rule.action === 'PROXY' ? t('optionsProxyThisSite') : t('optionsOpenDirectly'),
-        `site-rule-action ${rule.action === 'PROXY' ? 'proxy' : 'direct'}`,
+    const urls = validateProviderForm(form, name, urlsInput);
+    if (!urls) {
+      setMessage(t('optionsValidationFailed'), 'error');
+      return;
+    }
+    const description = form.querySelector(
+        '[name="newProvider.description"]',
     );
-    appendText(row, 'span', rule.note || '', 'site-rule-note');
-    enabledInput.onchange = async () => {
-      try {
-        await updateSiteRule(pacMods, index, {enabled: enabledInput.checked});
-        await refresh(t('optionsPacChangedCookApply'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-    const removeButton = append(row, 'button');
-    removeButton.type = 'button';
-    removeButton.textContent = t('optionsRemove');
-    removeButton.onclick = async () => {
-      try {
-        await removeSiteRule(pacMods, index);
-        await refresh(t('optionsPacChangedCookApply'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-  }
-
-  function renderLocalProxySection(parent, pacMods) {
-
-    const section = append(parent, 'section', 'panel');
-    appendText(section, 'h2', t('optionsLocalProxyPresets'));
-    appendText(
-        section,
-        'p',
-        t('optionsLocalProxyHint'),
+    const result = await runOperation(
+        'provider:add',
+        button,
+        () => rpc.callBackground('addCustomPacProvider', {
+          label: name.value.trim(),
+          description: description.value.trim(),
+          urls,
+        }),
+        {
+          context: 'provider',
+          draftKey: 'provider:add',
+          retry: () => addCustomProvider(
+              form,
+              name,
+              urlsInput,
+              button,
+              ifUse,
+          ),
+        },
     );
-    appendText(
-        section,
-        'p',
-        t('optionsPasswordNotice'),
-        'notice',
-    );
-    appendText(section, 'p', t('optionsTorModeNote'), 'notice');
-    appendText(section, 'p', t('popupTorAvailabilityNote'), 'notice');
-    const form = append(section, 'form');
-    renderPacProxyModeEditor(form, pacMods);
-    renderTorConfigEditor(form, 'localTor', t('popupLocalTor'), pacMods.localTor);
-    renderTorConfigEditor(
-        form,
-        'torBrowser',
-        t('popupTorBrowser'),
-        pacMods.torBrowser,
-    );
-    renderWarpEditor(form, pacMods.warp);
-    renderOwnProxyEditor(form, pacMods.ownProxies || []);
-    const saveButton = append(form, 'button');
-    saveButton.type = 'button';
-    saveButton.dataset.idleText = t('optionsSaveProxySettings');
-    saveButton.dataset.busyText = t('optionsSaving');
-    saveButton.textContent = saveButton.dataset.idleText;
-    saveButton.onclick = async () => {
-      setButtonBusy(saveButton, true);
-      try {
-        await rpc.callBackground(
-            'setPacMods',
-            {pacMods: collectLocalProxyPacMods(form, pacMods)},
-        );
-        await refresh(t('optionsPacChangedCookApply'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-  }
-
-  function renderAdvancedPacRulesSection(parent, pacMods) {
-
-    const details = append(parent, 'details', 'panel');
-    appendText(details, 'summary', t('optionsAdvancedPacRules'));
-    appendText(
-        details,
-        'p',
-        t('optionsAdvancedPacRulesHint'),
-        'notice',
-    );
-    const form = append(details, 'form');
-    renderPatternListEditor(
-        form,
-        'whitelist',
-        t('optionsWhitelist'),
-        pacMods.whitelist || [],
-        false,
-    );
-    renderPacPolicyEditor(form, pacMods);
-    const saveButton = append(form, 'button');
-    saveButton.type = 'button';
-    saveButton.dataset.idleText = t('optionsSaveAdvancedPacRules');
-    saveButton.dataset.busyText = t('optionsSaving');
-    saveButton.textContent = saveButton.dataset.idleText;
-    saveButton.onclick = async () => {
-      setButtonBusy(saveButton, true);
-      try {
-        await rpc.callBackground(
-            'setPacMods',
-            {pacMods: collectAdvancedPacRules(form, pacMods)},
-        );
-        await refresh(t('optionsPacChangedCookApply'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-    renderAdvancedJsonEditor(details, pacMods);
-
-  }
-
-  function renderAdvancedJsonEditor(parent, pacMods) {
-
-    const details = append(parent, 'details');
-    appendText(details, 'summary', t('optionsAdvancedJsonEditor'));
-    const textarea = append(details, 'textarea');
-    textarea.value = JSON.stringify(pacMods, null, 2);
-    const saveButton = append(details, 'button');
-    saveButton.type = 'button';
-    saveButton.dataset.idleText = t('optionsSavePacModifiersJson');
-    saveButton.dataset.busyText = t('optionsSaving');
-    saveButton.textContent = saveButton.dataset.idleText;
-    saveButton.onclick = async () => {
-      let nextPacMods;
-      try {
-        nextPacMods = JSON.parse(textarea.value);
-      } catch (err) {
-        await refresh(t('optionsPacJsonInvalid'), true);
+    if (!result) {
+      return;
+    }
+    if (ifUse && result.provider && result.provider.key) {
+      const selected = await runOperation(
+          'select-provider',
+          button,
+          () => rpc.callBackground('setCurrentPacProvider', {
+            providerKey: result.provider.key,
+          }),
+          {context: 'provider'},
+      );
+      if (!selected) {
+        state.drafts.delete('provider:add');
+        await refresh({
+          message: t('optionsSourceSavedNotSelected'),
+          tone: 'warning',
+        });
         return;
       }
-      setButtonBusy(saveButton, true);
-      try {
-        await rpc.callBackground(
-            'setPacMods',
-            {pacMods: preparePacModsForSave(nextPacMods)},
-        );
-        await refresh(t('optionsPacChangedCookApply'));
-      } catch (err) {
-        await refresh(err.message, true);
+    }
+    state.drafts.delete('provider:add');
+    state.openDisclosures.delete('provider-add');
+    await refresh({
+      message: ifUse ?
+        t('optionsSourceSavedAndSelected') :
+        t('optionsCustomProviderAdded'),
+      tone: 'success',
+    });
+
+  }
+
+  function copyProviderToAddDraft(provider) {
+
+    state.openDisclosures.add('provider-add');
+    const baseline = [
+      {
+        name: 'newProvider.label',
+        type: 'text',
+        value: t('optionsProviderCopyName', [provider.label]),
+        checked: false,
+      },
+      {
+        name: 'newProvider.description',
+        type: 'text',
+        value: provider.description || '',
+        checked: false,
+      },
+      {
+        name: 'newProvider.urls',
+        type: 'textarea',
+        value: (provider.urls || []).join('\n'),
+        checked: false,
+      },
+    ];
+    state.drafts.set('provider:add', {
+      baseline: [],
+      values: baseline,
+      dirty: true,
+      conflict: false,
+      pacRevision: null,
+      usesPacMods: false,
+    });
+    render();
+    navigateTo('routing-sources');
+
+  }
+
+  async function deleteCustomProvider(provider, button) {
+
+    const selected = state.snapshot.state.currentPacProviderKey === provider.key;
+    const message = selected ?
+      t('optionsConfirmDeleteSelectedSource', [provider.label]) :
+      t('optionsConfirmDeleteCustomProvider', [provider.label]);
+    if (!window.confirm(message)) {
+      return;
+    }
+    const result = await runOperation(
+        `provider:${provider.key}:delete`,
+        button,
+        () => rpc.callBackground('deleteCustomPacProvider', {
+          key: provider.key,
+        }),
+        {context: 'provider'},
+    );
+    if (result) {
+      state.drafts.delete(`provider:${provider.key}`);
+      await refresh({
+        message: result.selectedProviderCleared ?
+          t('optionsSelectedProviderDeleted') :
+          t('optionsCustomProviderDeleted'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  function appendField(parent, type, name, labelText, value, options = {}) {
+
+    const group = append(
+        parent,
+        'label',
+        `field-group${options.full ? ' full' : ''}`,
+    );
+    const label = appendText(group, 'span', labelText, 'field-label');
+    const input = append(
+        group,
+        type === 'textarea' ? 'textarea' : 'input',
+        'ui-input',
+    );
+    fieldId += 1;
+    input.id = `options-field-${fieldId}`;
+    label.setAttribute('for', input.id);
+    input.name = name;
+    if (type !== 'textarea') {
+      input.type = type;
+    }
+    input.value = value === null || value === undefined ? '' : String(value);
+    if (options.required) {
+      input.required = true;
+      input.setAttribute('aria-required', 'true');
+    }
+    if (options.placeholder) {
+      input.placeholder = options.placeholder;
+    }
+    if (options.autocomplete) {
+      input.autocomplete = options.autocomplete;
+    }
+    if (options.min !== undefined) {
+      input.min = String(options.min);
+    }
+    if (options.max !== undefined) {
+      input.max = String(options.max);
+    }
+    if (options.help) {
+      const help = appendText(group, 'span', options.help, 'field-help');
+      help.id = `${input.id}-help`;
+      input.setAttribute('aria-describedby', help.id);
+    }
+    return input;
+
+  }
+
+  function appendSelect(parent, name, labelText, entries, value, options = {}) {
+
+    const group = append(
+        parent,
+        'label',
+        `field-group${options.full ? ' full' : ''}`,
+    );
+    const label = appendText(group, 'span', labelText, 'field-label');
+    const select = append(group, 'select', 'ui-input');
+    fieldId += 1;
+    select.id = `options-field-${fieldId}`;
+    label.setAttribute('for', select.id);
+    select.name = name;
+    entries.forEach((entry) => {
+      const option = appendText(
+          select,
+          'option',
+          Array.isArray(entry) ? entry[1] : entry,
+      );
+      option.value = Array.isArray(entry) ? entry[0] : entry;
+    });
+    select.value = value;
+    if (options.help) {
+      const help = appendText(group, 'span', options.help, 'field-help');
+      help.id = `${select.id}-help`;
+      select.setAttribute('aria-describedby', help.id);
+    }
+    return select;
+
+  }
+
+  function appendCheckbox(
+      parent,
+      name,
+      labelText,
+      checked,
+      help,
+      className = '',
+  ) {
+
+    const label = append(
+        parent,
+        'label',
+        `check-row${className ? ` ${className}` : ''}`,
+    );
+    const input = append(label, 'input');
+    input.type = 'checkbox';
+    input.name = name;
+    input.checked = checked === true;
+    const copy = append(label, 'span', 'check-row-copy');
+    appendText(copy, 'span', labelText);
+    if (help) {
+      appendText(copy, 'small', help);
+    }
+    return input;
+
+  }
+
+  function clearValidation(form) {
+
+    form.querySelectorAll('.validation-message').forEach((message) => {
+      message.remove();
+    });
+    form.querySelectorAll('[aria-invalid="true"]').forEach((input) => {
+      input.removeAttribute('aria-invalid');
+      const described = String(input.getAttribute('aria-describedby') || '')
+          .split(/\s+/g)
+          .filter((id) => id && !id.endsWith('-error'));
+      if (described.length) {
+        input.setAttribute('aria-describedby', described.join(' '));
+      } else {
+        input.removeAttribute('aria-describedby');
       }
-    };
-
-  }
-
-  function renderDebugDiagnosticsSection(parent, snapshot) {
-
-    const details = append(parent, 'details', 'panel');
-    appendText(details, 'summary', t('optionsDiagnostics'));
-    appendText(
-        details,
-        'p',
-        t('optionsDiagnosticsHint'),
-    );
-    const state = snapshot.state;
-    renderArtifactStorageSection(details, snapshot.artifactStorage);
-    renderPacDownloadSection(details, state);
-    renderPacCookSection(details, state, snapshot.stale && snapshot.stale.cookedPac);
-    renderProxySection(details, state, snapshot.proxy);
-    renderProxyAuthSection(details, snapshot.proxyAuth);
-    renderPeriodicUpdateSection(details, snapshot.periodicUpdate);
-    renderNotificationSection(details, state.notificationPrefs);
-    appendText(details, 'h2', t('optionsRcStatus'));
-    appendText(details, 'p', snapshot.status);
-
-  }
-
-  function renderAboutSection(parent) {
-
-    const details = append(parent, 'details', 'panel');
-    appendText(details, 'summary', t('optionsAbout'));
-    appendText(details, 'p', t('optionsAboutHint'), 'notice');
-    appendText(details, 'h3', t('optionsLimitations'));
-    const list = append(details, 'ul');
-    [
-      'optionsLimitationDns',
-      'optionsLimitationRawReplaceDirect',
-      'optionsLimitationSecureFiltering',
-      'optionsLimitationWeightedRules',
-      'optionsLimitationExternalProxyQa',
-      'optionsLimitationTorQa',
-    ].forEach((key) => {
-      appendText(list, 'li', t(key));
-    });
-    appendText(details, 'h3', t('optionsRestoredMv2Behavior'));
-    const restoredList = append(details, 'ul');
-    [
-      'optionsRestoredPacProxySwitch',
-      'optionsRestoredOwnSitesOnly',
-      'optionsRestoredOnionTor',
-      'optionsRestoredDirectPolicy',
-    ].forEach((key) => {
-      appendText(restoredList, 'li', t(key));
     });
 
   }
 
-  function renderMaintenanceSection(parent, snapshot) {
+  function showFieldError(input, message) {
 
-    const details = append(parent, 'details', 'panel');
-    appendText(details, 'summary', t('optionsMaintenance'));
-    appendText(details, 'p', t('optionsMaintenanceHint'), 'notice');
-    const state = snapshot.state;
-    renderLegacyMigrationSection(
-        details,
-        state.legacyMigration,
-        latestLegacyMigrationPlan,
+    input.setAttribute('aria-invalid', 'true');
+    const error = appendText(
+        input.parentNode,
+        'span',
+        message,
+        'validation-message',
     );
+    error.id = `${input.id}-error`;
+    const described = String(input.getAttribute('aria-describedby') || '')
+        .split(/\s+/g)
+        .filter(Boolean);
+    described.push(error.id);
+    input.setAttribute('aria-describedby', described.join(' '));
 
   }
 
-  function renderFooter(parent) {
+  function renderDraftConflict(form, key) {
 
-    const footer = append(parent, 'footer', 'footer');
-    appendText(footer, 'p', t('optionsMv3Credits'));
-
-  }
-
-  function renderArtifactStorageSection(parent, artifactStorage) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', 'PAC artifact storage');
-    const list = append(section, 'dl');
-    appendDefinition(list, 'Backend', artifactStorage && artifactStorage.backend);
-    appendDefinition(list, 'Database', artifactStorage && artifactStorage.dbName);
-    appendDefinition(
-        list,
-        'Schema',
-        artifactStorage && artifactStorage.schemaVersion,
-    );
+    const draft = state.drafts.get(key);
+    if (!draft || !draft.conflict) {
+      return;
+    }
+    const banner = append(form, 'div', 'status-banner warning full');
+    banner.setAttribute('role', 'alert');
+    appendText(banner, 'strong', t('optionsConflictTitle'));
+    appendText(banner, 'p', t('optionsConflictHelp'));
 
   }
 
@@ -1188,23 +1776,31 @@
 
     const input = String(value || '').trim();
     if (!input) {
-      throw new Error(t('optionsEnterSite'));
+      throw new Error('EMPTY_SITE');
     }
-    if (/^[*]\.[a-z0-9.-]+$/i.test(input)) {
-      return input.toLowerCase();
+    if (input.startsWith('*.')) {
+      try {
+        const wildcardHost = new URL(`https://${input.slice(2)}`).hostname;
+        if (wildcardHost && /^[a-z0-9.-]+$/i.test(wildcardHost)) {
+          return `*.${wildcardHost.toLowerCase()}`;
+        }
+      } catch (error) {
+        throw new Error('INVALID_SITE');
+      }
     }
-
     let host = input;
     try {
       if (/^[a-z][a-z0-9+.-]*:\/\//i.test(input)) {
         host = new URL(input).hostname;
-      } else if (input.includes('/')) {
+      } else if (
+        input.includes('/') ||
+        Array.from(input).some((character) => character.charCodeAt(0) > 127)
+      ) {
         host = new URL(`https://${input}`).hostname;
       }
-    } catch (err) {
-      throw new Error(t('optionsEnterValidSite'));
+    } catch (error) {
+      throw new Error('INVALID_SITE');
     }
-
     host = String(host || '')
         .trim()
         .replace(/^\[|\]$/g, '')
@@ -1217,13 +1813,13 @@
       host.startsWith('.') ||
       host.endsWith('.')
     ) {
-      throw new Error(t('optionsEnterValidSite'));
+      throw new Error('INVALID_SITE');
     }
     return host;
 
   }
 
-  function getSiteRules(pacMods) {
+  function getSiteRules(pacMods = state.snapshot.state.pacMods) {
 
     return Array.isArray(pacMods && pacMods.exceptions) ?
       pacMods.exceptions :
@@ -1231,1126 +1827,491 @@
 
   }
 
-  function createPacModsPatch(pacMods, patch) {
+  function createPacModsPatch(patch) {
 
-    return Object.assign({}, clone(pacMods), patch);
-
-  }
-
-  async function savePacModsPatch(pacMods, patch) {
-
-    await rpc.callBackground('setPacMods', {
-      pacMods: createPacModsPatch(pacMods, patch),
-    });
+    return Object.assign({}, clone(state.snapshot.state.pacMods), patch);
 
   }
 
-  async function addSiteRule({pacMods, pattern, action, note}) {
+  function renderSiteRulesSection(parent) {
 
-    const rules = getSiteRules(pacMods).slice();
-    const normalizedAction = String(action || '').toUpperCase();
-    if (!['PROXY', 'DIRECT'].includes(normalizedAction)) {
-      throw new Error(t('optionsUnsupportedSiteRuleAction'));
-    }
-    const duplicate = rules.some((rule) =>
-      String(rule.pattern || '').toLowerCase() === pattern.toLowerCase(),
-    );
-    if (duplicate) {
-      throw new Error(t('optionsDuplicateSiteRule'));
-    }
-    rules.push({
-      pattern,
-      action: normalizedAction,
-      enabled: true,
-      note: note || '',
-    });
-    await savePacModsPatch(pacMods, {exceptions: rules});
-
-  }
-
-  async function updateSiteRule(pacMods, index, patch) {
-
-    const rules = getSiteRules(pacMods).slice();
-    if (!rules[index]) {
-      throw new Error(t('optionsSiteRuleNotFound'));
-    }
-    rules[index] = Object.assign({}, rules[index], patch);
-    await savePacModsPatch(pacMods, {exceptions: rules});
-
-  }
-
-  async function removeSiteRule(pacMods, index) {
-
-    const rules = getSiteRules(pacMods).slice();
-    if (!rules[index]) {
-      throw new Error(t('optionsSiteRuleNotFound'));
-    }
-    rules.splice(index, 1);
-    await savePacModsPatch(pacMods, {exceptions: rules});
-
-  }
-
-  function getProxyRuleCandidateCount(pacMods) {
-
-    const mods = pacMods || {};
-    const ownProxyCount = Array.isArray(mods.ownProxies) ?
-      mods.ownProxies.filter((proxy) =>
-        proxy &&
-        proxy.enabled !== false &&
-        proxy.host &&
-        proxy.port,
-      ).length :
-      0;
-    const localTorCount = isObject(mods.localTor) &&
-      mods.localTor.enabled === true ? 1 : 0;
-    const torBrowserCount = isObject(mods.torBrowser) &&
-      mods.torBrowser.enabled === true ? 1 : 0;
-    const warpCount = isObject(mods.warp) && mods.warp.enabled === true &&
-      String(mods.warp.proxyString || '').trim() ? 1 : 0;
-    return ownProxyCount + localTorCount + torBrowserCount + warpCount;
-
-  }
-
-  function hasProxySiteRules(pacMods) {
-
-    return getSiteRules(pacMods).some((rule) =>
-      rule &&
-      rule.enabled !== false &&
-      rule.action === 'PROXY',
-    );
-
-  }
-
-  function renderPacDownloadSection(parent, state) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', 'PAC download cache');
-
-    const downloadButton = append(section, 'button');
-    downloadButton.type = 'button';
-    downloadButton.dataset.idleText = 'Download PAC';
-    downloadButton.dataset.busyText = 'Downloading...';
-    downloadButton.textContent = downloadButton.dataset.idleText;
-    downloadButton.onclick = async () => {
-      setButtonBusy(downloadButton, true);
-      try {
-        const result = await rpc.callBackground('downloadPac', {});
-        if (result.ok === false) {
-          await refresh(`PAC download failed: ${result.error.message}`, true);
-          return;
-        }
-        await refresh(`PAC download status: ${result.status}.`);
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const clearButton = append(section, 'button');
-    clearButton.type = 'button';
-    clearButton.dataset.idleText = 'Clear PAC cache';
-    clearButton.dataset.busyText = 'Clearing...';
-    clearButton.textContent = clearButton.dataset.idleText;
-    clearButton.onclick = async () => {
-      setButtonBusy(clearButton, true);
-      try {
-        const result = await rpc.callBackground('clearPacCache', {});
-        if (result.ok === false) {
-          await refresh(`PAC cache clear failed: ${result.error.message}`, true);
-          return;
-        }
-        await refresh('PAC cache cleared.');
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    renderPacDownloadDetails(section, state.pacDownload);
-    renderPacCacheMetadata(section, state.pacCache);
-
-  }
-
-  function renderPacDownloadDetails(parent, pacDownload) {
-
-    const list = append(parent, 'dl');
-    appendDefinition(list, 'Status', pacDownload.status);
-    appendDefinition(list, 'Provider', pacDownload.providerKey);
-    appendDefinition(
-        list,
-        'URL',
-        rpc.formatPacSourceUrlForDiagnostics(
-            pacDownload.url,
-            pacDownload.providerKey,
-        ),
-    );
-    appendDefinition(list, 'HTTP status', pacDownload.httpStatus);
-    appendDefinition(list, 'Content length', pacDownload.contentLength);
-    appendDefinition(list, 'SHA-256', pacDownload.sha256);
-    appendDefinition(list, 'Last-Modified', pacDownload.lastModified);
-    appendDefinition(list, 'ETag', pacDownload.etag);
-    if (pacDownload.error) {
-      appendDefinition(list, 'Error', pacDownload.error.message);
-    }
-
-  }
-
-  function renderPacCacheMetadata(parent, pacCache) {
-
-    const details = append(parent, 'details');
-    appendText(details, 'summary', 'PAC cache metadata');
-
-    if (!pacCache.rawPacSha256) {
-      appendText(details, 'p', 'No PAC data cached.');
-      return;
-    }
-
-    const list = append(details, 'dl');
-    appendDefinition(list, 'Artifact', pacCache.artifactRef);
-    appendDefinition(list, 'Artifact present', pacCache.artifactRef ? 'yes' : 'no');
-    appendDefinition(list, 'Raw PAC size', pacCache.rawPacSize);
-    appendDefinition(list, 'SHA-256', pacCache.rawPacSha256);
-    appendDefinition(
-        list,
-        'URL',
-        rpc.formatPacSourceUrlForDiagnostics(pacCache.url, pacCache.providerKey),
-    );
-
-  }
-
-  function renderPacCookSection(parent, state, staleInfo) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', 'PAC cooking cache');
-
-    const cookButton = append(section, 'button');
-    cookButton.type = 'button';
-    cookButton.dataset.idleText = 'Cook PAC';
-    cookButton.dataset.busyText = 'Cooking...';
-    cookButton.textContent = cookButton.dataset.idleText;
-    cookButton.onclick = async () => {
-      setButtonBusy(cookButton, true);
-      try {
-        const result = await rpc.callBackground('cookPac', {});
-        if (result.ok === false) {
-          await refresh(`PAC cooking failed: ${result.error.message}`, true);
-          return;
-        }
-        await refresh(`PAC cooking status: ${result.status}.`);
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const clearButton = append(section, 'button');
-    clearButton.type = 'button';
-    clearButton.dataset.idleText = 'Clear cooked PAC cache';
-    clearButton.dataset.busyText = 'Clearing...';
-    clearButton.textContent = clearButton.dataset.idleText;
-    clearButton.onclick = async () => {
-      setButtonBusy(clearButton, true);
-      try {
-        const result = await rpc.callBackground('clearCookedPacCache', {});
-        if (result.ok === false) {
-          await refresh(
-              `Cooked PAC cache clear failed: ${result.error.message}`,
-              true,
-          );
-          return;
-        }
-        await refresh('Cooked PAC cache cleared.');
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    if (staleInfo && staleInfo.stale) {
-      appendText(
-          section,
-          'p',
-          `Cooked PAC cache is stale: ${staleInfo.reasons.join(', ')}.`,
-          'status error',
-      );
-    }
-
-    renderPacCookDetails(section, state.pacCook);
-    renderCookedPacCacheMetadata(section, state.cookedPacCache);
-
-  }
-
-  function renderPacCookDetails(parent, pacCook) {
-
-    const list = append(parent, 'dl');
-    appendDefinition(list, 'Status', pacCook.status);
-    appendDefinition(list, 'Provider', pacCook.providerKey);
-    appendDefinition(list, 'Source raw SHA-256', pacCook.sourceRawPacSha256);
-    appendDefinition(list, 'Cooked SHA-256', pacCook.cookedPacSha256);
-    appendDefinition(list, 'Cooked content length', pacCook.cookedContentLength);
-    if (pacCook.warnings && pacCook.warnings.length) {
-      appendDefinition(list, 'Warnings', pacCook.warnings.join('; '));
-    }
-    if (pacCook.error) {
-      appendDefinition(list, 'Error', pacCook.error.message);
-    }
-
-  }
-
-  function renderCookedPacCacheMetadata(parent, cookedPacCache) {
-
-    const details = append(parent, 'details');
-    appendText(details, 'summary', 'Cooked PAC metadata');
-
-    if (!cookedPacCache.cookedPacSha256) {
-      appendText(details, 'p', 'No cooked PAC data cached.');
-      return;
-    }
-
-    const list = append(details, 'dl');
-    appendDefinition(list, 'Artifact', cookedPacCache.artifactRef);
-    appendDefinition(
-        list,
-        'Artifact present',
-        cookedPacCache.artifactRef ? 'yes' : 'no',
-    );
-    appendDefinition(list, 'Cooked PAC size', cookedPacCache.cookedPacSize);
-    appendDefinition(list, 'Cooked SHA-256', cookedPacCache.cookedPacSha256);
-    appendDefinition(list, 'Provider', cookedPacCache.providerKey);
-
-  }
-
-  function renderProxySection(parent, state, proxySnapshot) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', 'Proxy application');
-
-    const proxyControl = proxySnapshot && proxySnapshot.proxyControl ||
-      state.proxyControl;
-    const proxyApply = proxySnapshot && proxySnapshot.proxyApply ||
-      state.proxyApply;
-    const staleInfo = proxySnapshot && proxySnapshot.stale &&
-      proxySnapshot.stale.cookedPac;
-
-    const refreshButton = append(section, 'button');
-    refreshButton.type = 'button';
-    refreshButton.dataset.idleText = 'Refresh proxy control';
-    refreshButton.dataset.busyText = 'Refreshing...';
-    refreshButton.textContent = refreshButton.dataset.idleText;
-    refreshButton.onclick = async () => {
-      setButtonBusy(refreshButton, true);
-      try {
-        await rpc.callBackground('refreshProxyControl', {});
-        await refresh('Proxy control refreshed.');
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const applyButton = append(section, 'button');
-    applyButton.type = 'button';
-    applyButton.dataset.idleText = 'Apply cooked PAC';
-    applyButton.dataset.busyText = 'Applying...';
-    applyButton.textContent = applyButton.dataset.idleText;
-    applyButton.disabled = !state.cookedPacCache.cookedPacSha256 ||
-      Boolean(staleInfo && staleInfo.stale);
-    applyButton.onclick = async () => {
-      setButtonBusy(applyButton, true);
-      try {
-        const result = await rpc.callBackground('applyCookedPac', {});
-        if (result.ok === false) {
-          await refresh(`Proxy apply failed: ${result.error.message}`, true);
-          return;
-        }
-        await refresh(`Proxy apply status: ${result.status}.`);
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const clearButton = append(section, 'button');
-    clearButton.type = 'button';
-    clearButton.dataset.idleText = 'Clear proxy settings';
-    clearButton.dataset.busyText = 'Clearing...';
-    clearButton.textContent = clearButton.dataset.idleText;
-    clearButton.onclick = async () => {
-      setButtonBusy(clearButton, true);
-      try {
-        const result = await rpc.callBackground('clearProxy', {});
-        if (result.ok === false) {
-          await refresh(`Proxy clear failed: ${result.error.message}`, true);
-          return;
-        }
-        await refresh(`Proxy clear status: ${result.status}.`);
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    if (!state.cookedPacCache.cookedPacSha256) {
-      appendText(section, 'p', 'Cook PAC before applying proxy settings.', 'status');
-    }
-    if (staleInfo && staleInfo.stale) {
-      appendText(
-          section,
-          'p',
-          `Cooked PAC is stale and normal apply is disabled: ` +
-          `${staleInfo.reasons.join(', ')}.`,
-          'status error',
-      );
-    }
-
-    renderProxyControlDetails(section, proxyControl);
-    renderProxyApplyDetails(section, proxyApply);
-
-  }
-
-  function renderProxyControlDetails(parent, proxyControl) {
-
-    const list = append(parent, 'dl');
-    appendDefinition(list, 'Level of control', proxyControl.levelOfControl);
-    appendDefinition(
-        list,
-        'Can control',
-        proxyControl.canControl === true ? 'yes' : 'no',
-    );
-    appendDefinition(
-        list,
-        'Controlled by this extension',
-        proxyControl.controlledByThisExtension === true ? 'yes' : 'no',
-    );
-    appendDefinition(list, 'Last checked', formatTime(proxyControl.checkedAt));
-    if (proxyControl.rawValue) {
-      appendDefinition(
-          list,
-          'Current proxy config',
-          JSON.stringify(proxyControl.rawValue),
-      );
-    }
-    if (proxyControl.error) {
-      appendDefinition(list, 'Control error', proxyControl.error.message);
-    }
-
-  }
-
-  function renderProxyApplyDetails(parent, proxyApply) {
-
-    const list = append(parent, 'dl');
-    appendDefinition(list, 'Apply status', proxyApply.status);
-    appendDefinition(list, 'Provider', proxyApply.providerKey);
-    appendDefinition(list, 'Applied cooked SHA-256', proxyApply.cookedPacSha256);
-    appendDefinition(list, 'Applied time', formatTime(proxyApply.appliedAt));
-    appendDefinition(list, 'Cleared time', formatTime(proxyApply.clearedAt));
-    appendDefinition(list, 'Apply level of control', proxyApply.levelOfControl);
-    if (proxyApply.warnings && proxyApply.warnings.length) {
-      appendDefinition(list, 'Apply warnings', proxyApply.warnings.join('; '));
-    }
-    if (proxyApply.error) {
-      appendDefinition(list, 'Apply error', proxyApply.error.message);
-    }
-
-  }
-
-  function renderProxyAuthSection(parent, proxyAuth) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', 'Proxy authentication');
-
-    const enabledLabel = append(section, 'label');
-    const enabledInput = document.createElement('input');
-    enabledInput.type = 'checkbox';
-    enabledInput.checked = Boolean(proxyAuth && proxyAuth.enabled);
-    enabledLabel.appendChild(enabledInput);
-    enabledLabel.appendChild(document.createTextNode(' Enable proxy auth'));
-
-    const saveButton = append(section, 'button');
-    saveButton.type = 'button';
-    saveButton.dataset.idleText = 'Save proxy auth';
-    saveButton.dataset.busyText = 'Saving...';
-    saveButton.textContent = saveButton.dataset.idleText;
-    saveButton.onclick = async () => {
-      setButtonBusy(saveButton, true);
-      try {
-        await rpc.callBackground(
-            'setProxyAuthEnabled',
-            {enabled: enabledInput.checked},
-        );
-        await refresh('Proxy auth setting saved.');
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const clearButton = append(section, 'button');
-    clearButton.type = 'button';
-    clearButton.dataset.idleText = 'Clear proxy auth events';
-    clearButton.dataset.busyText = 'Clearing...';
-    clearButton.textContent = clearButton.dataset.idleText;
-    clearButton.onclick = async () => {
-      setButtonBusy(clearButton, true);
-      try {
-        await rpc.callBackground('clearProxyAuthEvents', {});
-        await refresh('Proxy auth events cleared.');
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    renderProxyAuthDetails(section, proxyAuth);
-
-  }
-
-  function renderProxyAuthDetails(parent, proxyAuth) {
-
-    const list = append(parent, 'dl');
-    appendDefinition(list, 'Enabled', proxyAuth && proxyAuth.enabled ? 'yes' : 'no');
-    appendDefinition(list, 'Status', proxyAuth && proxyAuth.status);
-    appendDefinition(list, 'Last challenge', formatTime(proxyAuth && proxyAuth.lastChallengeAt));
-    appendDefinition(list, 'Last provided', formatTime(proxyAuth && proxyAuth.lastProvidedAt));
-    appendDefinition(
-        list,
-        'Configured credentials',
-        proxyAuth && proxyAuth.configuredCredentials ?
-          proxyAuth.configuredCredentials.count :
-          0,
-    );
-    if (proxyAuth && proxyAuth.lastError) {
-      appendDefinition(list, 'Last error', proxyAuth.lastError.message);
-    }
-
-    renderProxyAuthCredentialSummary(parent, proxyAuth);
-    renderProxyAuthStats(parent, proxyAuth && proxyAuth.stats);
-    renderProxyAuthEvents(parent, proxyAuth && proxyAuth.lastEvents);
-
-  }
-
-  function renderProxyAuthCredentialSummary(parent, proxyAuth) {
-
-    appendText(parent, 'h3', 'Configured proxy credentials');
-    const proxies = proxyAuth && proxyAuth.configuredCredentials &&
-      proxyAuth.configuredCredentials.proxies || [];
-    if (!proxies.length) {
-      appendText(parent, 'p', 'No configured proxy credentials.');
-      return;
-    }
-    proxies.forEach((proxy) => {
-      const list = append(parent, 'dl');
-      appendDefinition(list, 'Type', proxy.type);
-      appendDefinition(list, 'Host', proxy.host);
-      appendDefinition(list, 'Port', proxy.port);
-      appendDefinition(list, 'Has username', proxy.hasUsername ? 'yes' : 'no');
-      appendDefinition(list, 'Has password', proxy.hasPassword ? 'yes' : 'no');
-      appendDefinition(list, 'Username', proxy.username);
-    });
-
-  }
-
-  function renderProxyAuthStats(parent, stats) {
-
-    appendText(parent, 'h3', 'Proxy auth stats');
-    const list = append(parent, 'dl');
-    appendDefinition(list, 'Challenges seen', stats && stats.challenges);
-    appendDefinition(list, 'Credentials provided', stats && stats.provided);
-    appendDefinition(list, 'Missing credentials', stats && stats.missingCredentials);
-    appendDefinition(list, 'Retry limit hits', stats && stats.retryLimit);
-    appendDefinition(
-        list,
-        'Non-proxy ignored',
-        stats && stats.nonProxyChallengesIgnored,
-    );
-
-  }
-
-  function renderProxyAuthEvents(parent, events) {
-
-    appendText(parent, 'h3', 'Proxy auth events');
-    if (!events || !events.length) {
-      appendText(parent, 'p', 'No proxy auth events.');
-      return;
-    }
-    events.slice().reverse().forEach((event) => {
-      const list = append(parent, 'dl');
-      appendDefinition(list, 'Type', event.type);
-      appendDefinition(list, 'Time', formatTime(event.at));
-      appendDefinition(list, 'Proxy challenge', event.isProxy ? 'yes' : 'no');
-      appendDefinition(list, 'Host', event.host);
-      appendDefinition(list, 'Port', event.port);
-      appendDefinition(list, 'Has credentials', event.hasCredentials ? 'yes' : 'no');
-      appendDefinition(list, 'Username', event.username);
-      appendDefinition(list, 'Message', event.message);
-    });
-
-  }
-
-  function renderPeriodicUpdateSection(parent, periodicSnapshot) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', t('optionsPeriodicUpdates'));
-    appendText(
-        section,
-        'p',
-        t('optionsPeriodicUpdatesHint'),
-        'notice',
-    );
-    appendText(
-        section,
-        'p',
-        t('optionsPeriodicAuthHint'),
-        'notice',
-    );
-
-    const periodicUpdate = periodicSnapshot && periodicSnapshot.periodicUpdate || {};
-    const form = append(section, 'form');
-    const enabledLabel = append(form, 'label');
-    const enabledInput = document.createElement('input');
-    enabledInput.type = 'checkbox';
-    enabledInput.checked = periodicUpdate.enabled === true;
-    enabledLabel.appendChild(enabledInput);
-    enabledLabel.appendChild(document.createTextNode(` ${t('optionsEnablePeriodicUpdates')}`));
-
-    appendText(form, 'p', t('popupAutoUpdateEveryHours', ['12']), 'note');
-
-    const saveButton = append(form, 'button');
-    saveButton.type = 'button';
-    saveButton.dataset.idleText = t('optionsSavePeriodicUpdates');
-    saveButton.dataset.busyText = t('optionsSaving');
-    saveButton.textContent = saveButton.dataset.idleText;
-    saveButton.onclick = async () => {
-      setButtonBusy(saveButton, true);
-      try {
-        await rpc.callBackground(
-            'setPeriodicUpdateEnabled',
-            {enabled: enabledInput.checked},
-        );
-        await refresh(t('optionsPeriodicSettingsSaved'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const runButton = append(section, 'button');
-    runButton.type = 'button';
-    runButton.dataset.idleText = t('optionsRunUpdateNow');
-    runButton.dataset.busyText = t('optionsRunning');
-    runButton.textContent = runButton.dataset.idleText;
-    runButton.onclick = async () => {
-      setButtonBusy(runButton, true);
-      try {
-        const result = await rpc.callBackground(
-            'runPeriodicUpdateNow',
-            {applyIfSafe: true},
-        );
-        if (result.ok === false && result.status !== 'skipped') {
-          await refresh(
-              t('optionsPeriodicUpdateFailed', [result.error.message]),
-              true,
-          );
-          return;
-        }
-        await refresh(t('optionsPeriodicUpdateStatus', [
-          localizeStatusValue(result.status),
-        ]));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const clearButton = append(section, 'button');
-    clearButton.type = 'button';
-    clearButton.dataset.idleText = t('optionsClearPeriodicEvents');
-    clearButton.dataset.busyText = t('popupClearing');
-    clearButton.textContent = clearButton.dataset.idleText;
-    clearButton.onclick = async () => {
-      setButtonBusy(clearButton, true);
-      try {
-        await rpc.callBackground('clearPeriodicUpdateEvents', {});
-        await refresh(t('optionsPeriodicEventsCleared'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    renderPeriodicUpdateDetails(section, periodicSnapshot);
-
-  }
-
-  function renderPeriodicUpdateDetails(parent, periodicSnapshot) {
-
-    const periodicUpdate = periodicSnapshot && periodicSnapshot.periodicUpdate || {};
-    const alarms = periodicSnapshot && periodicSnapshot.alarms || {};
-    const periodicAlarm = alarms.periodicUpdate;
-    const list = append(parent, 'dl');
-    appendDefinition(list, t('optionsEnabled'), periodicUpdate.enabled ? t('optionsYes') : t('optionsNo'));
-    appendDefinition(list, t('optionsInterval'), periodicUpdate.intervalMinutes);
-    appendDefinition(
-        list,
-        t('popupStatus'),
-        localizeStatusValue(periodicUpdate.status),
-    );
-    appendDefinition(list, t('optionsLastStarted'), formatTime(periodicUpdate.lastStartedAt));
-    appendDefinition(
-        list,
-        t('optionsLastFinished'),
-        formatTime(periodicUpdate.lastFinishedAt),
-    );
-    appendDefinition(list, t('optionsNextRun'), formatTime(periodicUpdate.nextRunAt));
-    appendDefinition(
-        list,
-        t('optionsConsecutiveFailures'),
-        periodicUpdate.consecutiveFailures,
-    );
-    appendDefinition(
-        list,
-        t('optionsAlarmScheduled'),
-        periodicAlarm ? formatTime(periodicAlarm.scheduledTime) : t('optionsNone'),
-    );
-    appendDefinition(
-        list,
-        t('optionsAlarmPeriod'),
-        periodicAlarm && periodicAlarm.periodInMinutes,
-    );
-    if (periodicUpdate.lastResult) {
-      appendDefinition(
-          list,
-          t('optionsLastResult'),
-          JSON.stringify(periodicUpdate.lastResult),
-      );
-    }
-    if (periodicUpdate.lastError) {
-      appendDefinition(list, t('optionsLastError'), periodicUpdate.lastError.message);
-    }
-    renderPeriodicUpdateEvents(parent, periodicUpdate.lastEvents);
-
-  }
-
-  function renderPeriodicUpdateEvents(parent, events) {
-
-    appendText(parent, 'h3', t('optionsPeriodicEvents'));
-    if (!events || !events.length) {
-      appendText(parent, 'p', t('optionsNoPeriodicEvents'));
-      return;
-    }
-    events.slice().reverse().forEach((event) => {
-      const list = append(parent, 'dl');
-      appendDefinition(list, t('optionsType'), event.type);
-      appendDefinition(list, t('optionsTime'), formatTime(event.at));
-      appendDefinition(list, t('optionsTrigger'), event.trigger);
-      appendDefinition(list, t('popupProvider'), event.providerKey);
-      appendDefinition(list, t('popupStatus'), event.status);
-      appendDefinition(list, t('optionsMessage'), event.message);
-      if (event.error) {
-        appendDefinition(list, t('optionsError'), event.error.message);
-      }
-    });
-
-  }
-
-  function renderLegacyMigrationSection(parent, legacyMigration, latestPlan) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', t('optionsLegacyMigration'));
-    appendText(
-        section,
-        'p',
-        t('optionsLegacyMigrationHint'),
-        'notice',
-    );
-
-    const scanButton = append(section, 'button');
-    scanButton.type = 'button';
-    scanButton.dataset.idleText = t('optionsScanLegacySettings');
-    scanButton.dataset.busyText = t('optionsScanning');
-    scanButton.textContent = scanButton.dataset.idleText;
-    scanButton.onclick = async () => {
-      setButtonBusy(scanButton, true);
-      try {
-        latestLegacyMigrationPlan = await rpc.callBackground(
-            'runLegacyMigrationAudit',
-            {includeValues: false},
-        );
-        await refresh(t('optionsLegacyAuditCompleted'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const loadButton = append(section, 'button');
-    loadButton.type = 'button';
-    loadButton.dataset.idleText = t('optionsLoadMigrationPlan');
-    loadButton.dataset.busyText = t('optionsLoading');
-    loadButton.textContent = loadButton.dataset.idleText;
-    loadButton.onclick = async () => {
-      setButtonBusy(loadButton, true);
-      try {
-        latestLegacyMigrationPlan = await rpc.callBackground(
-            'getLegacyMigrationPlan',
-            {includeValues: false},
-        );
-        await refresh(t('optionsLegacyPlanLoaded'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    const clearButton = append(section, 'button');
-    clearButton.type = 'button';
-    clearButton.dataset.idleText = t('optionsClearMigrationAudit');
-    clearButton.dataset.busyText = t('popupClearing');
-    clearButton.textContent = clearButton.dataset.idleText;
-    clearButton.onclick = async () => {
-      setButtonBusy(clearButton, true);
-      try {
-        latestLegacyMigrationPlan = null;
-        await rpc.callBackground('clearLegacyMigrationAudit', {});
-        await refresh(t('optionsLegacyAuditCleared'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-    renderLegacyMigrationStatus(section, legacyMigration);
-    if (latestPlan) {
-      renderLegacyMigrationPlan(section, latestPlan);
-      renderLegacyMigrationApplyForm(section, latestPlan);
-    }
-
-  }
-
-  function renderLegacyMigrationStatus(parent, legacyMigration) {
-
-    const state = legacyMigration || {};
-    const list = append(parent, 'dl');
-    appendDefinition(list, t('optionsAuditStatus'), state.auditStatus);
-    appendDefinition(list, t('optionsApplyStatus'), state.applyStatus);
-    appendDefinition(list, t('optionsLastAudit'), formatTime(state.lastAuditAt));
-    appendDefinition(list, t('optionsLastApply'), formatTime(state.lastApplyAt));
-    appendDefinition(
-        list,
-        t('optionsDetectedLegacyData'),
-        state.detectedLegacyData ? t('optionsYes') : t('optionsNo'),
-    );
-    if (state.lastSummary) {
-      appendDefinition(list, t('optionsInstallType'), state.lastSummary.installType);
-      appendDefinition(
-          list,
-          t('optionsChromeStorageKeys'),
-          state.lastSummary.sources.chromeStorageLocal.keysFound.join(', ') ||
-            t('optionsNone'),
-      );
-      appendDefinition(
-          list,
-          t('optionsLocalStorageKeys'),
-          state.lastSummary.sources.localStorage.keysFound.join(', ') ||
-            t('optionsNone'),
-      );
-      appendDefinition(
-          list,
-          t('optionsProposedSettings'),
-          state.lastSummary.proposedKeys.join(', ') || t('optionsNone'),
-      );
-      appendDefinition(
-          list,
-          t('optionsCannotMigrate'),
-          state.lastSummary.cannotMigrateCount,
-      );
-      appendDefinition(list, t('optionsConflicts'), state.lastSummary.conflictCount);
-      appendDefinition(list, t('optionsWarnings'), state.lastSummary.warningCount);
-    }
-    if (state.lastError) {
-      appendDefinition(list, t('optionsAuditError'), state.lastError.message);
-    }
-    if (state.appliedFields && state.appliedFields.length) {
-      appendDefinition(list, t('optionsAppliedFields'), state.appliedFields.join(', '));
-    }
-    if (state.skippedFields && state.skippedFields.length) {
-      appendDefinition(
-          list,
-          t('optionsSkippedFields'),
-          state.skippedFields.map((field) => field.field).join(', '),
-      );
-    }
-    if (state.conflicts && state.conflicts.length) {
-      appendDefinition(
-          list,
-          t('optionsApplyConflicts'),
-          state.conflicts.map((conflict) => conflict.field).join(', '),
-      );
-    }
-    if (state.lastApplySummary) {
-      appendText(parent, 'h4', t('optionsLastApplySummary'));
-      appendJsonBlock(parent, state.lastApplySummary);
-    }
-    if (state.warnings && state.warnings.length) {
-      appendDefinition(list, t('optionsAuditWarnings'), state.warnings.join('; '));
-    }
-
-  }
-
-  function renderLegacyMigrationPlan(parent, plan) {
-
-    appendText(parent, 'h3', t('optionsDryRunMigrationPlan'));
-    const sources = plan.sources || {};
-    const proposed = plan.proposedMigration || {};
-    const list = append(parent, 'dl');
-    appendDefinition(list, t('optionsDetected'), plan.detected ? t('optionsYes') : t('optionsNo'));
-    appendDefinition(list, t('optionsInstallType'), plan.installType);
-    appendDefinition(
-        list,
-        t('optionsChromeStorageChecked'),
-        sources.chromeStorageLocal && sources.chromeStorageLocal.checked ?
-          t('optionsYes') :
-          t('optionsNo'),
-    );
-    appendDefinition(
-        list,
-        t('optionsChromeStorageKeys'),
-        sources.chromeStorageLocal ?
-          sources.chromeStorageLocal.keysFound.join(', ') || t('optionsNone') :
-          t('optionsNone'),
-    );
-    appendDefinition(
-        list,
-        t('optionsLocalStorageChecked'),
-        sources.localStorage && sources.localStorage.checked ?
-          t('optionsYes') :
-          t('optionsNo'),
-    );
-    appendDefinition(
-        list,
-        t('optionsLocalStorageKeys'),
-        sources.localStorage ?
-          sources.localStorage.keysFound.join(', ') || t('optionsNone') :
-          t('optionsNone'),
-    );
-
-    appendText(parent, 'h4', t('optionsSettingsAvailableForMigration'));
-    appendJsonBlock(parent, proposed.canMigrate || {});
-    renderPlanItems(
+    const section = createPageSection(
         parent,
-        t('optionsSettingsCannotMigrateSafely'),
-        proposed.cannotMigrate,
+        'site-rules',
+        'optionsNavSiteRules',
+        'optionsSiteRulesDescription',
     );
-    renderPlanItems(parent, t('optionsConflictsWithCurrentMv3'), proposed.conflicts);
-    renderPlanItems(parent, t('optionsWarnings'), proposed.warnings);
-
-  }
-
-  function renderLegacyMigrationApplyForm(parent, plan) {
-
-    const proposed = plan.proposedMigration || {};
-    const canMigrate = proposed.canMigrate || {};
-    const section = append(parent, 'div', 'migration-apply');
-    appendText(section, 'h4', t('optionsApplySelectedLegacySettings'));
-
-    const form = append(section, 'form');
-    LEGACY_MIGRATION_FIELDS.forEach((field) => {
-      const label = append(form, 'label');
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.dataset.migrationField = field.key;
-      input.disabled = canMigrate[field.key] === null ||
-        canMigrate[field.key] === undefined;
-      input.checked = !input.disabled;
-      label.appendChild(input);
-      label.appendChild(document.createTextNode(` ${t(field.labelKey)}`));
-    });
-
-    const strategyLabel = append(form, 'label');
-    strategyLabel.appendChild(document.createTextNode(` ${t('optionsStrategy')} `));
-    const strategySelect = document.createElement('select');
-    strategySelect.name = 'migrationStrategy';
-    [
-      ['fillMissing', t('optionsFillMissingOnly')],
-      ['overwriteSelected', t('optionsOverwriteSelectedMv3')],
-    ].forEach(([value, label]) => {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = label;
-      strategySelect.appendChild(option);
-    });
-    strategyLabel.appendChild(strategySelect);
-
-    const confirmationLabel = append(form, 'label', 'confirmation');
-    const confirmationInput = document.createElement('input');
-    confirmationInput.type = 'checkbox';
-    confirmationLabel.appendChild(confirmationInput);
-    confirmationLabel.appendChild(document.createTextNode(
-        ` ${t('optionsMigrationConfirmation')}`,
-    ));
-
-    const applyButton = append(form, 'button');
-    applyButton.type = 'button';
-    applyButton.dataset.idleText = t('optionsApplySelectedMigration');
-    applyButton.dataset.busyText = t('optionsApplying');
-    applyButton.textContent = applyButton.dataset.idleText;
-    applyButton.disabled = true;
-
-    const updateApplyEnabled = () => {
-      const selectedFields = getSelectedMigrationFields(form);
-      applyButton.disabled = !confirmationInput.checked || !selectedFields.length;
-    };
-    form.addEventListener('change', updateApplyEnabled);
-    updateApplyEnabled();
-
-    applyButton.onclick = async () => {
-      const fields = getSelectedMigrationFields(form);
-      if (!confirmationInput.checked || !fields.length) {
-        return;
-      }
-      setButtonBusy(applyButton, true);
-      try {
-        const result = await rpc.callBackground('applyLegacyMigration', {
-          strategy: strategySelect.value,
-          fields,
-        });
-        if (result.ok === false) {
-          await refresh(t('optionsMigrationApplyFailed', [result.error.message]), true);
-          return;
-        }
-        await refresh(t('optionsMigrationApplyStatus', [result.status]));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-  }
-
-  function getSelectedMigrationFields(form) {
-
-    return Array.from(form.querySelectorAll('input[data-migration-field]'))
-        .filter((input) => input.checked && !input.disabled)
-        .map((input) => input.dataset.migrationField);
-
-  }
-
-  function renderPlanItems(parent, title, items) {
-
-    appendText(parent, 'h4', title);
-    if (!items || !items.length) {
-      appendText(parent, 'p', t('optionsNone'));
+    renderAddSiteRuleCard(section);
+    const listCard = append(section, 'div', 'settings-card ui-card');
+    const header = append(listCard, 'div', 'card-header');
+    appendText(header, 'h3', t('optionsNavSiteRules'));
+    const rules = getSiteRules();
+    appendText(
+        header,
+        'span',
+        formatCount(
+            rules.length,
+            'optionsOneSiteRule',
+            'optionsManySiteRules',
+        ),
+        'scope-badge',
+    );
+    if (!rules.length) {
+      const empty = append(listCard, 'div', 'empty-state');
+      appendText(empty, 'p', t('optionsNoSiteRules'), 'item-title');
+      appendText(empty, 'p', t('optionsNoSiteRulesHelp'));
       return;
     }
-    appendJsonBlock(parent, items);
-
-  }
-
-  function appendJsonBlock(parent, value) {
-
-    const pre = append(parent, 'pre');
-    pre.textContent = JSON.stringify(value, null, 2);
-
-  }
-
-  function renderNotificationSection(parent, prefs) {
-
-    const section = append(parent, 'section');
-    appendText(section, 'h2', t('optionsNotifications'));
-    const form = append(section, 'form');
-
-    Object.entries(prefs).forEach(([key, value]) => {
-      const label = append(form, 'label');
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.dataset.pref = key;
-      input.checked = value;
-      label.appendChild(input);
-      label.appendChild(document.createTextNode(` ${getNotificationPrefLabel(key)}`));
-    });
-
-    const saveButton = append(form, 'button');
-    saveButton.type = 'button';
-    saveButton.dataset.idleText = t('optionsSaveNotifications');
-    saveButton.dataset.busyText = t('optionsSaving');
-    saveButton.textContent = saveButton.dataset.idleText;
-    saveButton.onclick = async () => {
-      const nextPrefs = {};
-      form.querySelectorAll('input[data-pref]').forEach((input) => {
-        nextPrefs[input.dataset.pref] = input.checked;
-      });
-      setButtonBusy(saveButton, true);
-      try {
-        await rpc.callBackground('setNotificationPrefs', {prefs: nextPrefs});
-        await refresh(t('optionsNotificationPrefsSaved'));
-      } catch (err) {
-        await refresh(err.message, true);
-      }
-    };
-
-  }
-
-  function getNotificationPrefLabel(key) {
-
-    const labels = {
-      pacError: t('optionsNotifyPacError'),
-      extError: t('optionsNotifyExtensionError'),
-      noControl: t('optionsNotifyNoControl'),
-    };
-    return labels[key] || key;
-
-  }
-
-  function renderTorConfigEditor(parent, key, title, config) {
-
-    const fieldset = append(parent, 'fieldset', 'pac-mod-group');
-    appendText(fieldset, 'legend', title);
-    appendText(
-        fieldset,
-        'p',
-        key === 'torBrowser' ? t('optionsTorBrowserHelp') : t('optionsLocalTorHelp'),
-        'note',
+    const filter = appendField(
+        listCard,
+        'search',
+        'siteRule.filter',
+        t('optionsFilterSiteRules'),
+        '',
+        {placeholder: t('optionsFilterSiteRulesPlaceholder')},
     );
-    const enabledInput = appendCheckbox(
-        fieldset,
+    const list = append(listCard, 'div', 'settings-list');
+    rules.forEach((rule, index) =>
+      renderSiteRuleEditor(list, rule, index),
+    );
+    filter.addEventListener('input', () => {
+      const query = filter.value.trim().toLowerCase();
+      list.querySelectorAll('[data-rule-search]').forEach((row) => {
+        row.hidden = query && !row.dataset.ruleSearch.includes(query);
+      });
+    });
+    if (rules.some((rule) =>
+      rule.enabled !== false && rule.action === 'PROXY',
+    ) && getProxyCandidateCount() === 0) {
+      const warning = append(listCard, 'div', 'status-banner warning');
+      appendText(warning, 'strong', t('optionsProxyRuleNoCandidate'));
+      const button = createButton(
+          warning,
+          t('optionsGoToProxyMethods'),
+          'quiet',
+      );
+      button.onclick = () => navigateTo('proxy-methods');
+    }
+
+  }
+
+  function renderAddSiteRuleCard(parent) {
+
+    const card = append(parent, 'div', 'settings-card ui-card');
+    appendText(card, 'h3', t('optionsAddSiteRule'));
+    appendText(
+        card,
+        'p',
+        t('optionsAddSiteRuleTaskHelp'),
+        'section-description',
+    );
+    appendText(
+        card,
+        'p',
+        t('optionsSiteLimitationsHelp'),
+        'technical-note',
+    );
+    const form = append(card, 'form', 'field-grid');
+    form.onsubmit = (event) => event.preventDefault();
+    const pattern = appendField(
+        form,
+        'text',
+        'siteRule.pattern',
+        t('optionsSiteOrDomain'),
+        '',
+        {
+          help: t('optionsSiteScopeHelp'),
+          placeholder: 'example.com or *.example.com',
+          required: true,
+        },
+    );
+    const route = appendSelect(
+        form,
+        'siteRule.action',
+        t('optionsRoute'),
+        [
+          ['PROXY', t('optionsProxyThisSite')],
+          ['DIRECT', t('optionsOpenDirectly')],
+        ],
+        'PROXY',
+        {help: t('optionsSiteRouteHelp')},
+    );
+    appendField(
+        form,
+        'text',
+        'siteRule.note',
+        t('optionsNote'),
+        '',
+        {full: true, placeholder: t('optionsOptional')},
+    );
+    const preview = appendText(
+        form,
+        'p',
+        t('optionsNormalizedScopePending'),
+        'field-help full',
+    );
+    pattern.addEventListener('input', () => {
+      try {
+        preview.textContent = t('optionsNormalizedScopePreview', [
+          normalizeSiteRuleInput(pattern.value),
+        ]);
+      } catch (error) {
+        preview.textContent = t('optionsNormalizedScopePending');
+      }
+    });
+    const actions = append(form, 'div', 'action-row full');
+    const addButton = createButton(
+        actions,
+        t('optionsAddRule'),
+        'primary',
+        t('optionsAdding'),
+    );
+    addButton.onclick = () => addSiteRule(
+        form,
+        pattern,
+        route,
+        addButton,
+    );
+    bindDraftForm(form, 'site-rule:add', {usesPacMods: true});
+    renderDraftConflict(form, 'site-rule:add');
+
+  }
+
+  async function addSiteRule(form, patternInput, routeInput, button) {
+
+    clearValidation(form);
+    let pattern;
+    try {
+      pattern = normalizeSiteRuleInput(patternInput.value);
+    } catch (error) {
+      showFieldError(
+          patternInput,
+          error.message === 'EMPTY_SITE' ?
+            t('optionsEnterSite') :
+            t('optionsEnterValidSite'),
+      );
+      patternInput.focus();
+      setMessage(t('optionsValidationFailed'), 'error');
+      return;
+    }
+    if (getSiteRules().some((rule) =>
+      String(rule.pattern || '').toLowerCase() === pattern,
+    )) {
+      showFieldError(patternInput, t('optionsDuplicateSiteRule'));
+      patternInput.focus();
+      setMessage(t('optionsValidationFailed'), 'error');
+      return;
+    }
+    const note = form.querySelector('[name="siteRule.note"]');
+    const rules = getSiteRules().concat({
+      pattern,
+      action: routeInput.value,
+      enabled: true,
+      note: note.value.trim(),
+    });
+    const result = await savePacMods(
+        'site-rule:add',
+        button,
+        createPacModsPatch({exceptions: rules}),
+        () => addSiteRule(form, patternInput, routeInput, button),
+    );
+    if (result) {
+      state.drafts.delete('site-rule:add');
+      await refresh({
+        message: t('optionsRuleSavedApplyRequired'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  function renderSiteRuleEditor(parent, rule, index) {
+
+    const key = `site-rule:${index}:${rule.pattern}`;
+    const disclosure = createDetails(
+        parent,
+        key,
+        rule.pattern,
+    );
+    disclosure.details.dataset.ruleSearch = [
+      rule.pattern,
+      rule.note || '',
+      rule.action,
+    ].join(' ').toLowerCase();
+    const meta = append(disclosure.content, 'div', 'item-header');
+    appendText(
+        meta,
+        'span',
+        rule.pattern.startsWith('*.') ?
+          t('optionsDomainScope') :
+          t('optionsExactHostScope'),
+        'scope-badge',
+    );
+    appendText(
+        meta,
+        'span',
+        rule.action === 'PROXY' ?
+          t('optionsProxyThisSite') :
+          t('optionsOpenDirectly'),
+        rule.action === 'PROXY' ? 'ui-pill warning' : 'ui-pill',
+    );
+    const form = append(disclosure.content, 'form', 'field-grid');
+    form.onsubmit = (event) => event.preventDefault();
+    const pattern = appendField(
+        form,
+        'text',
+        `${key}.pattern`,
+        t('optionsNormalizedScope'),
+        rule.pattern,
+        {help: t('optionsSiteScopeHelp'), required: true},
+    );
+    const route = appendSelect(
+        form,
+        `${key}.action`,
+        t('optionsRoute'),
+        [
+          ['PROXY', t('optionsProxyThisSite')],
+          ['DIRECT', t('optionsOpenDirectly')],
+          ['AUTO', t('popupAutoMode')],
+        ],
+        rule.action,
+        {help: t('optionsAutoRemovesRuleHelp')},
+    );
+    const note = appendField(
+        form,
+        'text',
+        `${key}.note`,
+        t('optionsNote'),
+        rule.note || '',
+        {full: true},
+    );
+    const enabled = appendCheckbox(
+        form,
         `${key}.enabled`,
         t('optionsEnabled'),
-        config && config.enabled,
-        key === 'torBrowser' ? t('optionsTorBrowserHelp') : t('optionsLocalTorHelp'),
+        rule.enabled !== false,
+        t('optionsDisabledRuleHelp'),
+        'full',
     );
-    enabledInput.onchange = () => enforceTorModeInputs(parent, key, enabledInput);
-    appendSelect(
-        fieldset,
-        `${key}.type`,
-        t('optionsType'),
-        ['SOCKS5', 'SOCKS4', 'PROXY', 'HTTPS'],
-        config && config.type || 'SOCKS5',
+    const actions = append(form, 'div', 'rule-actions full');
+    const save = createButton(
+        actions,
+        t('optionsSaveRule'),
+        'primary',
+        t('optionsSaving'),
     );
-    appendTextInput(
-        fieldset,
-        `${key}.host`,
-        t('optionsHost'),
-        config && config.host || '127.0.0.1',
+    save.onclick = () => updateSiteRule({
+      form,
+      draftKey: key,
+      index,
+      pattern,
+      route,
+      note,
+      enabled,
+      button: save,
+    });
+    const remove = createButton(
+        actions,
+        t('optionsRemoveRule'),
+        'danger quiet',
+        t('optionsDeleting'),
     );
-    appendNumberInput(
-        fieldset,
-        `${key}.port`,
-        t('optionsPort'),
-        config && config.port || (key === 'torBrowser' ? 9150 : 9050),
+    remove.onclick = () => removeSiteRule(rule, index, key, remove);
+    bindDraftForm(form, key, {usesPacMods: true});
+    renderDraftConflict(form, key);
+
+  }
+
+  async function updateSiteRule(options) {
+
+    clearValidation(options.form);
+    let pattern;
+    try {
+      pattern = normalizeSiteRuleInput(options.pattern.value);
+    } catch (error) {
+      showFieldError(options.pattern, t('optionsEnterValidSite'));
+      options.pattern.focus();
+      return;
+    }
+    const rules = getSiteRules().slice();
+    if (!rules[options.index]) {
+      setMessage(t('optionsConflictError'), 'error');
+      return;
+    }
+    if (rules.some((rule, index) =>
+      index !== options.index &&
+      String(rule.pattern || '').toLowerCase() === pattern,
+    )) {
+      showFieldError(options.pattern, t('optionsDuplicateSiteRule'));
+      options.pattern.focus();
+      return;
+    }
+    if (options.route.value === 'AUTO') {
+      rules.splice(options.index, 1);
+    } else {
+      rules[options.index] = {
+        pattern,
+        action: options.route.value,
+        enabled: options.enabled.checked,
+        note: options.note.value.trim(),
+      };
+    }
+    const result = await savePacMods(
+        options.draftKey,
+        options.button,
+        createPacModsPatch({exceptions: rules}),
+        () => updateSiteRule(options),
     );
-    appendCheckbox(
-        fieldset,
-        `${key}.useForOnion`,
-        t('optionsUseForOnion'),
-        !config || config.useForOnion !== false,
+    if (result) {
+      state.drafts.delete(options.draftKey);
+      await refresh({
+        message: t('optionsRuleSavedApplyRequired'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  async function removeSiteRule(rule, index, draftKey, button) {
+
+    if (!window.confirm(t('optionsConfirmRemoveRule', [rule.pattern]))) {
+      return;
+    }
+    const rules = getSiteRules().slice();
+    if (!rules[index]) {
+      setMessage(t('optionsConflictError'), 'error');
+      return;
+    }
+    rules.splice(index, 1);
+    const result = await savePacMods(
+        draftKey,
+        button,
+        createPacModsPatch({exceptions: rules}),
     );
-    appendCheckbox(
-        fieldset,
-        `${key}.useAsDirectReplacement`,
-        t('optionsUseAsDirectReplacement'),
-        config && config.useAsDirectReplacement,
+    if (result) {
+      state.drafts.delete(draftKey);
+      await refresh({
+        message: t('optionsRuleRemovedApplyRequired'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  async function savePacMods(draftKey, button, pacMods, retry) {
+
+    return runOperation(
+        `save:${draftKey}`,
+        button,
+        () => rpc.callBackground('setPacMods', {pacMods}),
+        {
+          context: 'validation',
+          draftKey,
+          retry,
+        },
     );
 
   }
 
-  function renderPacProxyModeEditor(parent, pacMods) {
+  function getProxyCandidateCount(pacMods = state.snapshot.state.pacMods) {
 
-    const fieldset = append(parent, 'fieldset', 'pac-mod-group');
-    appendText(fieldset, 'legend', t('optionsPacProxyMode'));
-    appendText(fieldset, 'p', t('optionsPacProxyModeHelp'), 'note');
+    const own = Array.isArray(pacMods.ownProxies) ?
+      pacMods.ownProxies.filter((proxy) =>
+        proxy && proxy.enabled !== false && proxy.host && proxy.port,
+      ).length :
+      0;
+    const localTor = isObject(pacMods.localTor) &&
+      pacMods.localTor.enabled === true ? 1 : 0;
+    const torBrowser = isObject(pacMods.torBrowser) &&
+      pacMods.torBrowser.enabled === true ? 1 : 0;
+    const warp = isObject(pacMods.warp) &&
+      pacMods.warp.enabled === true &&
+      String(pacMods.warp.proxyString || '').trim() ? 1 : 0;
+    return own + localTor + torBrowser + warp;
+
+  }
+
+  function renderProxyMethodsSection(parent) {
+
+    const section = createPageSection(
+        parent,
+        'proxy-methods',
+        'optionsNavProxyMethods',
+        'optionsProxyMethodsDescription',
+    );
+    const pacMods = state.snapshot.state.pacMods;
+    const summary = append(section, 'div', 'settings-card ui-card compact');
+    const summaryHeader = append(summary, 'div', 'card-header');
+    appendText(summaryHeader, 'h3', t('optionsProxyMethodAvailability'));
+    appendText(
+        summaryHeader,
+        'span',
+        formatCount(
+            getProxyCandidateCount(pacMods),
+            'optionsOneProxyMethod',
+            'optionsManyProxyMethods',
+        ),
+        getProxyCandidateCount(pacMods) ? 'ui-pill success' : 'ui-pill warning',
+    );
+    appendText(
+        summary,
+        'p',
+        t('optionsProxyHealthAuthSeparateHelp'),
+        'section-description',
+    );
+    const card = append(section, 'div', 'settings-card ui-card');
+    const form = append(card, 'form');
+    form.onsubmit = (event) => event.preventDefault();
+    renderProxyPolicy(form, pacMods);
+    const methods = append(form, 'div', 'method-grid');
+    renderTorMethod(
+        methods,
+        'localTor',
+        t('popupLocalTor'),
+        pacMods.localTor || {},
+        9050,
+    );
+    renderTorMethod(
+        methods,
+        'torBrowser',
+        t('popupTorBrowser'),
+        pacMods.torBrowser || {},
+        9150,
+    );
+    renderWarpMethod(methods, pacMods.warp || {});
+    renderOwnProxyMethods(form, pacMods.ownProxies || []);
+    const actions = append(form, 'div', 'split-actions');
+    const save = createButton(
+        actions,
+        t('optionsSaveProxySettings'),
+        'primary',
+        t('optionsSaving'),
+    );
+    save.onclick = () => saveProxyMethods(form, pacMods, save);
+    const discard = createButton(
+        actions,
+        t('optionsDiscardAllChanges'),
+        'quiet',
+    );
+    discard.onclick = () => confirmDiscardAll();
+    bindDraftForm(form, 'proxy-methods', {usesPacMods: true});
+    renderDraftConflict(form, 'proxy-methods');
+
+  }
+
+  function renderProxyPolicy(parent, pacMods) {
+
+    const group = append(parent, 'div', 'editor-panel');
+    appendText(group, 'h3', t('optionsProxyMethodPolicy'));
     appendCheckbox(
-        fieldset,
+        group,
         'usePacScriptProxies',
         t('popupUsePacScriptProxies'),
         pacMods.usePacScriptProxies !== false,
         t('popupUsePacScriptProxiesHelp'),
     );
     appendCheckbox(
-        fieldset,
+        group,
         'ownProxiesOnlyForOwnSites',
         t('popupOwnProxiesOnlyForOwnSites'),
         pacMods.ownProxiesOnlyForOwnSites === true,
@@ -2359,211 +2320,133 @@
 
   }
 
-  function renderWarpEditor(parent, warp) {
+  function renderTorMethod(parent, key, title, config, defaultPort) {
 
-    const fieldset = append(parent, 'fieldset', 'pac-mod-group');
-    appendText(fieldset, 'legend', t('popupWarpCustomProxy'));
-    appendCheckbox(fieldset, 'warp.enabled', t('optionsEnabled'), warp && warp.enabled);
-    appendTextInput(
-        fieldset,
+    const card = append(parent, 'fieldset', 'method-card');
+    appendText(card, 'legend', title, 'item-title');
+    const enabled = appendCheckbox(
+        card,
+        `${key}.enabled`,
+        t('optionsEnabled'),
+        config.enabled === true,
+        key === 'torBrowser' ?
+          t('optionsTorBrowserHelp') :
+          t('optionsLocalTorHelp'),
+    );
+    enabled.onchange = () => {
+      if (!enabled.checked) {
+        return;
+      }
+      const otherName = key === 'localTor' ?
+        'torBrowser.enabled' :
+        'localTor.enabled';
+      const other = parent.querySelector(`[name="${otherName}"]`);
+      if (other) {
+        other.checked = false;
+      }
+    };
+    appendSelect(
+        card,
+        `${key}.type`,
+        t('optionsType'),
+        ['SOCKS5', 'SOCKS4', 'PROXY', 'HTTPS'],
+        config.type || 'SOCKS5',
+        {full: true},
+    );
+    appendField(
+        card,
+        'text',
+        `${key}.host`,
+        t('optionsHost'),
+        config.host || '127.0.0.1',
+        {full: true},
+    );
+    appendField(
+        card,
+        'number',
+        `${key}.port`,
+        t('optionsPort'),
+        config.port || defaultPort,
+        {full: true, min: 1, max: 65535},
+    );
+    appendCheckbox(
+        card,
+        `${key}.useForOnion`,
+        t('optionsUseForOnion'),
+        config.useForOnion !== false,
+        '',
+    );
+    appendCheckbox(
+        card,
+        `${key}.useAsDirectReplacement`,
+        t('optionsUseAsDirectReplacement'),
+        config.useAsDirectReplacement === true,
+        t('optionsDirectReplacementHelp'),
+    );
+
+  }
+
+  function renderWarpMethod(parent, warp) {
+
+    const card = append(parent, 'fieldset', 'method-card');
+    appendText(card, 'legend', t('popupWarpCustomProxy'), 'item-title');
+    appendCheckbox(
+        card,
+        'warp.enabled',
+        t('optionsEnabled'),
+        warp.enabled === true,
+        t('optionsWarpLocalProxyWarning'),
+    );
+    appendField(
+        card,
+        'text',
         'warp.proxyString',
         t('optionsProxyString'),
-        warp && warp.proxyString ||
+        warp.proxyString ||
           'SOCKS5 127.0.0.1:40000; HTTPS 127.0.0.1:40000',
+        {full: true, help: t('optionsProxyStringHelp')},
     );
     appendCheckbox(
-        fieldset,
+        card,
         'warp.useAsDirectReplacement',
         t('optionsUseAsDirectReplacement'),
-        warp && warp.useAsDirectReplacement,
+        warp.useAsDirectReplacement === true,
+        t('optionsDirectReplacementHelp'),
     );
 
   }
 
-  function renderOwnProxyEditor(parent, ownProxies) {
+  function renderOwnProxyMethods(parent, proxies) {
 
-    const fieldset = append(parent, 'fieldset', 'pac-mod-group');
-    appendText(fieldset, 'legend', t('popupOwnProxies'));
-    const rows = append(fieldset, 'div');
-    const entries = ownProxies.length ? ownProxies : [createEmptyProxy()];
-    entries.forEach((proxy) => renderOwnProxyRow(rows, proxy));
-    const addButton = append(fieldset, 'button');
-    addButton.type = 'button';
-    addButton.textContent = t('optionsAddProxyRow');
-    addButton.onclick = () => renderOwnProxyRow(rows, createEmptyProxy());
-
-  }
-
-  function renderOwnProxyRow(parent, proxy) {
-
-    const row = append(parent, 'div', 'proxy-row');
-    row.mv3CredentialRef = proxy.credentialRef ?
-      clone(proxy.credentialRef) :
-      null;
-    appendCheckbox(row, 'proxy.enabled', t('optionsEnabled'), proxy.enabled !== false);
-    appendSelect(
-        row,
-        'proxy.type',
-        t('optionsType'),
-        ['PROXY', 'HTTPS', 'SOCKS4', 'SOCKS5'],
-        proxy.type || 'PROXY',
+    const section = append(parent, 'fieldset', 'editor-panel');
+    appendText(section, 'legend', t('popupOwnProxies'), 'item-title');
+    appendText(
+        section,
+        'p',
+        t('optionsOwnProxyEditorHelp'),
+        'section-description',
     );
-    appendTextInput(row, 'proxy.host', t('optionsHost'), proxy.host || '');
-    appendNumberInput(row, 'proxy.port', t('optionsPort'), proxy.port || 8080);
-    appendTextInput(row, 'proxy.username', t('optionsUsername'), proxy.username || '');
-    appendTextInput(
-        row,
-        'proxy.password',
-        t('optionsPassword'),
-        proxy.hasPassword ? REDACTED_PASSWORD : '',
+    const rows = append(section, 'div', 'own-proxy-rows');
+    proxies.forEach((proxy) => renderOwnProxyRow(rows, proxy));
+    if (!proxies.length) {
+      const empty = append(rows, 'div', 'empty-state proxy-empty-state');
+      appendText(empty, 'p', t('optionsNoOwnProxies'), 'item-title');
+      appendText(empty, 'p', t('optionsNoOwnProxiesHelp'));
+    }
+    const add = createButton(
+        section,
+        t('optionsAddProxyRow'),
+        '',
     );
-    appendCheckbox(
-        row,
-        'proxy.useAsDirectReplacement',
-        t('optionsDirectReplacement'),
-        proxy.useAsDirectReplacement,
-    );
-    appendTextInput(row, 'proxy.note', t('optionsNote'), proxy.note || '');
-    const removeButton = append(row, 'button');
-    removeButton.type = 'button';
-    removeButton.textContent = t('optionsRemove');
-    removeButton.onclick = () => row.remove();
-
-  }
-
-  function renderPatternListEditor(parent, key, title, entries, ifRules) {
-
-    const fieldset = append(parent, 'fieldset', 'pac-mod-group');
-    appendText(fieldset, 'legend', title);
-    const rows = append(fieldset, 'div');
-    const normalizedEntries = entries.length ? entries : [createEmptyPattern()];
-    normalizedEntries.forEach((entry) => {
-      renderPatternRow(rows, key, entry);
-    });
-    const addButton = append(fieldset, 'button');
-    addButton.type = 'button';
-    addButton.textContent = ifRules ? t('optionsAddExceptionRule') : t('optionsAddWhitelistRow');
-    addButton.onclick = () => {
-      renderPatternRow(rows, key, createEmptyPattern());
+    add.onclick = () => {
+      const empty = rows.querySelector('.proxy-empty-state');
+      if (empty) {
+        empty.remove();
+      }
+      renderOwnProxyRow(rows, createEmptyProxy());
+      updateOwnProxyOrderButtons(rows);
+      markDraftDirty(parent);
     };
-
-  }
-
-  function renderPatternRow(parent, key, entry) {
-
-    const row = append(parent, 'div', 'rule-row');
-    appendCheckbox(row, `${key}.enabled`, t('optionsEnabled'), entry.enabled !== false);
-    appendTextInput(row, `${key}.pattern`, t('optionsPattern'), entry.pattern || '');
-    appendTextInput(row, `${key}.note`, t('optionsNote'), entry.note || '');
-    const removeButton = append(row, 'button');
-    removeButton.type = 'button';
-    removeButton.textContent = t('optionsRemove');
-    removeButton.onclick = () => row.remove();
-
-  }
-
-  function renderPacPolicyEditor(parent, pacMods) {
-
-    const fieldset = append(parent, 'fieldset', 'pac-mod-group');
-    appendText(fieldset, 'legend', t('optionsDirectPolicy'));
-    appendCheckbox(
-        fieldset,
-        'replaceDirectWithProxy',
-        t('optionsReplaceDirectWithProxy'),
-        pacMods.replaceDirectWithProxy,
-    );
-    appendCheckbox(
-        fieldset,
-        'noDirect',
-        t('optionsRemoveDirectFallbacks'),
-        pacMods.noDirect,
-    );
-
-  }
-
-  function enforceTorModeInputs(rootNode, key, input) {
-
-    if (!input.checked) {
-      return;
-    }
-    const otherName = key === 'localTor' ?
-      'torBrowser.enabled' :
-      'localTor.enabled';
-    const other = rootNode.querySelector(`[name="${otherName}"]`);
-    if (other) {
-      other.checked = false;
-    }
-
-  }
-
-  function appendCheckbox(parent, name, labelText, checked, title) {
-
-    const label = append(parent, 'label');
-    if (title) {
-      label.title = title;
-    }
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.name = name;
-    input.checked = checked === true;
-    if (title) {
-      input.title = title;
-    }
-    label.appendChild(input);
-    label.appendChild(document.createTextNode(` ${labelText}`));
-    return input;
-
-  }
-
-  function appendTextInput(parent, name, labelText, value) {
-
-    const label = append(parent, 'label');
-    label.appendChild(document.createTextNode(`${labelText} `));
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.name = name;
-    input.value = value === undefined || value === null ? '' : String(value);
-    label.appendChild(input);
-    return input;
-
-  }
-
-  function appendTextareaInput(parent, name, labelText, value) {
-
-    const label = append(parent, 'label', 'textarea-field');
-    appendText(label, 'span', labelText);
-    const textarea = append(label, 'textarea');
-    textarea.name = name;
-    textarea.value = value === undefined || value === null ? '' : String(value);
-    return textarea;
-
-  }
-
-  function appendNumberInput(parent, name, labelText, value) {
-
-    const input = appendTextInput(parent, name, labelText, value);
-    input.type = 'number';
-    input.min = '1';
-    input.max = '65535';
-    return input;
-
-  }
-
-  function appendSelect(parent, name, labelText, options, value) {
-
-    const label = append(parent, 'label');
-    label.appendChild(document.createTextNode(`${labelText} `));
-    const select = document.createElement('select');
-    select.name = name;
-    options.forEach((optionValue) => {
-      const option = document.createElement('option');
-      option.value = optionValue;
-      option.textContent = optionValue;
-      option.selected = optionValue === value;
-      select.appendChild(option);
-    });
-    label.appendChild(select);
-    return select;
 
   }
 
@@ -2575,57 +2458,173 @@
       host: '',
       port: 8080,
       username: '',
-      password: '',
+      hasPassword: false,
       useAsDirectReplacement: false,
       note: '',
     };
 
   }
 
-  function createEmptyPattern() {
+  function renderOwnProxyRow(parent, proxy) {
 
-    return {
-      pattern: '',
-      enabled: true,
-      note: '',
+    const row = append(parent, 'div', 'proxy-row');
+    row.mv3CredentialRef = proxy.credentialRef ?
+      clone(proxy.credentialRef) :
+      null;
+    row.mv3HasPassword = proxy.hasPassword === true;
+    appendCheckbox(
+        row,
+        'proxy.enabled',
+        t('optionsEnabled'),
+        proxy.enabled !== false,
+        '',
+        'full',
+    );
+    appendSelect(
+        row,
+        'proxy.type',
+        t('optionsType'),
+        ['PROXY', 'HTTPS', 'SOCKS4', 'SOCKS5'],
+        proxy.type || 'PROXY',
+    );
+    appendField(
+        row,
+        'text',
+        'proxy.host',
+        t('optionsHost'),
+        proxy.host || '',
+        {required: true},
+    );
+    appendField(
+        row,
+        'number',
+        'proxy.port',
+        t('optionsPort'),
+        proxy.port || 8080,
+        {min: 1, max: 65535, required: true},
+    );
+    appendField(
+        row,
+        'text',
+        'proxy.username',
+        t('optionsUsername'),
+        proxy.username || '',
+        {autocomplete: 'username'},
+    );
+    const passwordMode = appendSelect(
+        row,
+        'proxy.passwordMode',
+        t('optionsPasswordAction'),
+        proxy.hasPassword ? [
+          ['preserve', t('optionsKeepSavedPassword')],
+          ['replace', t('optionsReplacePassword')],
+          ['remove', t('optionsRemovePassword')],
+        ] : [
+          ['none', t('optionsNoPassword')],
+          ['replace', t('optionsSetPassword')],
+        ],
+        proxy.hasPassword ? 'preserve' : 'none',
+        {help: t('optionsPasswordIntentHelp')},
+    );
+    const password = appendField(
+        row,
+        'password',
+        'proxy.password',
+        t('optionsNewPassword'),
+        '',
+        {
+          autocomplete: 'new-password',
+          help: t('optionsPasswordNotShownHelp'),
+        },
+    );
+    password.disabled = passwordMode.value !== 'replace';
+    passwordMode.onchange = () => {
+      password.disabled = passwordMode.value !== 'replace';
+      if (password.disabled) {
+        password.value = '';
+      }
     };
+    appendCheckbox(
+        row,
+        'proxy.useAsDirectReplacement',
+        t('optionsDirectReplacement'),
+        proxy.useAsDirectReplacement === true,
+        t('optionsDirectReplacementHelp'),
+        'full',
+    );
+    appendField(
+        row,
+        'text',
+        'proxy.note',
+        t('optionsNote'),
+        proxy.note || '',
+        {full: true},
+    );
+    const actions = append(row, 'div', 'rule-actions full');
+    const moveUp = createButton(
+        actions,
+        t('optionsMoveUp'),
+        'quiet',
+    );
+    moveUp.dataset.proxyMove = 'up';
+    moveUp.onclick = () => moveOwnProxyRow(parent, row, -1);
+    const moveDown = createButton(
+        actions,
+        t('optionsMoveDown'),
+        'quiet',
+    );
+    moveDown.dataset.proxyMove = 'down';
+    moveDown.onclick = () => moveOwnProxyRow(parent, row, 1);
+    const remove = createButton(
+        actions,
+        t('optionsRemove'),
+        'danger quiet row-remove',
+    );
+    remove.onclick = () => {
+      row.remove();
+      updateOwnProxyOrderButtons(parent);
+      const form = parent.closest('form');
+      if (form) {
+        markDraftDirty(form);
+      }
+    };
+    updateOwnProxyOrderButtons(parent);
 
   }
 
-  function collectLocalProxyPacMods(form, originalPacMods) {
+  function moveOwnProxyRow(parent, row, offset) {
 
-    const localTor = collectTorConfig(form, 'localTor');
-    const torBrowser = collectTorConfig(form, 'torBrowser');
-    if (localTor.enabled && torBrowser.enabled) {
-      localTor.enabled = false;
+    const rows = Array.from(parent.querySelectorAll('.proxy-row'));
+    const index = rows.indexOf(row);
+    const target = rows[index + offset];
+    if (!target) {
+      return;
     }
-    return createPacModsPatch(originalPacMods, {
-      localTor,
-      torBrowser,
-      usePacScriptProxies: getChecked(form, 'usePacScriptProxies'),
-      ownProxiesOnlyForOwnSites: getChecked(
-          form,
-          'ownProxiesOnlyForOwnSites',
-      ),
-      warp: {
-        enabled: getChecked(form, 'warp.enabled'),
-        proxyString: getValue(form, 'warp.proxyString'),
-        useAsDirectReplacement: getChecked(
-            form,
-            'warp.useAsDirectReplacement',
-        ),
-      },
-      ownProxies: collectOwnProxyRows(form),
-    });
+    if (offset < 0) {
+      parent.insertBefore(row, target);
+    } else {
+      parent.insertBefore(target, row);
+    }
+    updateOwnProxyOrderButtons(parent);
+    const form = parent.closest('form');
+    if (form) {
+      markDraftDirty(form);
+    }
 
   }
 
-  function collectAdvancedPacRules(form, originalPacMods) {
+  function updateOwnProxyOrderButtons(parent) {
 
-    return createPacModsPatch(originalPacMods, {
-      whitelist: collectPatternRows(form, 'whitelist'),
-      replaceDirectWithProxy: getChecked(form, 'replaceDirectWithProxy'),
-      noDirect: getChecked(form, 'noDirect'),
+    const rows = Array.from(parent.querySelectorAll('.proxy-row'));
+    rows.forEach((row, index) => {
+      const up = row.querySelector('[data-proxy-move="up"]');
+      const down = row.querySelector('[data-proxy-move="down"]');
+      if (up) {
+        up.disabled = index === 0;
+      }
+      if (down) {
+        down.disabled = index === rows.length - 1;
+      }
     });
 
   }
@@ -2650,25 +2649,27 @@
 
     return Array.from(form.querySelectorAll('.proxy-row'))
         .map((row) => {
+          const passwordMode = getValue(row, 'proxy.passwordMode');
           const proxy = {
             enabled: getChecked(row, 'proxy.enabled'),
             type: getValue(row, 'proxy.type'),
             host: getValue(row, 'proxy.host'),
             port: Number(getValue(row, 'proxy.port')),
             username: getValue(row, 'proxy.username'),
-            password: getValue(row, 'proxy.password'),
             useAsDirectReplacement: getChecked(
                 row,
                 'proxy.useAsDirectReplacement',
             ),
             note: getValue(row, 'proxy.note'),
           };
-          if (
-            row.mv3CredentialRef &&
-            proxy.password === REDACTED_PASSWORD
-          ) {
-            proxy.credentialRef = clone(row.mv3CredentialRef);
+          if (passwordMode === 'preserve' && row.mv3CredentialRef) {
+            proxy.password = REDACTED_PASSWORD;
             proxy.hasPassword = true;
+            proxy.credentialRef = clone(row.mv3CredentialRef);
+          } else {
+            proxy.password = passwordMode === 'replace' ?
+              getRawValue(row, 'proxy.password') :
+              '';
           }
           return proxy;
         })
@@ -2676,68 +2677,1283 @@
 
   }
 
-  function collectPatternRows(form, key) {
+  function validateProxyMethods(form) {
+
+    clearValidation(form);
+    let firstInvalid = null;
+    form.querySelectorAll('.proxy-row').forEach((row) => {
+      const host = row.querySelector('[name="proxy.host"]');
+      const port = row.querySelector('[name="proxy.port"]');
+      const passwordMode = row.querySelector(
+          '[name="proxy.passwordMode"]',
+      );
+      const password = row.querySelector('[name="proxy.password"]');
+      const type = row.querySelector('[name="proxy.type"]');
+      if (!host.value.trim()) {
+        showFieldError(host, t('optionsProxyHostRequired'));
+        firstInvalid = firstInvalid || host;
+      }
+      const portValue = Number(port.value);
+      if (!Number.isInteger(portValue) || portValue < 1 || portValue > 65535) {
+        showFieldError(port, t('optionsProxyPortInvalid'));
+        firstInvalid = firstInvalid || port;
+      }
+      if (passwordMode.value === 'replace' && !password.value) {
+        showFieldError(password, t('optionsPasswordRequiredForReplace'));
+        firstInvalid = firstInvalid || password;
+      }
+      const ref = row.mv3CredentialRef;
+      const endpointChanged = ref && (
+        ref.type !== type.value ||
+        ref.host.toLowerCase() !== host.value.trim().toLowerCase() ||
+        ref.port !== portValue
+      );
+      if (passwordMode.value === 'preserve' && endpointChanged) {
+        showFieldError(
+            passwordMode,
+            t('optionsPasswordEndpointChanged'),
+        );
+        firstInvalid = firstInvalid || passwordMode;
+      }
+    });
+    if (firstInvalid) {
+      firstInvalid.focus();
+      return false;
+    }
+    return true;
+
+  }
+
+  async function saveProxyMethods(form, originalPacMods, button) {
+
+    if (!validateProxyMethods(form)) {
+      setMessage(t('optionsValidationFailed'), 'error');
+      return;
+    }
+    let localTor = collectTorConfig(form, 'localTor');
+    const torBrowser = collectTorConfig(form, 'torBrowser');
+    if (localTor.enabled && torBrowser.enabled) {
+      localTor = Object.assign({}, localTor, {enabled: false});
+    }
+    const pacMods = Object.assign({}, clone(originalPacMods), {
+      localTor,
+      torBrowser,
+      usePacScriptProxies: getChecked(form, 'usePacScriptProxies'),
+      ownProxiesOnlyForOwnSites: getChecked(
+          form,
+          'ownProxiesOnlyForOwnSites',
+      ),
+      warp: {
+        enabled: getChecked(form, 'warp.enabled'),
+        proxyString: getValue(form, 'warp.proxyString'),
+        useAsDirectReplacement: getChecked(
+            form,
+            'warp.useAsDirectReplacement',
+        ),
+      },
+      ownProxies: collectOwnProxyRows(form),
+    });
+    const result = await savePacMods(
+        'proxy-methods',
+        button,
+        pacMods,
+        () => saveProxyMethods(form, originalPacMods, button),
+    );
+    if (result) {
+      markDraftClean('proxy-methods', form);
+      await refresh({
+        message: t('optionsProxyMethodsSavedApplyRequired'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  function getValue(parent, name) {
+
+    const input = parent.querySelector(`[name="${name}"]`);
+    return input ? String(input.value || '').trim() : '';
+
+  }
+
+  function getRawValue(parent, name) {
+
+    const input = parent.querySelector(`[name="${name}"]`);
+    return input ? String(input.value || '') : '';
+
+  }
+
+  function getChecked(parent, name) {
+
+    const input = parent.querySelector(`[name="${name}"]`);
+    return Boolean(input && input.checked);
+
+  }
+
+  function renderUpdatesHealthSection(parent) {
+
+    const section = createPageSection(
+        parent,
+        'updates-health',
+        'optionsNavUpdatesHealth',
+        'optionsUpdatesHealthDescription',
+    );
+    const reliability = state.snapshot.reliability || {};
+    const autoUpdate = reliability.autoUpdate || {};
+    const health = reliability.proxyHealth || {};
+    const settings = append(section, 'div', 'settings-card ui-card');
+    appendText(settings, 'h3', t('optionsAutomaticUpdates'));
+    const form = append(settings, 'form');
+    form.onsubmit = (event) => event.preventDefault();
+    const enabled = appendCheckbox(
+        form,
+        'updates.enabled',
+        t('optionsAutoUpdateEveryTwelveHours'),
+        autoUpdate.enabled === true,
+        t('optionsAutoUpdateSafetyHelp'),
+    );
+    const grid = append(form, 'div', 'summary-grid');
+    appendSummaryItem(
+        grid,
+        t('optionsLastSuccessfulPacUpdate'),
+        formatTime(autoUpdate.lastSuccessfulUpdateAt),
+    );
+    appendSummaryItem(
+        grid,
+        t('optionsNextAutomaticPacUpdate'),
+        autoUpdate.enabled ?
+          formatTime(autoUpdate.nextUpdateAt) :
+          t('optionsDisabled'),
+    );
+    const actions = append(form, 'div', 'action-row');
+    const save = createButton(
+        actions,
+        t('optionsSaveUpdateSettings'),
+        'primary',
+        t('optionsSaving'),
+    );
+    save.onclick = () => saveUpdateSettings(form, enabled, save);
+    const update = createButton(
+        actions,
+        t('optionsUpdateRoutingRules'),
+        '',
+        t('optionsUpdatingRoutingRules'),
+    );
+    update.disabled = !state.snapshot.state.currentPacProviderKey;
+    update.onclick = () => runUpdateNow(update);
+    bindDraftForm(form, 'updates');
+    const healthCard = append(section, 'div', 'settings-card ui-card');
+    const healthHeader = append(healthCard, 'div', 'card-header');
+    appendText(healthHeader, 'h3', t('optionsConnectionHealth'));
+    const healthView = getHealthView();
+    appendText(
+        healthHeader,
+        'span',
+        healthView.text,
+        `ui-pill ${healthView.tone}`,
+    );
+    const healthGrid = append(healthCard, 'div', 'summary-grid');
+    appendSummaryItem(
+        healthGrid,
+        t('optionsLastProxyCheck'),
+        formatTime(health.lastCheckedAt),
+    );
+    appendSummaryItem(
+        healthGrid,
+        t('optionsCheckedMethod'),
+        getCandidateTypeLabel(health.candidateType),
+    );
+    appendText(
+        healthCard,
+        'p',
+        t('optionsHealthCheckNeedsProxyRuleHelp'),
+        'section-description',
+    );
+    if (health.status === 'error') {
+      appendText(
+          healthCard,
+          'p',
+          getLocalizedProxyHealthError(health),
+          'status-banner error',
+      );
+    }
+    const check = createButton(
+        healthCard,
+        health.status === 'error' ?
+          t('popupCheckProxyAgain') :
+          t('popupCheckProxy'),
+        'primary',
+        t('popupProxyHealthChecking'),
+    );
+    check.onclick = () => runHealthCheck(check);
+
+  }
+
+  async function saveUpdateSettings(form, enabled, button) {
+
+    const result = await runOperation(
+        'updates:save',
+        button,
+        () => rpc.callBackground('setPeriodicUpdateEnabled', {
+          enabled: enabled.checked,
+        }),
+        {
+          draftKey: 'updates',
+          retry: () => saveUpdateSettings(form, enabled, button),
+        },
+    );
+    if (result) {
+      markDraftClean('updates', form);
+      await refresh({
+        message: t('optionsPeriodicSettingsSaved'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  async function runUpdateNow(button) {
+
+    const result = await runOperation(
+        'updates:run',
+        button,
+        () => rpc.callBackground('runPeriodicUpdateNow', {
+          applyIfSafe: true,
+        }),
+        {
+          context: 'apply',
+          acceptStatuses: ['skipped'],
+          retry: () => runUpdateNow(button),
+        },
+    );
+    if (result) {
+      await refresh({
+        message: result.status === 'skipped' ?
+          t('optionsUpdateSkipped') :
+          t('optionsRoutingRulesUpdated'),
+        tone: result.status === 'skipped' ? 'warning' : 'success',
+      });
+    }
+
+  }
+
+  function getLocalizedProxyHealthError(health) {
+
+    if (health.candidateType === 'torBrowser') {
+      return t('proxyHealthTorBrowserError');
+    }
+    if (health.candidateType === 'localTor') {
+      return t('proxyHealthLocalTorError');
+    }
+    return t('proxyHealthGenericError');
+
+  }
+
+  function getCandidateTypeLabel(type) {
+
+    const keys = {
+      localTor: 'popupLocalTor',
+      torBrowser: 'popupTorBrowser',
+      warp: 'popupWarpCustomProxy',
+      ownProxy: 'popupOwnProxies',
+    };
+    return keys[type] ? t(keys[type]) : t('optionsNone');
+
+  }
+
+  async function runHealthCheck(button) {
+
+    const result = await runOperation(
+        'health:check',
+        button,
+        () => rpc.callBackground('checkProxyHealth', {}),
+        {
+          acceptStatuses: ['checking', 'error', 'inconclusive'],
+          retry: () => runHealthCheck(button),
+        },
+    );
+    if (!result) {
+      return;
+    }
+    const messages = {
+      ok: t('popupProxyCheckSucceeded'),
+      error: getLocalizedProxyHealthError(result.proxyHealth || {}),
+      inconclusive: t('popupProxyCheckInconclusive'),
+      checking: t('popupProxyHealthChecking'),
+    };
+    await refresh({
+      message: messages[result.status] || t('popupProxyCheckInconclusive'),
+      tone: result.status === 'ok' ? 'success' : 'warning',
+    });
+
+  }
+
+  function renderDiagnosticsSection(parent) {
+
+    const section = createPageSection(
+        parent,
+        'diagnostics',
+        'optionsNavDiagnostics',
+        'optionsDiagnosticsDescriptionNew',
+    );
+    const card = append(section, 'div', 'settings-card ui-card');
+    appendText(card, 'h3', t('optionsSystemCheck'));
+    const grid = append(card, 'div', 'diagnostic-grid');
+    const control = deriveControlView();
+    appendDiagnosticItem(
+        grid,
+        t('optionsProxyOwnership'),
+        control.title,
+        control.tone,
+    );
+    appendDiagnosticItem(
+        grid,
+        t('optionsActiveRoutingSource'),
+        getProviderLabel(getSelectedProvider()),
+        getSelectedProvider() ? 'success' : 'warning',
+    );
+    appendDiagnosticItem(
+        grid,
+        t('optionsProxyMethodAvailability'),
+        formatCount(
+            getProxyCandidateCount(),
+            'optionsOneProxyMethod',
+            'optionsManyProxyMethods',
+        ),
+        getProxyCandidateCount() ? 'success' : 'warning',
+    );
+    appendDiagnosticItem(
+        grid,
+        t('popupProxyHealth'),
+        getHealthView().text,
+        getHealthView().tone,
+    );
+    appendDiagnosticItem(
+        grid,
+        t('optionsLastApplyResult'),
+        localizeStatusValue(
+            state.snapshot.state.proxyApply &&
+            state.snapshot.state.proxyApply.status,
+        ),
+        control.kind === 'error' ? 'error' : '',
+    );
+    appendDiagnosticItem(
+        grid,
+        t('optionsLastSuccessfulPacUpdate'),
+        formatTime(
+            state.snapshot.reliability &&
+            state.snapshot.reliability.autoUpdate &&
+            state.snapshot.reliability.autoUpdate.lastSuccessfulUpdateAt,
+        ),
+        '',
+    );
+    const details = createDetails(
+        section,
+        'diagnostics-expert',
+        t('optionsShowExpertDetails'),
+    );
+    renderSafeExpertDetails(details.content);
+
+  }
+
+  function appendDiagnosticItem(parent, label, value, tone) {
+
+    const item = append(parent, 'div', 'diagnostic-item');
+    appendText(item, 'span', label, 'compact-label');
+    appendText(item, 'strong', value);
+    if (tone) {
+      item.dataset.statusTone = tone;
+    }
+
+  }
+
+  function renderSafeExpertDetails(parent) {
+
+    appendText(
+        parent,
+        'p',
+        t('optionsExpertDetailsRedactionHelp'),
+        'technical-note',
+    );
+    const snapshot = state.snapshot;
+    const stored = snapshot.state;
+    const periodic = snapshot.periodicUpdate &&
+      snapshot.periodicUpdate.periodicUpdate || {};
+    const health = snapshot.reliability &&
+      snapshot.reliability.proxyHealth || {};
+    const list = append(parent, 'dl', 'technical-list');
+    appendDefinition(
+        list,
+        t('optionsControlLevel'),
+        localizeControlLevel(
+            stored.proxyControl && stored.proxyControl.levelOfControl,
+        ),
+    );
+    appendDefinition(
+        list,
+        t('optionsApplyStatus'),
+        localizeStatusValue(stored.proxyApply && stored.proxyApply.status),
+    );
+    appendDefinition(
+        list,
+        t('optionsDownloadStatus'),
+        localizeStatusValue(stored.pacDownload && stored.pacDownload.status),
+    );
+    appendDefinition(
+        list,
+        t('optionsCookStatus'),
+        localizeStatusValue(stored.pacCook && stored.pacCook.status),
+    );
+    appendDefinition(
+        list,
+        t('optionsHealthCode'),
+        localizeHealthCode(health.lastErrorCode),
+    );
+    appendDefinition(
+        list,
+        t('optionsLastProxyCheck'),
+        formatTime(health.lastCheckedAt),
+    );
+    appendDefinition(
+        list,
+        t('optionsUpdateStatus'),
+        localizeStatusValue(periodic.status),
+    );
+    appendDefinition(
+        list,
+        t('optionsNextRun'),
+        formatTime(periodic.nextRunAt),
+    );
+
+  }
+
+  function appendDefinition(parent, label, value) {
+
+    appendText(parent, 'dt', label);
+    appendText(parent, 'dd', value || t('optionsNone'));
+
+  }
+
+  function localizeControlLevel(level) {
+
+    const keys = {
+      controlled_by_this_extension: 'optionsControlLevelThisExtension',
+      controllable_by_this_extension: 'optionsControlLevelAvailable',
+      controlled_by_other_extensions: 'optionsControlLevelOther',
+      not_controllable: 'optionsControlLevelPolicy',
+    };
+    return keys[level] ? t(keys[level]) : t('optionsNone');
+
+  }
+
+  function localizeHealthCode(code) {
+
+    if (!code) {
+      return t('optionsNone');
+    }
+    const safeCodes = {
+      ERR_PROXY_CONNECTION_FAILED: t('optionsHealthCodeConnection'),
+      ERR_TUNNEL_CONNECTION_FAILED: t('optionsHealthCodeTunnel'),
+      ERR_SOCKS_CONNECTION_FAILED: t('optionsHealthCodeConnection'),
+      ERR_PROXY_AUTH_UNSUPPORTED: t('optionsHealthCodeAuthentication'),
+      ERR_PROXY_AUTH_REQUESTED: t('optionsHealthCodeAuthentication'),
+    };
+    return safeCodes[code] || t('optionsHealthCodeGeneric');
+
+  }
+
+  function localizeStatusValue(value) {
+
+    const status = String(value || 'idle');
+    const keys = {
+      idle: 'optionsStatusIdle',
+      downloading: 'optionsStatusDownloading',
+      success: 'optionsStatusSuccess',
+      error: 'optionsStatusError',
+      not_modified: 'optionsStatusNotModified',
+      cooking: 'optionsStatusCooking',
+      applying: 'optionsStatusApplying',
+      applied: 'popupApplied',
+      clearing: 'optionsStatusClearing',
+      cleared: 'optionsStatusCleared',
+      scheduled: 'optionsStatusScheduled',
+      running: 'optionsStatusRunning',
+      skipped: 'optionsStatusSkipped',
+    };
+    return keys[status] ? t(keys[status]) : t('optionsStatusUnknown');
+
+  }
+
+  function renderAdvancedSection(parent) {
+
+    const section = createPageSection(
+        parent,
+        'advanced',
+        'optionsNavAdvanced',
+        'optionsAdvancedDescriptionNew',
+    );
+    renderAdvancedPacRules(section);
+    renderNotificationSettings(section);
+    renderExpertOperations(section);
+    renderMigration(section);
+    renderAbout(section);
+
+  }
+
+  function renderAdvancedPacRules(parent) {
+
+    const disclosure = createDetails(
+        parent,
+        'advanced-routing',
+        t('optionsAdvancedPacRules'),
+    );
+    appendText(
+        disclosure.content,
+        'p',
+        t('optionsAdvancedPacRulesHint'),
+        'status-banner warning',
+    );
+    const form = append(disclosure.content, 'form');
+    form.onsubmit = (event) => event.preventDefault();
+    const pacMods = state.snapshot.state.pacMods;
+    const whitelist = append(form, 'fieldset', 'editor-panel');
+    appendText(whitelist, 'legend', t('optionsWhitelist'), 'item-title');
+    appendText(
+        whitelist,
+        'p',
+        t('optionsWhitelistHelpNew'),
+        'section-description',
+    );
+    const rows = append(whitelist, 'div', 'pattern-rows');
+    (pacMods.whitelist || []).forEach((entry) =>
+      renderPatternRow(rows, entry),
+    );
+    if (!(pacMods.whitelist || []).length) {
+      appendText(
+          rows,
+          'p',
+          t('optionsNoWhitelistRules'),
+          'empty-state pattern-empty-state',
+      );
+    }
+    const add = createButton(
+        whitelist,
+        t('optionsAddWhitelistRow'),
+    );
+    add.onclick = () => {
+      const empty = rows.querySelector('.pattern-empty-state');
+      if (empty) {
+        empty.remove();
+      }
+      renderPatternRow(rows, {pattern: '', enabled: true, note: ''});
+      markDraftDirty(form);
+    };
+    const policy = append(form, 'fieldset', 'editor-panel');
+    appendText(policy, 'legend', t('optionsDirectPolicy'), 'item-title');
+    appendCheckbox(
+        policy,
+        'replaceDirectWithProxy',
+        t('optionsReplaceDirectWithProxy'),
+        pacMods.replaceDirectWithProxy === true,
+        t('optionsReplaceDirectWarningNew'),
+    );
+    appendCheckbox(
+        policy,
+        'noDirect',
+        t('optionsRemoveDirectFallbacks'),
+        pacMods.noDirect === true,
+        t('optionsNoDirectWarningNew'),
+    );
+    const actions = append(form, 'div', 'split-actions');
+    const save = createButton(
+        actions,
+        t('optionsSaveAdvancedPacRules'),
+        'primary',
+        t('optionsSaving'),
+    );
+    save.onclick = () => saveAdvancedRules(form, pacMods, save);
+    const discard = createButton(
+        actions,
+        t('optionsDiscardAllChanges'),
+        'quiet',
+    );
+    discard.onclick = () => confirmDiscardAll();
+    bindDraftForm(form, 'advanced-routing', {usesPacMods: true});
+    renderDraftConflict(form, 'advanced-routing');
+
+  }
+
+  function renderPatternRow(parent, entry) {
+
+    const row = append(parent, 'div', 'rule-row');
+    appendCheckbox(
+        row,
+        'whitelist.enabled',
+        t('optionsEnabled'),
+        entry.enabled !== false,
+        '',
+        'full',
+    );
+    appendField(
+        row,
+        'text',
+        'whitelist.pattern',
+        t('optionsPattern'),
+        entry.pattern || '',
+        {required: true, full: true},
+    );
+    appendField(
+        row,
+        'text',
+        'whitelist.note',
+        t('optionsNote'),
+        entry.note || '',
+        {full: true},
+    );
+    const remove = createButton(
+        row,
+        t('optionsRemove'),
+        'danger quiet row-remove',
+    );
+    remove.onclick = () => {
+      row.remove();
+      const form = parent.closest('form');
+      if (form) {
+        markDraftDirty(form);
+      }
+    };
+
+  }
+
+  function collectPatternRows(form) {
 
     return Array.from(form.querySelectorAll('.rule-row'))
-        .filter((row) => row.querySelector(`[name="${key}.pattern"]`))
         .map((row) => ({
-          pattern: getValue(row, `${key}.pattern`),
-          enabled: getChecked(row, `${key}.enabled`),
-          note: getValue(row, `${key}.note`),
+          pattern: getValue(row, 'whitelist.pattern'),
+          enabled: getChecked(row, 'whitelist.enabled'),
+          note: getValue(row, 'whitelist.note'),
         }))
         .filter((entry) => entry.pattern);
 
   }
 
-  function getValue(rootNode, name) {
+  async function saveAdvancedRules(form, originalPacMods, button) {
 
-    const input = rootNode.querySelector(`[name="${name}"]`);
-    return input ? input.value.trim() : '';
+    clearValidation(form);
+    let firstInvalid = null;
+    form.querySelectorAll('[name="whitelist.pattern"]').forEach((input) => {
+      if (!input.value.trim()) {
+        showFieldError(input, t('optionsPatternRequired'));
+        firstInvalid = firstInvalid || input;
+      }
+    });
+    if (firstInvalid) {
+      firstInvalid.focus();
+      setMessage(t('optionsValidationFailed'), 'error');
+      return;
+    }
+    const pacMods = Object.assign({}, clone(originalPacMods), {
+      whitelist: collectPatternRows(form),
+      replaceDirectWithProxy: getChecked(form, 'replaceDirectWithProxy'),
+      noDirect: getChecked(form, 'noDirect'),
+    });
+    const result = await savePacMods(
+        'advanced-routing',
+        button,
+        pacMods,
+        () => saveAdvancedRules(form, originalPacMods, button),
+    );
+    if (result) {
+      markDraftClean('advanced-routing', form);
+      await refresh({
+        message: t('optionsAdvancedRulesSavedApplyRequired'),
+        tone: 'success',
+      });
+    }
 
   }
 
-  function getChecked(rootNode, name) {
+  function renderNotificationSettings(parent) {
 
-    const input = rootNode.querySelector(`[name="${name}"]`);
-    return input ? input.checked : false;
+    const disclosure = createDetails(
+        parent,
+        'notifications',
+        t('optionsNotifications'),
+    );
+    const form = append(disclosure.content, 'form');
+    form.onsubmit = (event) => event.preventDefault();
+    const prefs = state.snapshot.state.notificationPrefs || {};
+    appendCheckbox(
+        form,
+        'notification.pacError',
+        t('optionsNotifyPacError'),
+        prefs.pacError === true,
+        '',
+    );
+    appendCheckbox(
+        form,
+        'notification.extError',
+        t('optionsNotifyExtensionError'),
+        prefs.extError === true,
+        '',
+    );
+    appendCheckbox(
+        form,
+        'notification.noControl',
+        t('optionsNotifyNoControl'),
+        prefs.noControl === true,
+        '',
+    );
+    const save = createButton(
+        form,
+        t('optionsSaveNotifications'),
+        'primary',
+        t('optionsSaving'),
+    );
+    save.onclick = () => saveNotifications(form, save);
+    bindDraftForm(form, 'notifications');
 
   }
 
-  function preparePacModsForSave(pacMods) {
+  async function saveNotifications(form, button) {
 
-    const prepared = clone(pacMods);
-    prepared.ownProxies = Array.isArray(prepared.ownProxies) ?
-      prepared.ownProxies.map((proxy) => {
-        if (
-          !isObject(proxy) ||
-          !Object.prototype.hasOwnProperty.call(proxy, 'password') ||
-          proxy.password === REDACTED_PASSWORD
-        ) {
-          return proxy;
-        }
-        delete proxy.credentialRef;
-        delete proxy.hasCredentials;
-        delete proxy.hasPassword;
-        return proxy;
-      }) :
-      [];
-    return prepared;
+    const result = await runOperation(
+        'notifications:save',
+        button,
+        () => rpc.callBackground('setNotificationPrefs', {
+          prefs: {
+            pacError: getChecked(form, 'notification.pacError'),
+            extError: getChecked(form, 'notification.extError'),
+            noControl: getChecked(form, 'notification.noControl'),
+          },
+        }),
+        {
+          draftKey: 'notifications',
+          retry: () => saveNotifications(form, button),
+        },
+    );
+    if (result) {
+      markDraftClean('notifications', form);
+      await refresh({
+        message: t('optionsNotificationPrefsSaved'),
+        tone: 'success',
+      });
+    }
 
   }
 
-  function renderError(err) {
+  function renderExpertOperations(parent) {
 
-    root.replaceChildren();
-    appendText(root, 'h1', t('popupTitle'));
+    const disclosure = createDetails(
+        parent,
+        'expert-operations',
+        t('optionsExpertOperations'),
+    );
     appendText(
-        root,
+        disclosure.content,
         'p',
-        err && err.message ? err.message : t('optionsLoadStateFailed'),
-        'status error',
+        t('optionsExpertOperationsHelp'),
+        'status-banner warning',
+    );
+    const actions = append(disclosure.content, 'div', 'action-row');
+    const download = createButton(
+        actions,
+        t('optionsDownloadPac'),
+        '',
+        t('optionsDownloading'),
+    );
+    download.onclick = () => runExpertOperation(
+        'expert:download',
+        download,
+        'downloadPac',
+        t('optionsRoutingRulesDownloaded'),
+    );
+    const cook = createButton(
+        actions,
+        t('optionsRebuildRoutingRules'),
+        '',
+        t('optionsCooking'),
+    );
+    cook.onclick = () => runExpertOperation(
+        'expert:cook',
+        cook,
+        'cookPac',
+        t('optionsRoutingRulesRebuilt'),
+    );
+    const apply = createButton(
+        actions,
+        t('optionsActivatePreparedRules'),
+        '',
+        t('optionsApplying'),
+    );
+    apply.onclick = () => runExpertOperation(
+        'expert:apply',
+        apply,
+        'applyCookedPac',
+        t('optionsPreparedRulesActivated'),
     );
 
   }
 
-  refresh();
+  async function runExpertOperation(key, button, method, message) {
+
+    const result = await runOperation(
+        key,
+        button,
+        () => rpc.callBackground(method, {}),
+        {
+          context: 'apply',
+          retry: () => runExpertOperation(key, button, method, message),
+        },
+    );
+    if (result) {
+      await refresh({message, tone: 'success'});
+    }
+
+  }
+
+  function renderMigration(parent) {
+
+    const disclosure = createDetails(
+        parent,
+        'legacy-migration',
+        t('optionsLegacyMigration'),
+    );
+    appendText(
+        disclosure.content,
+        'p',
+        t('optionsLegacyMigrationSafeHelp'),
+        'section-description',
+    );
+    const actions = append(disclosure.content, 'div', 'action-row');
+    const scan = createButton(
+        actions,
+        t('optionsScanLegacySettings'),
+        '',
+        t('optionsScanning'),
+    );
+    scan.onclick = () => runMigrationAudit(scan);
+    const clear = createButton(
+        actions,
+        t('optionsClearMigrationAudit'),
+        'danger quiet',
+        t('popupClearing'),
+    );
+    clear.onclick = () => clearMigrationAudit(clear);
+    renderMigrationStatus(disclosure.content);
+    if (state.latestMigrationPlan) {
+      renderMigrationPlan(disclosure.content, state.latestMigrationPlan);
+    }
+
+  }
+
+  function renderMigrationStatus(parent) {
+
+    const migration = state.snapshot.state.legacyMigration || {};
+    const list = append(parent, 'dl', 'technical-list');
+    appendDefinition(
+        list,
+        t('optionsAuditStatus'),
+        localizeStatusValue(migration.auditStatus),
+    );
+    appendDefinition(
+        list,
+        t('optionsApplyStatus'),
+        localizeStatusValue(migration.applyStatus),
+    );
+    appendDefinition(
+        list,
+        t('optionsLastAudit'),
+        formatTime(migration.lastAuditAt),
+    );
+    appendDefinition(
+        list,
+        t('optionsDetectedLegacyData'),
+        migration.detectedLegacyData ? t('optionsYes') : t('optionsNo'),
+    );
+
+  }
+
+  async function runMigrationAudit(button) {
+
+    const result = await runOperation(
+        'migration:audit',
+        button,
+        () => rpc.callBackground('runLegacyMigrationAudit', {
+          includeValues: false,
+        }),
+    );
+    if (result) {
+      state.latestMigrationPlan = result;
+      state.openDisclosures.add('legacy-migration');
+      await refresh({
+        message: t('optionsLegacyAuditCompleted'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  async function clearMigrationAudit(button) {
+
+    if (!window.confirm(t('optionsConfirmClearMigrationAudit'))) {
+      return;
+    }
+    const result = await runOperation(
+        'migration:clear',
+        button,
+        () => rpc.callBackground('clearLegacyMigrationAudit', {}),
+    );
+    if (result) {
+      state.latestMigrationPlan = null;
+      state.drafts.delete('migration');
+      await refresh({
+        message: t('optionsLegacyAuditCleared'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  function renderMigrationPlan(parent, plan) {
+
+    const proposed = plan.proposedMigration || {};
+    const available = proposed.canMigrate || {};
+    const card = append(parent, 'div', 'editor-panel');
+    appendText(card, 'h3', t('optionsSettingsAvailableForMigration'));
+    const form = append(card, 'form');
+    LEGACY_MIGRATION_FIELDS.forEach(([key, labelKey]) => {
+      const ifAvailable = available[key] !== null &&
+        available[key] !== undefined;
+      const input = appendCheckbox(
+          form,
+          `migration.${key}`,
+          t(labelKey),
+          ifAvailable,
+          ifAvailable ? '' : t('optionsMigrationFieldUnavailable'),
+      );
+      input.disabled = !ifAvailable;
+    });
+    const strategy = appendSelect(
+        form,
+        'migration.strategy',
+        t('optionsStrategy'),
+        [
+          ['fillMissing', t('optionsFillMissingOnly')],
+          ['overwriteSelected', t('optionsOverwriteSelectedMv3')],
+        ],
+        'fillMissing',
+        {full: true},
+    );
+    const confirm = appendCheckbox(
+        form,
+        'migration.confirm',
+        t('optionsMigrationConfirmation'),
+        false,
+        t('optionsMigrationDoesNotApplyHelp'),
+    );
+    const apply = createButton(
+        form,
+        t('optionsApplySelectedMigration'),
+        'primary',
+        t('optionsApplying'),
+    );
+    const updateEnabled = () => {
+      const selected = LEGACY_MIGRATION_FIELDS.some(([key]) =>
+        getChecked(form, `migration.${key}`),
+      );
+      apply.disabled = !confirm.checked || !selected;
+    };
+    form.addEventListener('change', updateEnabled);
+    bindDraftForm(form, 'migration');
+    updateEnabled();
+    apply.onclick = () => applyMigration(form, strategy, apply);
+    renderDraftConflict(form, 'migration');
+
+  }
+
+  async function applyMigration(form, strategy, button) {
+
+    const fields = LEGACY_MIGRATION_FIELDS
+        .filter(([key]) => getChecked(form, `migration.${key}`))
+        .map(([key]) => key);
+    if (!getChecked(form, 'migration.confirm') || !fields.length) {
+      return;
+    }
+    const result = await runOperation(
+        'migration:apply',
+        button,
+        () => rpc.callBackground('applyLegacyMigration', {
+          strategy: strategy.value,
+          fields,
+        }),
+    );
+    if (result) {
+      state.latestMigrationPlan = null;
+      state.drafts.delete('migration');
+      await refresh({
+        message: t('optionsMigrationAppliedSafely'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  function renderAbout(parent) {
+
+    const disclosure = createDetails(
+        parent,
+        'about',
+        t('optionsAbout'),
+    );
+    appendText(disclosure.content, 'p', t('optionsAboutHint'));
+    appendText(
+        disclosure.content,
+        'p',
+        t('optionsAboutBehaviorBoundary'),
+        'technical-note',
+    );
+
+  }
+
+  function renderGlobalActionBar(parent) {
+
+    const bar = append(parent, 'aside', 'global-action-bar');
+    bar.id = 'global-action-bar';
+    bar.setAttribute('aria-label', t('optionsConfigurationActions'));
+    renderGlobalActionBarContents(bar);
+
+  }
+
+  function renderGlobalActionBarContents(bar) {
+
+    const dirty = getDirtyDrafts();
+    const conflicts = dirty.filter((entry) => entry[1].conflict);
+    const view = deriveControlView();
+    const copy = append(bar, 'div', 'global-action-copy');
+    const buttons = append(bar, 'div', 'global-action-buttons');
+    if (conflicts.length) {
+      appendText(copy, 'strong', t('optionsConflictTitle'));
+      appendText(copy, 'span', t('optionsConflictActionHelp'));
+      const review = createButton(
+          buttons,
+          t('optionsReviewConflict'),
+          'primary',
+      );
+      review.onclick = () => navigateTo(getSectionForDraft(conflicts[0][0]));
+      const discard = createButton(
+          buttons,
+          t('optionsDiscardAllChanges'),
+          'danger quiet',
+      );
+      discard.onclick = () => confirmDiscardAll();
+      return;
+    }
+    if (dirty.length) {
+      appendText(
+          copy,
+          'strong',
+          formatCount(
+              dirty.length,
+              'optionsOneUnsavedDraft',
+              'optionsManyUnsavedDrafts',
+          ),
+      );
+      appendText(copy, 'span', t('optionsSaveSectionBeforeApply'));
+      const review = createButton(
+          buttons,
+          t('optionsReviewChanges'),
+          'primary',
+      );
+      review.onclick = () => navigateTo(getSectionForDraft(dirty[0][0]));
+      const discard = createButton(
+          buttons,
+          t('optionsDiscardAllChanges'),
+          'danger quiet',
+      );
+      discard.onclick = () => confirmDiscardAll();
+      return;
+    }
+    if (view.external) {
+      appendText(copy, 'strong', t('popupControlExternal'));
+      appendText(copy, 'span', t('optionsExternalActionHelp'));
+      const refreshButton = createButton(
+          buttons,
+          t('optionsCheckAgain'),
+          '',
+          t('optionsLoading'),
+      );
+      refreshButton.onclick = () => refresh({restoreFocus: false});
+      return;
+    }
+    if (view.busy || state.pending.has('configuration:apply') ||
+        state.pending.has('configuration:clear')) {
+      appendText(copy, 'strong', view.title);
+      appendText(copy, 'span', t('optionsOperationInProgressHelp'));
+      const busy = createButton(
+          buttons,
+          view.kind === 'clearing' ?
+            t('popupControlClearing') :
+            t('popupControlApplying'),
+          'primary',
+      );
+      busy.disabled = true;
+      busy.setAttribute('aria-busy', 'true');
+      return;
+    }
+    if (!getSelectedProvider()) {
+      appendText(copy, 'strong', t('optionsChooseSourceTitle'));
+      appendText(copy, 'span', t('optionsChooseSourceBeforeApply'));
+      const choose = createButton(
+          buttons,
+          t('optionsGoToRoutingSources'),
+          'primary',
+      );
+      choose.onclick = () => navigateTo('routing-sources');
+      return;
+    }
+    if (view.controlsPac && !view.stale) {
+      appendText(copy, 'strong', t('optionsSavedAndActive'));
+      appendText(copy, 'span', t('optionsTurnOffKeepsSettings'));
+      const clear = createButton(
+          buttons,
+          t('popupTurnOffProxy'),
+          '',
+          t('popupClearing'),
+      );
+      clear.onclick = () => clearConfiguration(clear);
+      return;
+    }
+    appendText(
+        copy,
+        'strong',
+        view.stale ? t('optionsApplyRequired') : t('optionsReadyToApply'),
+    );
+    appendText(copy, 'span', t('optionsApplyWorkflowHelp'));
+    const apply = createButton(
+        buttons,
+        t('optionsApplyConfiguration'),
+        'primary',
+        t('optionsApplyingConfiguration'),
+    );
+    apply.onclick = () => applyConfiguration(apply);
+    if (view.controlsPac) {
+      const clear = createButton(
+          buttons,
+          t('popupTurnOffProxy'),
+          'quiet',
+          t('popupClearing'),
+      );
+      clear.onclick = () => clearConfiguration(clear);
+    }
+
+  }
+
+  function getSectionForDraft(key) {
+
+    if (key.startsWith('provider:')) {
+      return 'routing-sources';
+    }
+    if (key.startsWith('site-rule:')) {
+      return 'site-rules';
+    }
+    if (key === 'proxy-methods') {
+      return 'proxy-methods';
+    }
+    if (key === 'updates') {
+      return 'updates-health';
+    }
+    return 'advanced';
+
+  }
+
+  function confirmDiscardAll() {
+
+    if (!hasDirtyDrafts()) {
+      return;
+    }
+    if (window.confirm(t('optionsConfirmDiscardAll'))) {
+      discardAllDrafts();
+    }
+
+  }
+
+  async function applyConfiguration(button) {
+
+    if (hasDirtyDrafts()) {
+      setMessage(t('optionsSaveSectionBeforeApply'), 'warning');
+      return;
+    }
+    const result = await runOperation(
+        'configuration:apply',
+        button,
+        () => rpc.callBackground('applyPopupChanges', {
+          operation: 'apply',
+          draft: {},
+        }),
+        {
+          context: 'apply',
+          retry: () => applyConfiguration(button),
+        },
+    );
+    if (result) {
+      await refresh({
+        message: t('optionsConfigurationApplied'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  async function clearConfiguration(button) {
+
+    const result = await runOperation(
+        'configuration:clear',
+        button,
+        () => rpc.callBackground('clearProxy', {}),
+        {
+          context: 'apply',
+          retry: () => clearConfiguration(button),
+        },
+    );
+    if (result) {
+      await refresh({
+        message: t('optionsConfigurationTurnedOff'),
+        tone: 'success',
+      });
+    }
+
+  }
+
+  function updateDraftPresentation() {
+
+    const dirty = getDirtyDrafts();
+    root.querySelectorAll('form[data-draft-key]').forEach((form) => {
+      const draft = state.drafts.get(form.dataset.draftKey);
+      form.dataset.dirty = draft && draft.dirty ? 'true' : 'false';
+      form.dataset.conflict = draft && draft.conflict ? 'true' : 'false';
+    });
+    const bar = root.querySelector('#global-action-bar');
+    if (bar && state.snapshot) {
+      bar.replaceChildren();
+      renderGlobalActionBarContents(bar);
+    }
+    const live = root.querySelector('[aria-live="polite"]');
+    if (live) {
+      const message = dirty.length ? formatCount(
+          dirty.length,
+          'optionsOneUnsavedDraft',
+          'optionsManyUnsavedDrafts',
+      ) : '';
+      if (live.textContent !== message) {
+        live.textContent = message;
+      }
+    }
+
+  }
+
+  installGlobalListeners();
+  renderLoading();
+  refresh({restoreFocus: false});
 
 })();
