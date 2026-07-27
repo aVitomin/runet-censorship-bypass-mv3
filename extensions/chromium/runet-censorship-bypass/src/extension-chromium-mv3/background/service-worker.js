@@ -61,6 +61,15 @@ let pacCookPromise = null;
 let proxyHealthCheckPromise = null;
 let pacProxyOperationQueue = Promise.resolve();
 let activePacApplyOperation = null;
+let actionOperationSequence = 0;
+const activeActionOperations = new Set();
+const supersededActionOperations = new WeakSet();
+const ACTION_OPERATION_PRIORITIES = Object.freeze({
+  check: 1,
+  refresh: 2,
+  apply: 3,
+  clear: 4,
+});
 const proxyErrorDebounce = new Map();
 const NO_PROXY_CANDIDATE_MESSAGE =
   'No proxy is enabled. Enable Tor, WARP, or an own proxy.';
@@ -75,7 +84,10 @@ const actionStatusRefresh = mv3ActionStatus.createRefreshCoordinator({
   createStatus: (tabUrl, state) => createPopupState(tabUrl, state),
 });
 actionStatusRefresh.start();
-const actionStatusRecoveryPromise = recoverActionStatusOnWorkerStart()
+const automaticPacUpdatesInitializationPromise =
+  initializeAutomaticPacUpdates('service-worker-startup');
+const actionStatusRecoveryPromise = automaticPacUpdatesInitializationPromise
+    .then(() => recoverActionStatusOnWorkerStart())
     .catch(() => requestActionStatusRefresh({}));
 
 function openFullOptionsPage() {
@@ -114,6 +126,131 @@ function getProviderForState(state, providerKey, ifIncludeDisabled) {
 function invalidatePacApplyFreshness() {
 
   activePacApplyOperation = null;
+
+}
+
+function getCurrentActionOperation() {
+
+  return Array.from(activeActionOperations)
+      .filter((operation) => !supersededActionOperations.has(operation))
+      .sort((left, right) =>
+        ACTION_OPERATION_PRIORITIES[right.kind] -
+          ACTION_OPERATION_PRIORITIES[left.kind] ||
+        right.sequence - left.sequence,
+      )[0] || null;
+
+}
+
+function ifActionOperationIsActive(kind) {
+
+  return Array.from(activeActionOperations).some((operation) =>
+    operation.kind === kind && !supersededActionOperations.has(operation),
+  );
+
+}
+
+function ifSupersededActionOperationIsActive() {
+
+  return Array.from(activeActionOperations).some((operation) =>
+    supersededActionOperations.has(operation),
+  );
+
+}
+
+function createUiOperationRecord(record, kind, transientStatus) {
+
+  const result = cloneRpcRecord(record);
+  if (
+    result.status !== transientStatus ||
+    ifActionOperationIsActive(kind)
+  ) {
+    return result;
+  }
+  if (kind === 'check') {
+    result.status = 'unknown';
+    result.lastErrorCode = null;
+    result.lastErrorMessage = null;
+    return result;
+  }
+  result.status = 'error';
+  result.error = {
+    code: 'OPERATION_INTERRUPTED',
+    message: 'The operation was interrupted. Review the current state and retry.',
+    details: null,
+  };
+  return result;
+
+}
+
+function createUiPeriodicUpdateRecord(record) {
+
+  const result = cloneRpcRecord(record);
+  if (
+    result.status !== 'running' ||
+    ifActionOperationIsActive('refresh')
+  ) {
+    return result;
+  }
+  result.status = 'error';
+  result.lastError = {
+    code: 'OPERATION_INTERRUPTED',
+    message: 'The update was interrupted. Review the current state and retry.',
+    details: null,
+  };
+  result.lastFailureCode = 'OPERATION_INTERRUPTED';
+  return result;
+
+}
+
+function createUiProxyApplyRecord(record) {
+
+  const status = record && record.status;
+  return ['applying', 'clearing'].includes(status) ?
+    createUiOperationRecord(
+        record,
+        status === 'clearing' ? 'clear' : 'apply',
+        status,
+    ) :
+    cloneRpcRecord(record);
+
+}
+
+async function beginActionOperation(kind) {
+
+  const operation = Object.freeze({
+    kind,
+    sequence: ++actionOperationSequence,
+  });
+  for (const activeOperation of activeActionOperations) {
+    if (
+      ACTION_OPERATION_PRIORITIES[kind] >=
+        ACTION_OPERATION_PRIORITIES[activeOperation.kind]
+    ) {
+      supersededActionOperations.add(activeOperation);
+    }
+  }
+  activeActionOperations.add(operation);
+  await updateActionStatusFromStoredState({}).catch(() => undefined);
+  return operation;
+
+}
+
+async function finishActionOperation(operation) {
+
+  activeActionOperations.delete(operation);
+  supersededActionOperations.delete(operation);
+  await updateActionStatusFromStoredState({}).catch(() => undefined);
+
+}
+
+async function runWithActionOperation(kind, execute) {
+
+  const operation = await beginActionOperation(kind);
+  try {
+    return await execute();
+  } finally {
+    await finishActionOperation(operation);
+  }
 
 }
 
@@ -261,7 +398,12 @@ function cloneRpcRecord(value) {
 
 function createOptionsStateForRpc(state) {
 
-  const pacCook = cloneRpcRecord(state.pacCook);
+  const pacCook = createUiOperationRecord(
+      state.pacCook,
+      'refresh',
+      'cooking',
+  );
+  const proxyApply = createUiProxyApplyRecord(state.proxyApply);
   const cookedPacCache = cloneRpcRecord(state.cookedPacCache);
   delete pacCook.pacModsSha256;
   delete cookedPacCache.pacModsSha256;
@@ -273,11 +415,15 @@ function createOptionsStateForRpc(state) {
         state.pacModsRevision,
     ),
     notificationPrefs: cloneRpcRecord(state.notificationPrefs),
-    pacDownload: cloneRpcRecord(state.pacDownload),
+    pacDownload: createUiOperationRecord(
+        state.pacDownload,
+        'refresh',
+        'downloading',
+    ),
     pacCache: cloneRpcRecord(state.pacCache),
     pacCook,
     cookedPacCache,
-    proxyApply: cloneRpcRecord(state.proxyApply),
+    proxyApply,
     proxyControl: cloneRpcRecord(state.proxyControl),
     legacyMigration: cloneRpcRecord(state.legacyMigration),
   };
@@ -444,9 +590,15 @@ if (chrome.action && chrome.action.onClicked) {
 const RPC_METHODS = Object.freeze({
   async getState() {
 
+    await actionStatusRecoveryPromise.catch(() => undefined);
     const state = await mv3State.loadState();
+    const uiPeriodicUpdate = createUiPeriodicUpdateRecord(
+        state.periodicUpdate,
+    );
     const [periodicUpdate, cookedPacStale] = await Promise.all([
-      mv3PeriodicUpdate.getStatus(state),
+      mv3PeriodicUpdate.getStatus(Object.assign({}, state, {
+        periodicUpdate: uiPeriodicUpdate,
+      })),
       getCookedPacStaleness(state),
     ]);
     return Object.assign({}, PHASE_TEN_STATUS, {
@@ -457,7 +609,11 @@ const RPC_METHODS = Object.freeze({
       periodicUpdate,
       reliability: {
         autoUpdate: getPacAutoUpdateSummary(state),
-        proxyHealth: state.proxyHealth,
+        proxyHealth: createUiOperationRecord(
+            state.proxyHealth,
+            'check',
+            'checking',
+        ),
       },
       stale: {
         cookedPac: cookedPacStale,
@@ -651,6 +807,7 @@ const RPC_METHODS = Object.freeze({
 
     invalidatePacApplyFreshness();
     await mv3State.resetState();
+    await updateActionStatusFromStoredState({});
     return {ok: true};
 
   },
@@ -670,14 +827,15 @@ const RPC_METHODS = Object.freeze({
       );
     }
 
-    pacDownloadPromise = downloadPacAndPersist(params)
-        .finally(() => {
-          pacDownloadPromise = null;
-        });
-    const result = await pacDownloadPromise;
-    await handlePacOperationResult(result, 'PAC download failed.');
-    await updateActionStatusFromStoredState({});
-    return result;
+    return runWithActionOperation('refresh', async () => {
+      pacDownloadPromise = downloadPacAndPersist(params)
+          .finally(() => {
+            pacDownloadPromise = null;
+          });
+      const result = await pacDownloadPromise;
+      await handlePacOperationResult(result, 'PAC download failed.');
+      return result;
+    });
 
   },
 
@@ -717,14 +875,15 @@ const RPC_METHODS = Object.freeze({
       );
     }
 
-    pacCookPromise = cookPacAndPersist(params)
-        .finally(() => {
-          pacCookPromise = null;
-        });
-    const result = await pacCookPromise;
-    await handlePacOperationResult(result, 'PAC cooking failed.');
-    await updateActionStatusFromStoredState({});
-    return result;
+    return runWithActionOperation('refresh', async () => {
+      pacCookPromise = cookPacAndPersist(params)
+          .finally(() => {
+            pacCookPromise = null;
+          });
+      const result = await pacCookPromise;
+      await handlePacOperationResult(result, 'PAC cooking failed.');
+      return result;
+    });
 
   },
 
@@ -788,19 +947,21 @@ const RPC_METHODS = Object.freeze({
           'Periodic PAC update is already running.',
       );
     }
-    const result = await applyCookedPacAndPersist(params);
-    await handleProxyOperationResult(result, 'Proxy apply failed.');
-    await updateActionStatusFromStoredState({});
-    return result;
+    return runWithActionOperation('apply', async () => {
+      const result = await applyCookedPacAndPersist(params);
+      await handleProxyOperationResult(result, 'Proxy apply failed.');
+      return result;
+    });
 
   },
 
   async clearProxy() {
 
-    const result = await clearProxyAndPersist();
-    await handleProxyOperationResult(result, 'Proxy clear failed.');
-    await updateActionStatusFromStoredState({});
-    return result;
+    return runWithActionOperation('clear', async () => {
+      const result = await clearProxyAndPersist();
+      await handleProxyOperationResult(result, 'Proxy clear failed.');
+      return result;
+    });
 
   },
 
@@ -911,7 +1072,9 @@ const RPC_METHODS = Object.freeze({
     ) {
       await invalidatePacWorkflowFreshness();
     }
-    return mv3LegacyMigrationApply.applyLegacyMigration(params);
+    const result = await mv3LegacyMigrationApply.applyLegacyMigration(params);
+    await updateActionStatusFromStoredState({});
+    return result;
 
   },
 
@@ -1028,8 +1191,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 });
 
-initializeAutomaticPacUpdates('service-worker-startup');
-
 function isInternalRpcMessage(message, sender) {
 
   if (sender && sender.id && sender.id !== chrome.runtime.id) {
@@ -1091,7 +1252,7 @@ function handleWebRequestError(details) {
 
 function initializeAutomaticPacUpdates(trigger) {
 
-  mv3PeriodicUpdate.reconcileAlarms({startupDelay: true})
+  return mv3PeriodicUpdate.reconcileAlarms({startupDelay: true})
       .catch((err) => console.warn(
           `Failed to initialize PAC auto-update (${trigger}).`,
           err,
@@ -1229,6 +1390,17 @@ async function applyPopupChanges(params = {}) {
     );
   }
   const workflow = operation === 'save' ? null : await beginPacWorkflow();
+  if (workflow) {
+    return runWithActionOperation(
+        operation === 'updatePac' ? 'refresh' : 'apply',
+        () => applyPopupChangesForWorkflow(params, operation, workflow),
+    );
+  }
+  return applyPopupChangesForWorkflow(params, operation, workflow);
+
+}
+
+async function applyPopupChangesForWorkflow(params, operation, workflow) {
 
   const draft = params.draft || {};
   const validation = await validatePopupDraftProxyCandidates(
@@ -1652,7 +1824,22 @@ async function createPopupState(tabUrl, state) {
   }
 
   const stale = await getCookedPacStaleness(state);
-  const proxyApply = state.proxyApply || {};
+  const proxyApply = createUiProxyApplyRecord(state.proxyApply);
+  const pacDownload = createUiOperationRecord(
+      state.pacDownload,
+      'refresh',
+      'downloading',
+  );
+  const pacCook = createUiOperationRecord(
+      state.pacCook,
+      'refresh',
+      'cooking',
+  );
+  const proxyHealth = createUiOperationRecord(
+      state.proxyHealth,
+      'check',
+      'checking',
+  );
   const proxyControl = state.proxyControl || {};
   const ifLivePacControlled = Boolean(
       proxyControl.controlledByThisExtension === true &&
@@ -1691,9 +1878,8 @@ async function createPopupState(tabUrl, state) {
       null,
     pacCookedAt: state.cookedPacCache && state.cookedPacCache.cookedAt ||
       null,
-    pacDownloadStatus: state.pacDownload && state.pacDownload.status ||
-      'idle',
-    pacCookStatus: state.pacCook && state.pacCook.status || 'idle',
+    pacDownloadStatus: pacDownload.status || 'idle',
+    pacCookStatus: pacCook.status || 'idle',
     proxyApplied: proxyApply.status === 'applied' && ifLivePacControlled,
     proxyApplyStatus: proxyApply.status || 'idle',
     proxyControl: {
@@ -1704,7 +1890,7 @@ async function createPopupState(tabUrl, state) {
       controlsPac: ifLivePacControlled,
       checkedAt: proxyControl.checkedAt || null,
     },
-    proxyHealth: state.proxyHealth,
+    proxyHealth,
     autoUpdate,
     proxyCandidates: candidates,
     quickProxies: getPopupQuickProxyState(pacMods),
@@ -1729,7 +1915,24 @@ async function updateActionStatusFromStoredState(overrides = {}) {
 
 function requestActionStatusRefresh(params = {}) {
 
-  return actionStatusRefresh.requestRefresh(params);
+  const request = Object.assign({}, params);
+  if (
+    Object.prototype.hasOwnProperty.call(request, 'state') &&
+    ifSupersededActionOperationIsActive()
+  ) {
+    delete request.state;
+  }
+  const overrides = Object.assign({}, params.overrides);
+  const activeOperation = getCurrentActionOperation();
+  if (
+    activeOperation &&
+    !Object.prototype.hasOwnProperty.call(overrides, 'operation')
+  ) {
+    overrides.operation = activeOperation.kind;
+  }
+  return actionStatusRefresh.requestRefresh(Object.assign(request, {
+    overrides,
+  }));
 
 }
 
@@ -1865,7 +2068,7 @@ function getEffectivePacUpdateSuccess(state) {
 
 function getPacAutoUpdateSummary(state) {
 
-  const periodic = state.periodicUpdate || {};
+  const periodic = createUiPeriodicUpdateRecord(state.periodicUpdate);
   const success = getEffectivePacUpdateSuccess(state);
   const dueAt = success.lastSuccessfulUpdateAt ?
     success.lastSuccessfulUpdateAt +
@@ -2003,31 +2206,30 @@ function runPeriodicUpdate(params = {}) {
     });
   }
 
-  return mv3PeriodicUpdate.runUpdate({
-    trigger,
-    applyIfSafe: params.applyIfSafe !== false,
-    execute: executePeriodicUpdatePipeline,
-  }).then(async (result) => {
-    if (result && result.ok === false && result.status !== 'skipped') {
-      await notifyErrorIfEnabled(
-          'pacError',
-          getChromeMessage(
-              'periodicUpdateNotificationTitle',
-              'PAC update failed',
-          ),
-          getChromeMessage(
-              'periodicUpdateNotificationBody',
-              'The automatic PAC update failed. Open settings for details.',
-          ),
-      );
-    }
-    await updateActionStatusFromStoredState({
-      error: result && result.ok === false && result.status !== 'skipped' ?
-        result.error && result.error.message || 'Periodic PAC update failed.' :
-        '',
-    });
-    return result;
-  });
+  return runWithActionOperation(
+      'refresh',
+      () => mv3PeriodicUpdate.runUpdate({
+        trigger,
+        applyIfSafe: params.applyIfSafe !== false,
+        execute: executePeriodicUpdatePipeline,
+      }),
+  )
+      .then(async (result) => {
+        if (result && result.ok === false && result.status !== 'skipped') {
+          await notifyErrorIfEnabled(
+              'pacError',
+              getChromeMessage(
+                  'periodicUpdateNotificationTitle',
+                  'PAC update failed',
+              ),
+              getChromeMessage(
+                  'periodicUpdateNotificationBody',
+                  'The automatic PAC update failed. Open settings for details.',
+              ),
+          );
+        }
+        return result;
+      });
 
 }
 
@@ -2625,14 +2827,18 @@ async function getCookedPacStaleness(state) {
 async function getProxyStatusFromState(state, cookedPacStale) {
 
   return {
-    proxyApply: state.proxyApply,
+    proxyApply: createUiProxyApplyRecord(state.proxyApply),
     proxyControl: state.proxyControl,
     stale: {
       cookedPac: cookedPacStale || await getCookedPacStaleness(state),
     },
     currentPacProviderKey: state.currentPacProviderKey,
     cookedPacCache: await summarizeCookedPacCache(state.cookedPacCache),
-    proxyHealth: state.proxyHealth,
+    proxyHealth: createUiOperationRecord(
+        state.proxyHealth,
+        'check',
+        'checking',
+    ),
   };
 
 }
@@ -2811,7 +3017,10 @@ function runProxyHealthCheck(params = {}) {
         null,
     ));
   }
-  proxyHealthCheckPromise = runProxyHealthCheckInternal(params)
+  proxyHealthCheckPromise = runWithActionOperation(
+      'check',
+      () => runProxyHealthCheckInternal(params),
+  )
       .finally(() => {
         proxyHealthCheckPromise = null;
       });
@@ -2918,8 +3127,6 @@ async function runProxyHealthCheckInternal(params) {
         startedState.proxyHealth,
     );
   }
-  await updateActionStatusFromStoredState({});
-
   const controller = new AbortController();
   const timeoutId = setTimeout(
       () => controller.abort(),
@@ -2985,7 +3192,6 @@ async function runProxyHealthCheckInternal(params) {
           proxyHealth,
       );
     }
-    await updateActionStatusFromStoredState({});
     return createProxyCheckResult(
         'ok',
         null,
@@ -3040,7 +3246,6 @@ async function runProxyHealthCheckInternal(params) {
           proxyHealth,
       );
     }
-    await updateActionStatusFromStoredState({});
     return createProxyCheckResult(
         'inconclusive',
         err && err.name === 'AbortError' ?

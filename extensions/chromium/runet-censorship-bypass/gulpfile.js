@@ -97,6 +97,8 @@ const chromiumMv3CommonSrc = [
   commonSrc,
   '!./src/extension-common/manifest.tmpl.json',
   '!./src/extension-common/*.js',
+  '!./src/extension-common/icons',
+  '!./src/extension-common/icons/**/*',
   ...commonPageFolder('consent'),
   ...commonPageFolder('debug'),
   ...commonPageFolder('exceptions'),

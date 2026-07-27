@@ -8,10 +8,22 @@ const {loadBackgroundModules} = require('./background-modules');
 
 const TEST_EXTENSION_ID = 'action-status-test';
 const TEST_EXTENSION_ORIGIN = `chrome-extension://${TEST_EXTENSION_ID}`;
+const TOOLBAR_ICON_SIZES = [16, 19, 20, 32, 38];
 
 function getAbsoluteIconPath(pathname) {
 
   return `${TEST_EXTENSION_ORIGIN}/${pathname}`;
+
+}
+
+function getAbsoluteIconMap(variant, ifLarge = false) {
+
+  const sizes = ifLarge ? TOOLBAR_ICON_SIZES.concat([48, 128]) :
+    TOOLBAR_ICON_SIZES;
+  return sizes.reduce((paths, size) => {
+    paths[size] = getAbsoluteIconPath(`icons/action-${variant}-${size}.png`);
+    return paths;
+  }, {});
 
 }
 
@@ -53,6 +65,7 @@ function createHarness(options = {}) {
     [2, {id: 2, windowId: 10, active: false, url: 'https://beta.example/'}],
   ]);
   const calls = [];
+  const statusUrls = [];
   const counts = {
     runtimeErrorReads: 0,
     runtimeUrlResolutions: 0,
@@ -87,26 +100,61 @@ function createHarness(options = {}) {
     pacCooked: true,
   }, options.state);
   let focusedWindowId = 10;
-  let iconFailuresRemaining = options.iconFailures || 0;
+  const actionFailures = Object.assign(
+      {setIcon: options.iconFailures || 0},
+      options.actionFailures,
+  );
+  const promiseActionFailures = Object.assign(
+      {},
+      options.promiseActionFailures,
+  );
+  let ifHoldActionCallbacks = false;
+  const heldActionCallbacks = [];
+  const appliedActionState = {};
   const action = {};
-  [
+  const actionMethods = [
     'setIcon',
     'setBadgeText',
     'setBadgeBackgroundColor',
+    'setBadgeTextColor',
     'setTitle',
-  ].forEach((method) => {
+  ].filter((method) =>
+    method !== 'setBadgeTextColor' ||
+    options.badgeTextColorSupported !== false,
+  );
+  actionMethods.forEach((method) => {
+    if (Object.prototype.hasOwnProperty.call(promiseActionFailures, method)) {
+      action[method] = (params) => {
+        calls.push({method, params});
+        if (promiseActionFailures[method] > 0) {
+          --promiseActionFailures[method];
+          return Promise.reject(new Error(`Failed to call ${method}`));
+        }
+        appliedActionState[method] = params;
+        return Promise.resolve();
+      };
+      return;
+    }
     action[method] = (params, callback) => {
       calls.push({method, params});
-      if (method === 'setIcon' && iconFailuresRemaining > 0) {
-        --iconFailuresRemaining;
-        runtimeLastError = {
-          message: 'Failed to set icon: Failed to fetch',
-        };
+      const complete = () => {
+        if (actionFailures[method] > 0) {
+          --actionFailures[method];
+          runtimeLastError = {
+            message: `Failed to call ${method}`,
+          };
+          callback();
+          runtimeLastError = null;
+          return;
+        }
+        appliedActionState[method] = params;
         callback();
-        runtimeLastError = null;
-        return;
+      };
+      if (ifHoldActionCallbacks) {
+        heldActionCallbacks.push(complete);
+      } else {
+        complete();
       }
-      callback();
     };
   });
   const chromeApi = {
@@ -146,11 +194,26 @@ function createHarness(options = {}) {
     mode: snapshot.mode,
     proxyApplied: snapshot.proxyApplied === true &&
       snapshot.controlledByThisExtension === true,
+    proxyControl: {
+      controlsPac: snapshot.proxyApplied === true &&
+        snapshot.controlledByThisExtension === true,
+      controlledByThisExtension:
+        snapshot.controlledByThisExtension === true,
+      canControl: snapshot.controlledByThisExtension === true,
+      levelOfControl: snapshot.controlledByThisExtension === true ?
+        (
+          snapshot.proxyApplied === true ?
+            'controlled_by_this_extension' :
+            'controllable_by_this_extension'
+        ) :
+        'controlled_by_other_extensions',
+    },
     pacDownloaded: snapshot.pacDownloaded === true,
     pacCooked: snapshot.pacCooked === true,
     pacStale: snapshot.pacStale === true,
     selectedProvider: 'test-provider',
-    proxyHealth: {status: 'unknown'},
+    proxyHealth: snapshot.proxyHealth || {status: 'unknown'},
+    autoUpdate: snapshot.autoUpdate || {status: 'scheduled'},
   });
   const createStatus = options.createStatus || defaultCreateStatus;
   const coordinator = global.mv3ActionStatus.createRefreshCoordinator({
@@ -164,6 +227,7 @@ function createHarness(options = {}) {
     async createStatus(url, snapshot) {
 
       ++counts.statusBuilds;
+      statusUrls.push(url);
       return createStatus(url, snapshot, defaultCreateStatus);
 
     },
@@ -175,6 +239,8 @@ function createHarness(options = {}) {
     coordinator,
     counts,
     events,
+    appliedActionState,
+    statusUrls,
     tabs,
     async start() {
 
@@ -219,6 +285,17 @@ function createHarness(options = {}) {
       events.updated.dispatch(tabId, changeInfo, Object.assign({}, tab));
 
     },
+    holdActionCallbacks() {
+
+      ifHoldActionCallbacks = true;
+
+    },
+    releaseActionCallbacks() {
+
+      ifHoldActionCallbacks = false;
+      heldActionCallbacks.splice(0).forEach((complete) => complete());
+
+    },
   };
 
 }
@@ -243,13 +320,14 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
     Chai.expect(harness.calls).to.deep.include({
       method: 'setIcon',
       params: {
-        path: {128: getAbsoluteIconPath('icons/default-128.png')},
+        path: getAbsoluteIconMap('active', true),
         tabId: 2,
       },
     });
     const title = harness.calls.find((call) => call.method === 'setTitle');
     Chai.expect(title.params).to.include({tabId: 2});
-    Chai.expect(title.params.title).to.include('beta.example');
+    Chai.expect(title.params.title).to.include('Current site: Auto');
+    Chai.expect(title.params.title).to.not.include('beta.example');
 
   });
 
@@ -267,18 +345,21 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           'setIcon',
           'setBadgeText',
           'setBadgeBackgroundColor',
+          'setBadgeTextColor',
           'setTitle',
         ]);
         Chai.expect(harness.calls.find((call) => call.method === 'setIcon'))
             .to.deep.equal({
               method: 'setIcon',
               params: {
-                path: {128: getAbsoluteIconPath('icons/default-128.png')},
+                path: getAbsoluteIconMap('active', true),
                 tabId: 1,
               },
             });
         Chai.expect(harness.calls.find((call) => call.method === 'setTitle')
-            .params.title).to.include('changed.example');
+            .params.title).to.include('Current site: Auto');
+        Chai.expect(harness.statusUrls[harness.statusUrls.length - 1])
+            .to.equal('https://changed.example/path');
 
       });
 
@@ -296,10 +377,11 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           'setIcon',
           'setBadgeText',
           'setBadgeBackgroundColor',
+          'setBadgeTextColor',
           'setTitle',
         ]);
         Chai.expect(harness.calls.find((call) => call.method === 'setTitle')
-            .params.title).to.include('alpha.example');
+            .params.title).to.include('Current site: Auto');
 
       });
 
@@ -312,7 +394,7 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
 
         harness.updateTab(1, {url: 'https://changed.example/path'});
         await waitForRefresh();
-        Chai.expect(harness.calls).to.have.length(4);
+        Chai.expect(harness.calls).to.have.length(5);
         harness.calls.length = 0;
 
         await harness.coordinator.requestRefresh({state: harness.setState({})});
@@ -366,10 +448,10 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         harness.activate(2);
         await waitForRefresh();
         Chai.expect(harness.calls.some((call) =>
-          call.params.tabId === 2 &&
-          call.method === 'setTitle' &&
-          call.params.title.includes('beta.example'),
+          call.params.tabId === 2 && call.method === 'setTitle',
         )).to.equal(true);
+        Chai.expect(harness.statusUrls[harness.statusUrls.length - 1])
+            .to.equal('https://beta.example/');
 
         releaseOld({
           host: 'alpha.example',
@@ -413,10 +495,12 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         harness.updateTab(1, {url: 'https://post-navigation.example/'});
         await waitForRefresh();
         Chai.expect(harness.calls.find((call) =>
-          call.method === 'setTitle' &&
-          call.params.title.includes('post-navigation.example'),
+          call.method === 'setTitle' && call.params.tabId === 1,
         )).to.be.an('object');
+        Chai.expect(harness.statusUrls[harness.statusUrls.length - 1])
+            .to.equal('https://post-navigation.example/');
 
+        const callCount = harness.calls.length;
         releaseOld({
           host: 'alpha.example',
           controllable: true,
@@ -424,10 +508,7 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           proxyApplied: true,
         });
         await oldRefresh;
-        Chai.expect(harness.calls.some((call) =>
-          call.method === 'setTitle' &&
-          call.params.title.includes('alpha.example'),
-        )).to.equal(false);
+        Chai.expect(harness.calls).to.have.length(callCount);
 
       });
 
@@ -466,8 +547,8 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         Chai.expect(harness.calls.filter((call) =>
           call.method === 'setIcon',
         ).map((call) => call.params.path)).to.deep.equal([
-          {128: getAbsoluteIconPath('icons/default-128.png')},
-          {128: getAbsoluteIconPath('icons/default-grayscale-128.png')},
+          getAbsoluteIconMap('active', true),
+          getAbsoluteIconMap('off'),
         ]);
 
       });
@@ -484,13 +565,13 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
     Chai.expect(harness.calls).to.deep.include({
       method: 'setIcon',
       params: {
-        path: {128: getAbsoluteIconPath('icons/default-grayscale-128.png')},
+        path: getAbsoluteIconMap('external'),
         tabId: 1,
       },
     });
     Chai.expect(harness.calls).to.deep.include({
       method: 'setBadgeText',
-      params: {text: '', tabId: 1},
+      params: {text: 'EXT', tabId: 1},
     });
 
   });
@@ -507,10 +588,11 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           'setIcon',
           'setBadgeText',
           'setBadgeBackgroundColor',
+          'setBadgeTextColor',
           'setTitle',
         ]);
         Chai.expect(harness.calls.find((call) => call.method === 'setTitle')
-            .params.title).to.include('alpha.example');
+            .params.title).to.include('Current site: Auto');
 
       });
 
@@ -520,12 +602,12 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         const harness = createHarness();
         await harness.start();
 
-        Chai.expect(harness.counts.runtimeUrlResolutions).to.equal(1);
+        Chai.expect(harness.counts.runtimeUrlResolutions).to.equal(7);
         Chai.expect(harness.calls.find((call) => call.method === 'setIcon'))
             .to.deep.equal({
               method: 'setIcon',
               params: {
-                path: {128: getAbsoluteIconPath('icons/default-128.png')},
+                path: getAbsoluteIconMap('active', true),
                 tabId: 1,
               },
             });
@@ -544,6 +626,112 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
 
   });
 
+  Mocha.it('keeps deterministic property-level Action API call counts',
+      async function() {
+
+        const harness = createHarness();
+        await harness.start();
+        Chai.expect(harness.calls).to.have.length(5);
+        harness.calls.length = 0;
+
+        await harness.coordinator.requestRefresh({
+          state: harness.setState({}),
+        });
+        Chai.expect(harness.calls, 'identical refresh').to.have.length(0);
+
+        harness.activate(2);
+        await waitForRefresh();
+        Chai.expect(harness.calls, 'first same-state tab').to.have.length(5);
+        harness.calls.length = 0;
+        harness.activate(1);
+        await waitForRefresh();
+        Chai.expect(harness.calls, 'cached same-state tab').to.have.length(0);
+
+        for (const mode of ['proxy', 'direct', 'auto']) {
+          await harness.coordinator.requestRefresh({
+            state: harness.setState({mode}),
+          });
+          Chai.expect(harness.calls, `${mode} route transition`)
+              .to.have.length(3);
+          harness.calls.length = 0;
+        }
+
+        await harness.coordinator.requestRefresh({
+          state: harness.setState({}),
+          overrides: {operation: 'refresh'},
+        });
+        Chai.expect(harness.calls, 'refresh start').to.have.length(4);
+        harness.calls.length = 0;
+        await harness.coordinator.requestRefresh({
+          state: harness.setState({}),
+        });
+        Chai.expect(harness.calls, 'refresh completion').to.have.length(4);
+        harness.calls.length = 0;
+
+        for (const proxyApplied of [false, true]) {
+          await harness.coordinator.requestRefresh({
+            state: harness.setState({proxyApplied}),
+          });
+          Chai.expect(
+              harness.calls,
+              proxyApplied ? 'Off to applied' : 'applied to Off',
+          ).to.have.length(4);
+          harness.calls.length = 0;
+        }
+
+        for (const patch of [
+          {controlledByThisExtension: false},
+          {controlledByThisExtension: true},
+          {proxyHealth: {status: 'error'}},
+          {proxyHealth: {status: 'unknown'}},
+        ]) {
+          await harness.coordinator.requestRefresh({
+            state: harness.setState(patch),
+          });
+          Chai.expect(harness.calls, JSON.stringify(patch)).to.have.length(4);
+          harness.calls.length = 0;
+        }
+
+      });
+
+  Mocha.it('updates only badge and title properties when the route changes',
+      async function() {
+
+        const harness = createHarness();
+        await harness.start();
+        harness.calls.length = 0;
+
+        await harness.coordinator.requestRefresh({
+          state: harness.setState({mode: 'proxy'}),
+        });
+
+        Chai.expect(harness.calls.map((call) => call.method)).to.have.members([
+          'setBadgeText',
+          'setBadgeBackgroundColor',
+          'setTitle',
+        ]);
+        Chai.expect(harness.calls.some((call) =>
+          ['setIcon', 'setBadgeTextColor'].includes(call.method),
+        )).to.equal(false);
+
+      });
+
+  Mocha.it('feature-detects badge text color without making it required',
+      async function() {
+
+        const harness = createHarness({badgeTextColorSupported: false});
+        const result = await harness.start();
+
+        Chai.expect(result.ok).to.equal(true);
+        Chai.expect(harness.calls.map((call) => call.method)).to.have.members([
+          'setIcon',
+          'setBadgeText',
+          'setBadgeBackgroundColor',
+          'setTitle',
+        ]);
+
+      });
+
   Mocha.it('isolates an icon failure and retries it on a later refresh',
       async function() {
 
@@ -557,12 +745,11 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           'setIcon',
           'setBadgeText',
           'setBadgeBackgroundColor',
+          'setBadgeTextColor',
           'setTitle',
         ]);
         Chai.expect(harness.calls.find((call) => call.method === 'setIcon')
-            .params.path).to.deep.equal({
-          128: getAbsoluteIconPath('icons/default-128.png'),
-        });
+            .params.path).to.deep.equal(getAbsoluteIconMap('active', true));
 
         harness.calls.length = 0;
         const retry = await harness.coordinator.requestRefresh({
@@ -600,6 +787,7 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           Chai.expect(harness.calls.map((call) => call.method)).to.have.members([
             'setBadgeText',
             'setBadgeBackgroundColor',
+            'setBadgeTextColor',
             'setTitle',
           ]);
           Chai.expect(harness.calls.some((call) => call.method === 'setIcon'))
@@ -646,10 +834,135 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
       'setIcon',
       'setBadgeText',
       'setBadgeBackgroundColor',
+      'setBadgeTextColor',
       'setTitle',
     ]);
 
   });
+
+  Mocha.it('retries every failed Action property and consumes runtime errors',
+      async function() {
+
+        const failedMethods = [
+          'setBadgeText',
+          'setBadgeBackgroundColor',
+          'setBadgeTextColor',
+          'setTitle',
+        ];
+        const harness = createHarness({
+          actionFailures: failedMethods.reduce((failures, method) => {
+            failures[method] = 1;
+            return failures;
+          }, {}),
+        });
+        const first = await harness.start();
+
+        Chai.expect(first.ok).to.equal(false);
+        Chai.expect(first.failed).to.have.members(failedMethods);
+        Chai.expect(harness.counts.runtimeErrorReads).to.be.at.least(
+            failedMethods.length,
+        );
+
+        harness.calls.length = 0;
+        const retry = await harness.coordinator.requestRefresh({
+          state: harness.setState({}),
+        });
+        Chai.expect(retry.ok).to.equal(true);
+        Chai.expect(retry.failed).to.deep.equal([]);
+        Chai.expect(harness.calls.map((call) => call.method))
+            .to.have.members(failedMethods);
+
+        harness.calls.length = 0;
+        await harness.coordinator.requestRefresh({state: harness.setState({})});
+        Chai.expect(harness.calls).to.deep.equal([]);
+
+      });
+
+  Mocha.it('handles Promise-style Action rejection and retries the property',
+      async function() {
+
+        const harness = createHarness({
+          promiseActionFailures: {setTitle: 1},
+        });
+        const first = await harness.start();
+
+        Chai.expect(first).to.include({ok: false});
+        Chai.expect(first.failed).to.deep.equal(['setTitle']);
+        Chai.expect(harness.appliedActionState.setIcon).to.be.an('object');
+        Chai.expect(harness.appliedActionState.setTitle).to.equal(undefined);
+
+        harness.calls.length = 0;
+        const retry = await harness.coordinator.requestRefresh({
+          state: harness.setState({}),
+        });
+        Chai.expect(retry).to.include({ok: true});
+        Chai.expect(retry.failed).to.deep.equal([]);
+        Chai.expect(harness.calls.map((call) => call.method))
+            .to.deep.equal(['setTitle']);
+        Chai.expect(harness.appliedActionState.setTitle.title)
+            .to.include('Current site: Auto');
+
+      });
+
+  Mocha.it('serializes Action writes so a clear remains newer than apply',
+      async function() {
+
+        const harness = createHarness();
+        await harness.start();
+        harness.calls.length = 0;
+        harness.holdActionCallbacks();
+
+        const applying = harness.coordinator.requestRefresh({
+          state: harness.setState({mode: 'proxy'}),
+          overrides: {operation: 'apply'},
+        });
+        await waitForRefresh();
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setBadgeText' && call.params.text === '…',
+        )).to.be.an('object');
+
+        const cleared = harness.coordinator.requestRefresh({
+          state: harness.setState({proxyApplied: false}),
+        });
+        await waitForRefresh();
+        Chai.expect(harness.calls.some((call) =>
+          call.method === 'setBadgeText' && call.params.text === 'OFF',
+        )).to.equal(false);
+
+        harness.releaseActionCallbacks();
+        await Promise.all([applying, cleared]);
+        Chai.expect(harness.appliedActionState.setBadgeText.text).to.equal('OFF');
+        Chai.expect(harness.appliedActionState.setTitle.title)
+            .to.include('Extension proxy is off');
+        Chai.expect(harness.appliedActionState.setIcon.path)
+            .to.deep.equal(getAbsoluteIconMap('off'));
+
+      });
+
+  Mocha.it('drops a coalesced stale busy override after authoritative clear',
+      async function() {
+
+        const harness = createHarness();
+        await harness.start();
+        harness.calls.length = 0;
+
+        const busy = harness.coordinator.requestRefresh({
+          state: harness.setState({proxyApplied: true}),
+          overrides: {operation: 'apply'},
+        });
+        const cleared = harness.coordinator.requestRefresh({
+          state: harness.setState({proxyApplied: false}),
+        });
+        await Promise.all([busy, cleared]);
+
+        Chai.expect(harness.calls.some((call) =>
+          call.method === 'setBadgeText' && call.params.text === '…',
+        )).to.equal(false);
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setBadgeText',
+        ).params.text).to.equal('OFF');
+
+      });
 
   Mocha.it('coalesces event bursts onto the latest URL and state read',
       async function() {
@@ -669,7 +982,138 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         Chai.expect(harness.counts.statusBuilds - buildsBefore).to.equal(1);
         const titles = harness.calls.filter((call) => call.method === 'setTitle');
         Chai.expect(titles).to.have.length(1);
-        Chai.expect(titles[0].params.title).to.include('latest.example');
+        Chai.expect(harness.statusUrls[harness.statusUrls.length - 1])
+            .to.equal('https://latest.example/');
+
+      });
+
+  Mocha.it('lets external ownership supersede an older pending lookup',
+      async function() {
+
+        let releaseOld;
+        let markOldStarted;
+        const oldStarted = new Promise((resolve) => {
+          markOldStarted = resolve;
+        });
+        const oldStatus = new Promise((resolve) => {
+          releaseOld = resolve;
+        });
+        const harness = createHarness({
+          refreshOnStart: false,
+          state: {generation: 'old'},
+          createStatus(url, snapshot, fallback) {
+
+            if (snapshot.generation === 'old') {
+              markOldStarted();
+              return oldStatus;
+            }
+            return fallback(url, snapshot);
+
+          },
+        });
+        await harness.start();
+        const oldRefresh = harness.coordinator.requestRefresh({});
+        await oldStarted;
+
+        await harness.coordinator.requestRefresh({
+          state: harness.setState({
+            generation: 'new',
+            controlledByThisExtension: false,
+          }),
+        });
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setBadgeText' && call.params.text === 'EXT',
+        )).to.be.an('object');
+
+        const callCount = harness.calls.length;
+        releaseOld({
+          controllable: true,
+          mode: 'proxy',
+          proxyApplied: true,
+        });
+        await oldRefresh;
+        Chai.expect(harness.calls).to.have.length(callCount);
+
+      });
+
+  Mocha.it('prevents an old window lookup from overwriting new focus',
+      async function() {
+
+        let releaseOld;
+        let markOldStarted;
+        const oldStarted = new Promise((resolve) => {
+          markOldStarted = resolve;
+        });
+        const oldStatus = new Promise((resolve) => {
+          releaseOld = resolve;
+        });
+        const harness = createHarness({
+          refreshOnStart: false,
+          createStatus(url, snapshot, fallback) {
+
+            if (url.includes('alpha.example')) {
+              markOldStarted();
+              return oldStatus;
+            }
+            return fallback(url, snapshot);
+
+          },
+        });
+        harness.tabs.set(4, {
+          id: 4,
+          windowId: 20,
+          active: true,
+          url: 'https://focused.example/',
+        });
+        await harness.start();
+        const oldRefresh = harness.coordinator.requestRefresh({windowId: 10});
+        await oldStarted;
+
+        harness.focusWindow(20);
+        await waitForRefresh();
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setTitle' && call.params.tabId === 4,
+        )).to.be.an('object');
+
+        const callCount = harness.calls.length;
+        releaseOld({
+          controllable: true,
+          mode: 'auto',
+          proxyApplied: true,
+        });
+        await oldRefresh;
+        Chai.expect(harness.calls).to.have.length(callCount);
+
+      });
+
+  Mocha.it('keeps active ownership visible on unsupported browser pages',
+      async function() {
+
+        const harness = createHarness({
+          createStatus(url, snapshot, fallback) {
+
+            if (url.startsWith('chrome://')) {
+              return Object.assign(
+                  fallback('https://safe.invalid/', snapshot),
+                  {controllable: false, mode: 'direct'},
+              );
+            }
+            return fallback(url, snapshot);
+
+          },
+        });
+        harness.tabs.get(1).url = 'chrome://settings/';
+        await harness.start();
+
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setBadgeText',
+        ).params.text).to.equal('');
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setTitle',
+        ).params.title).to.include('routing is unavailable');
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setIcon',
+        ).params.path).to.deep.equal(getAbsoluteIconMap('active', true));
 
       });
 
@@ -684,8 +1128,11 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         harness.tabs.get(2).active = true;
         harness.events.removed.dispatch(1, {windowId: 10, isWindowClosing: false});
         await waitForRefresh();
-        Chai.expect(harness.calls.find((call) => call.method === 'setTitle')
-            .params.title).to.include('beta.example');
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setTitle' && call.params.tabId === 2,
+        )).to.be.an('object');
+        Chai.expect(harness.statusUrls[harness.statusUrls.length - 1])
+            .to.equal('https://beta.example/');
 
         harness.calls.length = 0;
         harness.tabs.get(2).active = false;
@@ -701,6 +1148,7 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           'setIcon',
           'setBadgeText',
           'setBadgeBackgroundColor',
+          'setBadgeTextColor',
           'setTitle',
         ]);
 
@@ -717,8 +1165,11 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         });
         harness.events.replaced.dispatch(3, 2);
         await waitForRefresh();
-        Chai.expect(harness.calls.find((call) => call.method === 'setTitle')
-            .params.title).to.include('replacement.example');
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setTitle' && call.params.tabId === 3,
+        )).to.be.an('object');
+        Chai.expect(harness.statusUrls[harness.statusUrls.length - 1])
+            .to.equal('https://replacement.example/');
 
         harness.calls.length = 0;
         harness.tabs.get(3).active = false;
@@ -734,6 +1185,7 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
           'setIcon',
           'setBadgeText',
           'setBadgeBackgroundColor',
+          'setBadgeTextColor',
           'setTitle',
         ]);
 
@@ -755,8 +1207,11 @@ Mocha.describe('MV3 active-tab action status refresh', function() {
         harness.focusWindow(20);
         await waitForRefresh();
 
-        Chai.expect(harness.calls.find((call) => call.method === 'setTitle')
-            .params.title).to.include('focused.example');
+        Chai.expect(harness.calls.find((call) =>
+          call.method === 'setTitle' && call.params.tabId === 4,
+        )).to.be.an('object');
+        Chai.expect(harness.statusUrls[harness.statusUrls.length - 1])
+            .to.equal('https://focused.example/');
 
       });
 

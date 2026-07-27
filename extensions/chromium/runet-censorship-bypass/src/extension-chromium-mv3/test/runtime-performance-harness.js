@@ -113,6 +113,7 @@ async function createRuntimeHarness(options = {}) {
 
   const counts = createCounts();
   const actionState = {};
+  const actionCalls = [];
   const asyncCounterWaiters = [];
   let completedHashOperations = 0;
   const storageData = {};
@@ -413,11 +414,13 @@ async function createRuntimeHarness(options = {}) {
     'setIcon',
     'setBadgeText',
     'setBadgeBackgroundColor',
+    'setBadgeTextColor',
     'setTitle',
   ].forEach((method) => {
     chromeApi.action[method] = (params, callback) => {
       ++counts.actionCalls;
       actionState[method] = clone(params);
+      actionCalls.push({method, params: clone(params)});
       notifyAsyncCounterWaiters();
       callback();
     };
@@ -774,7 +777,7 @@ async function createRuntimeHarness(options = {}) {
       const target = tabs.get(tabId);
       const actionCompletion = waitForAsyncCounter(
           () => counts.actionCalls,
-          counts.actionCalls + 4,
+          counts.actionCalls + 5,
           'active-tab action refresh',
       );
       Array.from(tabs.values()).forEach((tab) => {
@@ -894,6 +897,11 @@ async function createRuntimeHarness(options = {}) {
       return clone(actionState);
 
     },
+    getActionCalls() {
+
+      return clone(actionCalls);
+
+    },
     getProxyDetails() {
 
       return clone(proxyDetails);
@@ -985,6 +993,7 @@ async function createRuntimeHarness(options = {}) {
     resetCounts() {
 
       resetObject(counts, createCounts());
+      actionCalls.length = 0;
       databaseOpened = false;
 
     },
@@ -1021,6 +1030,15 @@ async function createRuntimeHarness(options = {}) {
       Object.assign(tab, changeInfo);
       events.tabUpdated.dispatch(tabId, clone(changeInfo), clone(tab));
       return hashCompletion.then(waitForAsyncWork);
+
+    },
+    waitForActionCalls(target) {
+
+      return waitForAsyncCounter(
+          () => counts.actionCalls,
+          target,
+          'action calls',
+      );
 
     },
     waitForAsyncWork,

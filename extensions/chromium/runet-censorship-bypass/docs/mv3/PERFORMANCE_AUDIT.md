@@ -22,28 +22,40 @@ means tab lookups/action API calls; `C/H` means PAC cooks/hash operations; and
 
 | Scenario | Before | After | Result |
 | --- | --- | --- | --- |
-| Cold worker startup | G/S 3/2; T/A 1/4; H 1; PR 1; alarms get/create 1/1 | G/S 3/1; other counts unchanged | Avoids an unchanged periodic-state write while one queue-owned freshness read prevents alarm reconciliation from committing a derived timestamp from a stale snapshot. |
+| Cold worker startup | G/S 3/2; T/A 1/4; H 1; PR 1; alarms get/create 1/1 | G/S 3/1; T/A 1/5; H 1; PR 1; alarms get/create 1/1 | Avoids an unchanged periodic-state write, reconstructs after alarm reconciliation, and initializes five independently cached Action properties when badge text color is supported. |
 | Warm worker RPC | RPC 1; G/S 1/0 | unchanged | No module reinitialization or durable write. |
 | Popup opening | RPC 1; tab query 1; G/S 1/0; H 1; A 0 | unchanged | Already optimal; opening the popup does not rewrite toolbar state. |
 | Full settings opening | RPC 1; G/S 2/0; H 2; alarm gets 2 | RPC 1; G/S 1/0; H 1; alarm gets 2 | Reuses the initial state and staleness calculation inside `getState`. |
-| Active-tab switch | G/S 1/0; T/A 1/4; H 1 | unchanged | Event driven, one state snapshot, no durable write. |
-| Active-tab URL completion | G/S 1/0; T/A 0/1; H 1 | unchanged | Only the changed title is written. |
-| Current site Auto to Proxy | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 2/1; T/A 1/3; H 2 | PAC modifiers and health reset derive from the queue's latest state and commit once. |
-| Current site Proxy to Direct | RPC 1; G/S 5/2; T/A 1/1; H 2 | RPC 1; G/S 2/1; T/A 1/1; H 2 | Same atomic derivation; routing result is unchanged. |
-| Current site Direct to Auto | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 2/1; T/A 1/3; H 2 | Same atomic derivation; the override is removed normally. |
+| Active-tab switch | G/S 1/0; T/A 1/4; H 1 | G/S 1/0; T/A 1/5; H 1 | Event driven, one state snapshot, no durable write; a first presentation for a tab initializes five fields. |
+| Active-tab URL completion or reload | G/S 1/0; T/A 0/1; H 1 | G/S 1/0; T/A 0/5; H 1 | Chromium may reset tab-specific action state during navigation, so the complete presentation is deliberately reapplied. |
+| Current site Auto to Proxy | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 2/1; T/A 1/4; H 2 | PAC modifiers and health reset derive from the queue's latest state and commit once; the toolbar shows Apply required rather than claiming the saved-but-unapplied route is active. |
+| Current site Proxy to Direct | RPC 1; G/S 5/2; T/A 1/1; H 2 | RPC 1; G/S 2/1; T/A 1/0; H 2 | The active PAC is still stale, so the identical Apply-required presentation performs no Action write. |
+| Current site Direct to Auto | RPC 1; G/S 5/2; T/A 1/3; H 2 | RPC 1; G/S 2/1; T/A 1/4; H 2 | The override is removed atomically and the authoritative active Auto presentation is restored. |
 | Proxy-auth or periodic event append | G/S 2/1 | G/S 1/1 | The latest bounded list/counters are read and updated within one queued operation. |
 | Proven atomic no-op | n/a | G/S 1/0 | The explicit no-change result returns the normalized durable snapshot without rewriting it. |
-| PAC refresh, changed content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 30/13; IDB R/W 2/2; C/H 1/7; PR/PW 4/1; tab gets 1 | One durable workflow-generation write and freshness reads protect download, cooking, artifact, and apply boundaries. The complete content pipeline remains. |
-| PAC refresh, identical HTTP 200 content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 19/8; IDB R/W 2/0; C/H 0/5; PR/PW 1/0; tab gets 1 | Workflow freshness is durable while existing artifacts are verified; no artifact is rewritten, no cook runs, and unchanged PAC is not reapplied. |
+| PAC refresh, changed content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 31/13; IDB R/W 2/2; C/H 1/8; PR/PW 4/1; tab gets 2; A 8 | One durable workflow-generation write and freshness reads protect download, cooking, artifact, and apply boundaries. The two presentation reads show and then clear the real busy state. |
+| PAC refresh, identical HTTP 200 content | RPC 1; G/S 29/16; IDB R/W 2/2; C/H 1/9; PR/PW 4/1; tab gets 2 | RPC 1; G/S 20/8; IDB R/W 2/0; C/H 0/6; PR/PW 1/0; tab gets 2; A 8 | Workflow freshness is durable while existing artifacts are verified; no artifact is rewritten, no cook runs, and unchanged PAC is not reapplied. The toolbar still reflects the real refresh activity. |
 | PAC metadata/artifact clear | RPC 2; G/S 6/2; IDB R/W 0/2; T/A 2/6; H 1 | G/S 8/4; other counts unchanged | Each clear durably invalidates older PAC workflows before removing its artifact and metadata. |
 | External proxy-control change | G/S 5/2; T/A 1/4; H 1; PR/PW 1/0 | unchanged | Live state is persisted, health is reset, and the active action is refreshed. |
-| Worker restart with valid PAC | same as cold startup | G/S 3/1; IDB 0; T/A 1/4; H 1; PR 1 | Worker memory starts empty; durable state plus live Chrome proxy state reconstruct the presentation without reading PAC bodies. |
+| Worker restart with valid PAC | same as cold startup | G/S 3/1; IDB 0; T/A 1/5; H 1; PR 1 | Worker memory starts empty; alarm reconciliation, durable state, and live Chromium proxy state reconstruct the presentation without reading PAC bodies. |
 
 The changed-PAC baseline is the original branch behavior measured with the same
 harness before production edits. The full-RPC baseline adds the unchanged
 periodic scheduler and action-refresh bookkeeping to the directly measured
 original core-pipeline count (18 gets, 12 sets, two artifact reads, two artifact
 writes, one cook, seven hashes, four proxy reads, and one proxy write).
+
+Action-only transition counts are also deterministic. With
+`setBadgeTextColor` available, cold startup and the first presentation for an
+uncached tab use five Action API calls; returning to a cached tab with the same
+presentation uses zero. A/P/D transitions update badge text, badge background,
+and title only (three calls). Applied/Off transitions use four calls. Apply,
+Clear, and periodic refresh use four calls
+to enter the busy presentation and four to restore the authoritative result.
+External ownership, recovery from external ownership, health warning, and
+health recovery each use four calls. Popup and options opening use zero Action
+API calls. Browsers without `setBadgeTextColor` use one fewer initialization
+call and retain the same semantics.
 
 ## Confirmed bottlenecks and changes
 
@@ -62,6 +74,9 @@ writes, one cook, seven hashes, four proxy reads, and one proxy write).
   body and cooked artifact metadata before taking an unchanged fast path.
 - Manual periodic refresh requested the same final action refresh twice. The
   RPC now relies on the refresh already performed by the periodic operation.
+- Action operations use one shared live-operation tracker and one final
+  authoritative refresh. Legacy per-operation final refreshes were removed;
+  identical property values never result in Action API calls.
 - Startup alarm reconciliation rewrote an already-correct `scheduled` state.
   It now rereads inside the queue and skips only when both status and next-run
   timestamp are unchanged.
@@ -73,8 +88,9 @@ writes, one cook, seven hashes, four proxy reads, and one proxy write).
 ## Intentionally unchanged
 
 - Startup still performs one live `chrome.proxy.settings.get`, persists its
-  fresh `checkedAt` result, queries the active tab, and writes the initial four
-  action presentation fields. Those are required after service-worker restart.
+  fresh `checkedAt` result, queries the active tab, and writes the initial five
+  action presentation fields when badge text color is supported. Those are
+  required after service-worker restart.
 - Identical refresh still downloads and hashes the response, verifies both
   durable artifacts with two IndexedDB reads, updates successful-download and
   periodic timestamps, and checks live proxy control before deciding not to

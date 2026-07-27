@@ -265,17 +265,50 @@
   "popupConfigurationWarning": {
     "message": "An advanced routing setting needs attention. Open Settings for details."
   },
-  "actionTitleSite": {
-    "message": "Site"
+  "actionTitleLoading": {
+    "message": "Checking extension proxy state…"
   },
-  "actionTitleMode": {
-    "message": "Mode"
+  "actionTitleExternal": {
+    "message": "Proxy settings are controlled by another extension or browser policy. Open the extension for recovery steps."
   },
-  "actionTitleProxy": {
-    "message": "Proxy"
+  "actionTitleApplying": {
+    "message": "Applying changes…"
   },
-  "actionTitleSystem": {
-    "message": "system"
+  "actionTitleClearing": {
+    "message": "Turning off extension proxy…"
+  },
+  "actionTitleRefreshing": {
+    "message": "Updating routing data…"
+  },
+  "actionTitleChecking": {
+    "message": "Testing proxy connection…"
+  },
+  "actionTitleOff": {
+    "message": "Extension proxy is off. Chromium uses system proxy settings."
+  },
+  "actionTitleStale": {
+    "message": "Extension proxy is on — Saved settings are newer than active routing rules. Open the extension to apply."
+  },
+  "actionTitleError": {
+    "message": "Extension proxy is on — An operation needs attention. Open the extension to retry."
+  },
+  "actionTitleControlError": {
+    "message": "Extension proxy state could not be confirmed. Open the extension to check again."
+  },
+  "actionTitleHealthWarning": {
+    "message": "Extension proxy is on — The last proxy check failed. Open the extension to test again."
+  },
+  "actionTitleActiveAuto": {
+    "message": "Extension proxy is on — Current site: Auto"
+  },
+  "actionTitleActiveProxy": {
+    "message": "Extension proxy is on — Current site: Proxy"
+  },
+  "actionTitleActiveDirect": {
+    "message": "Extension proxy is on — Current site: Direct"
+  },
+  "actionTitleActiveUnavailable": {
+    "message": "Extension proxy is on — Current page routing is unavailable"
   },
   "providerAntizapretDescription": {
     "message": "Main PAC script from the Antizapret project."

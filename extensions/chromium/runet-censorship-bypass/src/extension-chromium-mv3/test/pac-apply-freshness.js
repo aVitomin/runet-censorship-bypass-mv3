@@ -64,10 +64,10 @@ describe('PAC apply freshness', () => {
     expect(harness.getProxyDetails().value.mode).to.equal('direct');
     expect(harness.getState().proxyApply.status).to.equal('cleared');
     expect(result.popupState.proxyApplyStatus).to.equal('cleared');
-    expect(harness.getActionState().setIcon.path[128])
-        .to.include('default-grayscale-128.png');
+    expect(harness.getActionState().setIcon.path[16])
+        .to.include('action-off-16.png');
     expect(harness.getActionState().setTitle.title)
-        .to.include('Proxy: system');
+        .to.include('Extension proxy is off');
   });
 
   it('keeps a popup PAC workflow stale after clear during cooking', async () => {

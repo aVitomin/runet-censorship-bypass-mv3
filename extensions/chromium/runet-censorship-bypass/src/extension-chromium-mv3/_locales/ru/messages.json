@@ -265,17 +265,50 @@
   "popupConfigurationWarning": {
     "message": "Расширенная настройка маршрутизации требует внимания. Подробности доступны в настройках."
   },
-  "actionTitleSite": {
-    "message": "Сайт"
+  "actionTitleLoading": {
+    "message": "Проверка состояния прокси расширения…"
   },
-  "actionTitleMode": {
-    "message": "Режим"
+  "actionTitleExternal": {
+    "message": "Настройками прокси управляет другое расширение или политика браузера. Откройте расширение, чтобы устранить конфликт."
   },
-  "actionTitleProxy": {
-    "message": "Прокси"
+  "actionTitleApplying": {
+    "message": "Применение изменений…"
   },
-  "actionTitleSystem": {
-    "message": "системный"
+  "actionTitleClearing": {
+    "message": "Выключение прокси расширения…"
+  },
+  "actionTitleRefreshing": {
+    "message": "Обновление данных маршрутизации…"
+  },
+  "actionTitleChecking": {
+    "message": "Проверка подключения через прокси…"
+  },
+  "actionTitleOff": {
+    "message": "Прокси расширения выключен. Chromium использует системные настройки прокси."
+  },
+  "actionTitleStale": {
+    "message": "Прокси расширения включён — Сохранённые настройки новее активных правил. Откройте расширение, чтобы применить их."
+  },
+  "actionTitleError": {
+    "message": "Прокси расширения включён — Операция требует внимания. Откройте расширение и повторите попытку."
+  },
+  "actionTitleControlError": {
+    "message": "Не удалось подтвердить состояние прокси расширения. Откройте расширение и проверьте снова."
+  },
+  "actionTitleHealthWarning": {
+    "message": "Прокси расширения включён — Последняя проверка прокси завершилась ошибкой. Откройте расширение и проверьте снова."
+  },
+  "actionTitleActiveAuto": {
+    "message": "Прокси расширения включён — Текущий сайт: Авто"
+  },
+  "actionTitleActiveProxy": {
+    "message": "Прокси расширения включён — Текущий сайт: Через прокси"
+  },
+  "actionTitleActiveDirect": {
+    "message": "Прокси расширения включён — Текущий сайт: Напрямую"
+  },
+  "actionTitleActiveUnavailable": {
+    "message": "Прокси расширения включён — Маршрут для текущей страницы недоступен"
   },
   "providerAntizapretDescription": {
     "message": "Основной PAC-скрипт проекта Антизапрет."

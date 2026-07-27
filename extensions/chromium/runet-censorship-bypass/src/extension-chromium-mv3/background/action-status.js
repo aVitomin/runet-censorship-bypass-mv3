@@ -3,145 +3,47 @@
 (function(exports) {
 
   const BADGE_COLORS = Object.freeze({
-    proxy: '#15803d',
-    auto: '#2563eb',
-    direct: '#64748b',
-    stale: '#d97706',
-    error: '#b91c1c',
-    proxyHealthError: '#D93025',
-    off: '#64748b',
+    auto: '#1D4ED8',
+    proxy: '#166534',
+    direct: '#475569',
+    off: '#475569',
+    external: '#6B21A8',
+    warning: '#B91C1C',
+    busy: '#334155',
+    loading: '#475569',
   });
+  const BADGE_TEXT_COLOR = '#FFFFFF';
+  const TOOLBAR_ICON_SIZES = Object.freeze([16, 19, 20, 32, 38]);
+  const LARGE_ICON_SIZES = Object.freeze([48, 128]);
+  const MAX_CACHED_TABS = 256;
+  const actionStateByApi = new WeakMap();
+
+  function createIconPathMap(state, ifIncludeLarge) {
+
+    const sizes = ifIncludeLarge ?
+      TOOLBAR_ICON_SIZES.concat(LARGE_ICON_SIZES) :
+      TOOLBAR_ICON_SIZES;
+    return Object.freeze(sizes.reduce((paths, size) => {
+      paths[size] = `icons/action-${state}-${size}.png`;
+      return paths;
+    }, {}));
+
+  }
+
   const ICON_PATHS = Object.freeze({
-    applied: Object.freeze({
-      128: 'icons/default-128.png',
-    }),
-    inactive: Object.freeze({
-      128: 'icons/default-grayscale-128.png',
-    }),
+    active: createIconPathMap('active', true),
+    off: createIconPathMap('off', false),
+    external: createIconPathMap('external', false),
+    busy: createIconPathMap('busy', false),
+    warning: createIconPathMap('warning', false),
+    loading: createIconPathMap('loading', false),
   });
-  const NOTIFICATION_ICON_PATH = 'icons/default-128.png';
+  const NOTIFICATION_ICON_PATH = 'icons/action-active-128.png';
   const RUNTIME_ICON_PATHS = Object.freeze(Array.from(new Set(
       Object.values(ICON_PATHS)
           .flatMap((paths) => Object.values(paths))
           .concat(NOTIFICATION_ICON_PATH),
   )));
-  const MAX_CACHED_TABS = 256;
-  const actionStateByApi = new WeakMap();
-
-  function getBadgeStatus(status = {}) {
-
-    if (status.proxyHealth && status.proxyHealth.status === 'error') {
-      return {
-        text: 'E',
-        color: BADGE_COLORS.proxyHealthError,
-      };
-    }
-    if (status.error) {
-      return {
-        text: '!',
-        color: BADGE_COLORS.error,
-      };
-    }
-    if (status.pacStale) {
-      return {
-        text: '*',
-        color: BADGE_COLORS.stale,
-      };
-    }
-    if (status.proxyApplied !== true) {
-      return {
-        text: '',
-        color: BADGE_COLORS.off,
-      };
-    }
-    if (status.mode === 'proxy') {
-      return {
-        text: 'P',
-        color: BADGE_COLORS.proxy,
-      };
-    }
-    if (status.mode === 'direct') {
-      return {
-        text: 'D',
-        color: BADGE_COLORS.direct,
-      };
-    }
-    return {
-      text: 'A',
-      color: BADGE_COLORS.auto,
-    };
-
-  }
-
-  function formatTitle(status = {}) {
-
-    const lines = [getMessage('extName', 'Runet Censorship Bypass')];
-    if (status.host) {
-      lines.push(`${getMessage('actionTitleSite', 'Site')}: ${status.host}`);
-    }
-    if (status.controllable === false) {
-      lines.push(getMessage(
-          'popupPageCannotBeControlled',
-          'This page cannot be controlled.',
-      ));
-    }
-    lines.push(`${getMessage('actionTitleMode', 'Mode')}: ${formatMode(status.mode)}`);
-    lines.push(
-        `${getMessage('actionTitleProxy', 'Proxy')}: ` +
-        `${status.proxyApplied ?
-          getMessage('popupApplied', 'applied') :
-          getMessage('actionTitleSystem', 'system')}`,
-    );
-    const providerLabel = getProviderLabel(status);
-    if (providerLabel) {
-      lines.push(
-          `${getMessage('popupProvider', 'Provider')}: ` +
-          providerLabel,
-      );
-    }
-    lines.push(`PAC: ${formatPacStatus(status)}`);
-    if (status.error) {
-      lines.push(`${getMessage('optionsError', 'Error')}: ${sanitizeMessage(status.error)}`);
-    }
-    if (status.proxyHealth && status.proxyHealth.status === 'error') {
-      lines.push(
-          `${getMessage('optionsError', 'Error')}: ` +
-          getProxyHealthMessage(status.proxyHealth),
-      );
-    }
-    return lines.join('\n');
-
-  }
-
-  function getProxyHealthMessage(proxyHealth) {
-
-    if (proxyHealth.candidateType === 'torBrowser') {
-      return getMessage(
-          'proxyHealthTorBrowserShort',
-          'Tor Browser is unavailable',
-      );
-    }
-    if (proxyHealth.candidateType === 'localTor') {
-      return getMessage(
-          'proxyHealthLocalTorShort',
-          'Tor service is unavailable',
-      );
-    }
-    return getMessage(
-        'proxyHealthGenericShort',
-        'Configured proxy is unavailable',
-    );
-
-  }
-
-  function getProviderLabel(status) {
-
-    if (status.selectedProvider === 'onlyOwnSites') {
-      return getMessage('providerOnlyOwnSitesLabel', 'Only my site rules');
-    }
-    return status.selectedProviderLabel || status.selectedProvider || '';
-
-  }
 
   function getMessage(key, fallback) {
 
@@ -156,38 +58,271 @@
 
   }
 
-  function formatMode(mode) {
+  function getProxyControl(status) {
 
-    if (mode === 'proxy') {
-      return getMessage('popupProxyMode', 'Proxy');
-    }
-    if (mode === 'direct') {
-      return getMessage('popupDirectMode', 'Direct');
-    }
-    return getMessage('popupAutoMode', 'Auto');
+    return status.proxyControl && typeof status.proxyControl === 'object' ?
+      status.proxyControl :
+      {};
 
   }
 
-  function formatPacStatus(status) {
+  function ifProxyControlIsExternal(status) {
 
-    if (status.pacStale) {
-      return getMessage('popupCookedStale', 'stale');
+    const control = getProxyControl(status);
+    const level = String(control.levelOfControl || '');
+    return control.controlledByThisExtension !== true && (
+      level === 'controlled_by_other_extensions' ||
+      level === 'not_controllable' ||
+      Boolean(level) && control.canControl === false
+    );
+
+  }
+
+  function ifControlsPac(status) {
+
+    const control = getProxyControl(status);
+    return status.proxyApplied === true || control.controlsPac === true;
+
+  }
+
+  function getTransientOperation(status) {
+
+    if (['apply', 'clear', 'refresh', 'check'].includes(status.operation)) {
+      return status.operation;
     }
-    if (status.pacCooked) {
-      return getMessage('popupDownloadedAndCooked', 'downloaded/cooked');
+    return '';
+
+  }
+
+  function ifOperationFailed(status) {
+
+    return Boolean(status.error) ||
+      status.proxyApplyStatus === 'error' ||
+      status.pacDownloadStatus === 'error' ||
+      status.pacCookStatus === 'error' ||
+      status.autoUpdate && status.autoUpdate.status === 'error';
+
+  }
+
+  function getActionTitle(kind, operation) {
+
+    if (kind === 'external') {
+      return getMessage(
+          'actionTitleExternal',
+          'Proxy settings are controlled by another extension or browser ' +
+            'policy. Open the extension for recovery steps.',
+      );
     }
-    if (status.pacDownloaded) {
-      return getMessage('popupDownloaded', 'downloaded');
+    if (kind === 'busy') {
+      const titles = {
+        apply: [
+          'actionTitleApplying',
+          'Applying changes…',
+        ],
+        clear: [
+          'actionTitleClearing',
+          'Turning off extension proxy…',
+        ],
+        refresh: [
+          'actionTitleRefreshing',
+          'Updating routing data…',
+        ],
+        check: [
+          'actionTitleChecking',
+          'Testing proxy connection…',
+        ],
+      };
+      const entry = titles[operation] || titles.apply;
+      return getMessage(entry[0], entry[1]);
     }
-    return getMessage('popupNeverUpdated', 'never updated');
+    const titles = {
+      loading: [
+        'actionTitleLoading',
+        'Checking extension proxy state…',
+      ],
+      off: [
+        'actionTitleOff',
+        'Extension proxy is off. Chromium uses system proxy settings.',
+      ],
+      stale: [
+        'actionTitleStale',
+        'Extension proxy is on — Saved settings are newer than active ' +
+          'routing rules. Open the extension to apply.',
+      ],
+      error: [
+        'actionTitleError',
+        'Extension proxy is on — An operation needs attention. Open the ' +
+          'extension to retry.',
+      ],
+      controlError: [
+        'actionTitleControlError',
+        'Extension proxy state could not be confirmed. Open the extension ' +
+          'to check again.',
+      ],
+      healthWarning: [
+        'actionTitleHealthWarning',
+        'Extension proxy is on — The last proxy check failed. Open the ' +
+          'extension to test again.',
+      ],
+      auto: [
+        'actionTitleActiveAuto',
+        'Extension proxy is on — Current site: Auto',
+      ],
+      proxy: [
+        'actionTitleActiveProxy',
+        'Extension proxy is on — Current site: Proxy',
+      ],
+      direct: [
+        'actionTitleActiveDirect',
+        'Extension proxy is on — Current site: Direct',
+      ],
+      unsupported: [
+        'actionTitleActiveUnavailable',
+        'Extension proxy is on — Current page routing is unavailable',
+      ],
+    };
+    const entry = titles[kind] || titles.loading;
+    return getMessage(entry[0], entry[1]);
+
+  }
+
+  function createPresentation(kind, iconState, badge, options = {}) {
+
+    const presentation = {
+      kind,
+      iconState,
+      iconPath: ICON_PATHS[iconState],
+      badgeText: badge.text,
+      badgeTone: badge.tone,
+      badgeColor: BADGE_COLORS[badge.tone],
+      badgeTextColor: BADGE_TEXT_COLOR,
+      title: getActionTitle(kind, options.operation),
+      transient: options.transient === true,
+    };
+    presentation.fingerprint = JSON.stringify([
+      presentation.kind,
+      presentation.iconState,
+      presentation.badgeText,
+      presentation.badgeTone,
+      presentation.badgeColor,
+      presentation.badgeTextColor,
+      presentation.title,
+      presentation.transient,
+    ]);
+    return Object.freeze(presentation);
+
+  }
+
+  function deriveActionViewModel(status = {}) {
+
+    if (ifProxyControlIsExternal(status)) {
+      return createPresentation(
+          'external',
+          'external',
+          {text: 'EXT', tone: 'external'},
+      );
+    }
+    const operation = getTransientOperation(status);
+    if (operation) {
+      return createPresentation(
+          'busy',
+          'busy',
+          {text: '…', tone: 'busy'},
+          {operation, transient: true},
+      );
+    }
+    const control = getProxyControl(status);
+    if (control.error && !control.levelOfControl) {
+      return createPresentation(
+          'controlError',
+          'warning',
+          {text: '!', tone: 'warning'},
+      );
+    }
+    const hasControlEvidence = typeof status.proxyApplied === 'boolean' ||
+      Boolean(control.levelOfControl) ||
+      Boolean(control.checkedAt);
+    if (
+      status.loading === true ||
+      status.lifecycle === 'reconstructing' ||
+      !hasControlEvidence
+    ) {
+      return createPresentation(
+          'loading',
+          'loading',
+          {text: '…', tone: 'loading'},
+          {transient: true},
+      );
+    }
+    if (!ifControlsPac(status)) {
+      return createPresentation(
+          'off',
+          'off',
+          {text: 'OFF', tone: 'off'},
+      );
+    }
+    if (ifOperationFailed(status)) {
+      return createPresentation(
+          'error',
+          'warning',
+          {text: '!', tone: 'warning'},
+      );
+    }
+    if (status.pacStale === true) {
+      return createPresentation(
+          'stale',
+          'warning',
+          {text: '!', tone: 'warning'},
+      );
+    }
+    if (status.proxyHealth && status.proxyHealth.status === 'error') {
+      return createPresentation(
+          'healthWarning',
+          'warning',
+          {text: '!', tone: 'warning'},
+      );
+    }
+    if (status.controllable === false) {
+      return createPresentation(
+          'unsupported',
+          'active',
+          {text: '', tone: 'auto'},
+      );
+    }
+    const mode = ['proxy', 'direct'].includes(status.mode) ?
+      status.mode :
+      'auto';
+    return createPresentation(
+        mode,
+        'active',
+        {
+          text: mode === 'auto' ? 'A' : mode === 'proxy' ? 'P' : 'D',
+          tone: mode,
+        },
+    );
+
+  }
+
+  function getBadgeStatus(status = {}) {
+
+    const viewModel = deriveActionViewModel(status);
+    return {
+      text: viewModel.badgeText,
+      color: viewModel.badgeColor,
+      tone: viewModel.badgeTone,
+    };
+
+  }
+
+  function formatTitle(status = {}) {
+
+    return deriveActionViewModel(status).title;
 
   }
 
   function getIconPath(status = {}) {
 
-    return status.proxyApplied === true ?
-      ICON_PATHS.applied :
-      ICON_PATHS.inactive;
+    return deriveActionViewModel(status).iconPath;
 
   }
 
@@ -234,7 +369,6 @@
     if (!actionApi) {
       return {ok: false, status: 'unavailable'};
     }
-    const badge = getBadgeStatus(status);
     const tabId = Number.isInteger(options.tabId) ? options.tabId : null;
     const cacheKey = tabId === null ? 'global' : tabId;
     let cache = actionStateByApi.get(actionApi);
@@ -243,51 +377,82 @@
       actionStateByApi.set(actionApi, cache);
     }
     const previous = cache.get(cacheKey) || {};
-    const presentation = {
-      iconPath: getIconPath(status),
-      badgeText: badge.text,
-      badgeColor: badge.color,
-      title: formatTitle(status),
-    };
+    const presentation = deriveActionViewModel(status);
+    if (
+      options.forcePresentation !== true &&
+      previous.fingerprint === presentation.fingerprint
+    ) {
+      return {
+        ok: true,
+        badge: {
+          text: presentation.badgeText,
+          color: presentation.badgeColor,
+          tone: presentation.badgeTone,
+        },
+        iconPath: presentation.iconPath,
+        presentation,
+        fingerprint: presentation.fingerprint,
+        changed: [],
+        failed: [],
+      };
+    }
     const tabParams = tabId === null ? {} : {tabId};
     const changes = [
-      ['iconPath', 'setIcon', null],
-      ['badgeText', 'setBadgeText', Object.assign({text: presentation.badgeText}, tabParams)],
+      ['iconState', 'setIcon', null],
+      [
+        'badgeText',
+        'setBadgeText',
+        Object.assign({text: presentation.badgeText}, tabParams),
+      ],
       [
         'badgeColor',
         'setBadgeBackgroundColor',
         Object.assign({color: presentation.badgeColor}, tabParams),
       ],
       ['title', 'setTitle', Object.assign({title: presentation.title}, tabParams)],
-    ].filter(([key]) =>
+    ];
+    if (typeof actionApi.setBadgeTextColor === 'function') {
+      changes.splice(3, 0, [
+        'badgeTextColor',
+        'setBadgeTextColor',
+        Object.assign({color: presentation.badgeTextColor}, tabParams),
+      ]);
+    }
+    const requiredChanges = changes.filter(([key]) =>
       options.forcePresentation === true ||
       previous[key] !== presentation[key],
     );
-    const results = await Promise.all(changes.map(([key, method, params]) => {
-      if (key !== 'iconPath') {
-        return callAction(actionApi, runtimeApi, method, params);
-      }
-      const absoluteIconPaths = resolveActionIconPaths(
-          presentation.iconPath,
-          runtimeApi,
-      );
-      return absoluteIconPaths ?
-        callAction(
-            actionApi,
-            runtimeApi,
-            method,
-            Object.assign({path: absoluteIconPaths}, tabParams),
-        ) :
-        false;
-    }));
+    const results = await Promise.all(requiredChanges.map(
+        ([key, method, params]) => {
+          if (key !== 'iconState') {
+            return callAction(actionApi, runtimeApi, method, params);
+          }
+          const absoluteIconPaths = resolveActionIconPaths(
+              presentation.iconPath,
+              runtimeApi,
+          );
+          return absoluteIconPaths ?
+            callAction(
+                actionApi,
+                runtimeApi,
+                method,
+                Object.assign({path: absoluteIconPaths}, tabParams),
+            ) :
+            false;
+        },
+    ));
     const ok = results.every(Boolean);
     const next = Object.assign({}, previous);
+    delete next.fingerprint;
     results.forEach((ifSucceeded, index) => {
       if (ifSucceeded) {
-        const key = changes[index][0];
+        const key = requiredChanges[index][0];
         next[key] = presentation[key];
       }
     });
+    if (ok) {
+      next.fingerprint = presentation.fingerprint;
+    }
     if (ok || results.some(Boolean)) {
       cache.delete(cacheKey);
       cache.set(cacheKey, next);
@@ -297,10 +462,16 @@
     }
     return {
       ok,
-      badge,
+      badge: {
+        text: presentation.badgeText,
+        color: presentation.badgeColor,
+        tone: presentation.badgeTone,
+      },
       iconPath: presentation.iconPath,
-      changed: changes.map(([, method]) => method),
-      failed: changes
+      presentation,
+      fingerprint: presentation.fingerprint,
+      changed: requiredChanges.map(([, method]) => method),
+      failed: requiredChanges
           .filter((change, index) => !results[index])
           .map(([, method]) => method),
     };
@@ -321,17 +492,30 @@
   function callAction(actionApi, runtimeApi, method, params) {
 
     return new Promise((resolve) => {
+      let ifSettled = false;
+      const finish = (ifSucceeded) => {
+        if (!ifSettled) {
+          ifSettled = true;
+          resolve(ifSucceeded);
+        }
+      };
       if (!actionApi || typeof actionApi[method] !== 'function') {
-        resolve(false);
+        finish(false);
         return;
       }
       try {
-        actionApi[method](params, () => {
+        const result = actionApi[method](params, () => {
           const error = runtimeApi && runtimeApi.lastError;
-          resolve(!error);
+          finish(!error);
         });
+        if (result && typeof result.then === 'function') {
+          result.then(
+              () => finish(true),
+              () => finish(false),
+          );
+        }
       } catch (err) {
-        resolve(false);
+        finish(false);
       }
     });
 
@@ -356,6 +540,7 @@
     let latestToken = null;
     let pendingParams = null;
     let scheduledRefresh = null;
+    let presentationQueue = Promise.resolve();
 
     function requestRefresh(params = {}) {
 
@@ -381,11 +566,7 @@
             previous && previous.forcePresentation ||
             latest && latest.forcePresentation,
         ),
-        overrides: Object.assign(
-            {},
-            previous && previous.overrides,
-            latest && latest.overrides,
-        ),
+        overrides: Object.assign({}, latest && latest.overrides),
       });
 
     }
@@ -420,15 +601,22 @@
       if (token !== latestToken) {
         return {ok: false, status: 'stale'};
       }
-      return updateStatus(
-          Object.assign({}, status, params.overrides),
-          {
-            actionApi: chromeApi.action,
-            runtimeApi: chromeApi.runtime,
-            tabId: tab.id,
-            forcePresentation: params.forcePresentation === true,
-          },
-      );
+      const update = presentationQueue.then(() => {
+        if (token !== latestToken) {
+          return {ok: false, status: 'stale'};
+        }
+        return updateStatus(
+            Object.assign({}, status, params.overrides),
+            {
+              actionApi: chromeApi.action,
+              runtimeApi: chromeApi.runtime,
+              tabId: tab.id,
+              forcePresentation: params.forcePresentation === true,
+            },
+        );
+      });
+      presentationQueue = update.catch(() => undefined);
+      return update;
 
     }
 
@@ -511,6 +699,7 @@
         return;
       }
       event.addListener(listener);
+
     }
 
     function refreshFromEvent(params) {
@@ -648,81 +837,70 @@
 
   function selfTest() {
 
-    const proxyBadge = getBadgeStatus({
-      mode: 'proxy',
+    const active = {
+      controllable: true,
       proxyApplied: true,
-    });
-    const directBadge = getBadgeStatus({
+      proxyControl: {
+        controlsPac: true,
+        controlledByThisExtension: true,
+        levelOfControl: 'controlled_by_this_extension',
+      },
+    };
+    const proxy = deriveActionViewModel(Object.assign({}, active, {
+      mode: 'proxy',
+    }));
+    const direct = deriveActionViewModel(Object.assign({}, active, {
       mode: 'direct',
-      proxyApplied: true,
-    });
-    const autoBadge = getBadgeStatus({
+    }));
+    const auto = deriveActionViewModel(Object.assign({}, active, {
       mode: 'auto',
-      proxyApplied: true,
-    });
-    const staleBadge = getBadgeStatus({
-      mode: 'proxy',
-      proxyApplied: true,
-      pacStale: true,
-    });
-    const errorBadge = getBadgeStatus({
-      mode: 'proxy',
-      proxyApplied: true,
-      error: 'failed',
-    });
-    const proxyHealthBadge = getBadgeStatus({
-      mode: 'proxy',
-      proxyApplied: true,
-      pacStale: true,
-      error: 'PAC failed',
-      proxyHealth: {
-        status: 'error',
-        candidateType: 'torBrowser',
+    }));
+    const external = deriveActionViewModel(Object.assign({}, active, {
+      operation: 'apply',
+      proxyControl: {
+        controlsPac: false,
+        controlledByThisExtension: false,
+        canControl: false,
+        levelOfControl: 'controlled_by_other_extensions',
+      },
+    }));
+    const off = deriveActionViewModel({
+      controllable: true,
+      proxyApplied: false,
+      proxyControl: {
+        controlsPac: false,
+        controlledByThisExtension: false,
+        canControl: true,
+        levelOfControl: 'controllable_by_this_extension',
       },
     });
-    const samplePassword = ['sec', 'ret'].join('');
-    const sanitized = sanitizeMessage(
-        `Failed with password=${samplePassword} and ` +
-        `http://user:${samplePassword}@example.test`,
-    );
-    const manifestVersionBrand = String.fromCharCode(77, 86, 51);
+    const secret = ['not', '-for-title'].join('');
+    const safeTitle = formatTitle(Object.assign({}, active, {
+      host: `host-${secret}.example`,
+      selectedProviderLabel: `provider-${secret}`,
+      error: `password=${secret}`,
+    }));
     return {
-      proxyBadgeMapsToP: proxyBadge.text === 'P',
-      directBadgeMapsToD: directBadge.text === 'D',
-      autoBadgeMapsToA: autoBadge.text === 'A',
-      appliedProxyUsesColorIcon:
-        getIconPath({proxyApplied: true}) === ICON_PATHS.applied,
-      inactiveProxyUsesGrayscaleIcon:
-        getIconPath({proxyApplied: false}) === ICON_PATHS.inactive,
-      titleOmitsManifestVersionBranding:
-        !formatTitle({mode: 'auto'}).includes(manifestVersionBrand),
-      staleBadgeOverridesMode: staleBadge.text === '*',
-      errorBadgeOverridesStale: errorBadge.text === '!',
-      proxyHealthErrorMapsToRedE:
-        proxyHealthBadge.text === 'E' &&
-        proxyHealthBadge.color === '#D93025',
-      proxyHealthErrorOverridesOtherBadges:
-        proxyHealthBadge.text === 'E',
-      proxyHealthTitleIsLocalizedWithoutSecrets:
-        formatTitle({
+      proxyBadgeMapsToP: proxy.badgeText === 'P',
+      directBadgeMapsToD: direct.badgeText === 'D',
+      autoBadgeMapsToA: auto.badgeText === 'A',
+      offAndExternalAreDistinct:
+        off.badgeText === 'OFF' && external.badgeText === 'EXT',
+      externalOverridesBusy:
+        external.kind === 'external' && external.transient === false,
+      activeUsesPurposeBuiltIcon:
+        proxy.iconPath[16] === 'icons/action-active-16.png',
+      titleOmitsSensitiveInputs: !safeTitle.includes(secret),
+      fingerprintIsStable:
+        proxy.fingerprint === deriveActionViewModel(Object.assign({}, active, {
           mode: 'proxy',
-          proxyApplied: true,
-          proxyHealth: {status: 'error', candidateType: 'torBrowser'},
-        }).includes('Tor Browser') &&
-        !formatTitle({
-          mode: 'proxy',
-          proxyApplied: true,
-          proxyHealth: {status: 'error', candidateType: 'torBrowser'},
-        }).includes(samplePassword),
-      notificationMessageRedactsSecrets:
-        sanitized.includes('password=***') &&
-        sanitized.includes('user:***@') &&
-        !sanitized.includes(samplePassword),
+        })).fingerprint,
     };
 
   }
 
   exports.mv3ActionStatus = Object.freeze({
+    deriveActionViewModel,
     getBadgeStatus,
     getIconPath,
     getRuntimeIconPaths,
