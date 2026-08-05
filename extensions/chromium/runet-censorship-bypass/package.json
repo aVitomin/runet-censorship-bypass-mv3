@@ -27,8 +27,7 @@
     "eslint-config-google": "^0.14.0",
     "gulp-changed": "^4.0.2",
     "mocha": "^8.2.1",
-    "sinon-chrome": "^3.0.1",
-    "symlink-to": "^0.0.4"
+    "sinon-chrome": "^3.0.1"
   },
   "dependencies": {
     "del": "^6.0.0",
