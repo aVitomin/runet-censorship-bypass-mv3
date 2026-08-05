@@ -1,3 +1,12 @@
+# Archived architecture audit (2026-07-17)
+
+> Historical point-in-time audit of revision `f8f4735`. Its four primary
+> findings were addressed before `v0.0.2.0-beta1`; use the current
+> [architecture guide](../../development/ARCHITECTURE.md) for the product as it
+> exists now. The original audit body is preserved below.
+
+---
+
 # Chromium MV3 architecture and code-quality audit
 
 Audit date: 2026-07-17

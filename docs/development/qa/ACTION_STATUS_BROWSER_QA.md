@@ -10,7 +10,10 @@ as an unpacked extension in current Brave and Chrome builds.
 - Change the active URL, use back/forward, reload, and complete a redirect. Confirm the final URL wins and a background-tab navigation does not alter the visible action.
 - Rapidly switch tabs while reloading them, then close or replace the active tab. Confirm the final active tab remains displayed after activity settles.
 - Change a current-site rule in the popup and apply it. Confirm Auto, Proxy, and Direct appear immediately without closing and reopening the popup.
-- Download, cook, apply, refresh, clear, and recook PAC data from the popup and options page. Confirm the PAC and applied statuses, colored/grayscale icon, badge, and title agree.
+- Run the normal unified Apply configuration, Refresh data, and Turn off flows.
+  When separately testing download/cook/apply internals, use only the collapsed
+  Advanced expert operations. Confirm PAC/applied status, icon, badge, and title
+  agree throughout; separate steps are not the normal user workflow.
 - Take over proxy settings with another extension or policy, then release control. Confirm the action and a newly opened popup reflect live control without a tab switch.
 - From the browser's extensions page, inspect and stop the extension service worker. Then activate a tab and reopen the popup; confirm the active site and live proxy-control status are reconstructed.
 - Keep the service-worker DevTools console open while applying and clearing PAC. Confirm there is no `Unchecked runtime.lastError`, especially from `action.setIcon`, and that icon, badge, and title updates continue after a failed Action API call.

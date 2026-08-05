@@ -1,11 +1,9 @@
-# React + Flow + Webpack 2 Boilerplate with Babel
+# Legacy options source directory
 
-Switch branches for adding/removing Babel for JSX + Flowtype.
+This directory is retained for the legacy compatibility build. Its original
+upstream boilerplate README is preserved in the
+[legacy documentation](../../../../../../../docs/legacy/LEGACY_OPTIONS_BUNDLE_README.md).
 
-## Install
-
-`yarn install` or `npm install --dev`
-
-## Run
-
-`yarn/npm run build`
+For the current MV3 development workflow, use the repository
+[development guide](../../../../../../../docs/development/DEVELOPMENT.md).
+This pointer remains excluded from extension packages by `gulpfile.js`.

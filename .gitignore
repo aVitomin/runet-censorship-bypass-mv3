@@ -13,6 +13,7 @@ dist/
 coverage/
 
 # Local tools, caches, logs, and browser profiles.
+.local/
 .tmp/
 .cache/
 .npm/

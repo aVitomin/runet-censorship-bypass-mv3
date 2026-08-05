@@ -1,3 +1,12 @@
+# Archived MV3 legacy-migration phase notes
+
+> Historical implementation snapshot from the MV3 migration phases. It is
+> preserved for engineering context, but its phase labels and proposed mappings
+> are not current instructions. See the maintained
+> [legacy-migration guide](../../development/LEGACY_MIGRATION.md).
+
+---
+
 # MV3 Legacy Migration Audit Notes
 
 These repository audit notes are not part of the extension package.
@@ -103,8 +112,8 @@ and PAC cooker.
   structured defaults.
 - Legacy string `ownProxies` values are normalized into structured proxy rows
   and credentials remain available only for MV3 proxy authentication.
-- Migration apply updates selected MV3 settings only; users may need to cook
-  PAC again and explicitly apply proxy settings afterward.
+- Migration apply updates selected MV3 settings only; users must review the
+  result and run the unified **Apply configuration** workflow afterward.
 - Release-candidate scope keeps DNS monkey-patching, HTTPS-only URL gating,
   arbitrary raw `replaceDirectWith` PAC strings, blocking `webRequest`
   permission, DNR, and PAC runtime execution out of MV3.

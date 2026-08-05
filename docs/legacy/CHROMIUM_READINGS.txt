@@ -1,0 +1,6 @@
+Historical upstream Chromium reference links. These are not the current build,
+release, or browser-support instructions.
+
+https://chromereleases.googleblog.com/search/label/Stable%20updates
+https://www.chromestatus.com
+https://www.youtube.com/user/ChromeDevelopers/videos

@@ -1,3 +1,11 @@
+# Historical upstream store description
+
+> Archived from the legacy extension tooling root. It describes the upstream
+> MV2/store product and is not the current MV3 product description or
+> installation guide.
+
+---
+
 # О расширении
 
 Обход интернет-цензуры в России пока что не является преступлением.

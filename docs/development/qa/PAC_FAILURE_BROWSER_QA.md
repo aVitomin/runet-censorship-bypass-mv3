@@ -126,15 +126,18 @@ In full settings, add and select a custom provider whose only PAC URL is
 Browser, and WARP; add the required enabled own-proxy entries with no
 credentials; and save. Add an exact-host Proxy rule for the echo hostname. Keep
 `ownProxiesOnlyForOwnSites: true`, `replaceDirectWithProxy: false`, and
-`noDirect: false` unless a case says otherwise. Choose Download PAC, Cook PAC,
-and Apply proxy, then confirm that the extension controls a non-mandatory PAC.
+`noDirect: false` unless a case says otherwise. Under **Advanced → Expert
+operations**, deliberately run Download routing data, Rebuild routing rules,
+and Activate prepared rules, then confirm that the extension controls a
+non-mandatory PAC. These separate controls are for this QA procedure; the
+normal user workflow is **Apply configuration**.
 The loopback server does not redirect. Requested and final PAC response URL
 validation, including redirect rejection before artifact storage, is covered by
 the automated MV3 security tests rather than these browser routing cases.
 
 After changing `$env:PAC_BODY`, stop the Node server with Ctrl+C, set the new
-value in that same PowerShell window, restart the server, then repeat Download
-PAC, Cook PAC, and Apply proxy. Start a fresh `chrome://net-export/` capture
+value in that same PowerShell window, restart the server, then repeat the three
+Advanced expert operations above. Start a fresh `chrome://net-export/` capture
 immediately before the first navigation in each case.
 
 ## Cases
