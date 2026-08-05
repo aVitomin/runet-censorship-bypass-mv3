@@ -1,0 +1,94 @@
+name: Сообщить об ошибке
+description: Воспроизводимая проблема текущей Chromium MV3 beta
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за отчёт. Не публикуйте passwords, private proxy credentials/endpoints, tokens, cookies, credential-bearing URLs, raw private PAC или browsing history.
+  - type: input
+    id: version
+    attributes:
+      label: Версия расширения или commit
+      placeholder: v0.0.2.0-beta1
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Браузер и версия
+      placeholder: Brave 1.x / Chromium 1xx
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Операционная система
+      placeholder: Windows 11, Ubuntu 24.04, macOS …
+    validations:
+      required: true
+  - type: dropdown
+    id: install_type
+    attributes:
+      label: Тип установки
+      options:
+        - Чистая unpacked-установка
+        - Обновление существующей unpacked-установки
+        - Локальная сборка из исходников
+    validations:
+      required: true
+  - type: input
+    id: provider_method
+    attributes:
+      label: Источник и метод прокси
+      description: Не указывайте приватный endpoint или учётные данные.
+      placeholder: Antizapret + Tor Browser; custom provider + own HTTPS proxy
+    validations:
+      required: true
+  - type: dropdown
+    id: current_route
+    attributes:
+      label: Текущий маршрут
+      options:
+        - Auto (A)
+        - Proxy (P)
+        - Direct (D)
+        - Off (OFF)
+        - External control (EXT)
+        - Loading / warning (… / !)
+        - Неизвестно
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Ожидаемый и фактический результат
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized_logs
+    attributes:
+      label: Очищенные logs или screenshots
+      description: Удалите локальные пути, private URLs, PAC body, extension/profile IDs и любые секреты.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Проверка приватности
+      options:
+        - label: Я проверил(а), что отчёт не содержит passwords, private proxy credentials/endpoints, tokens, cookies, credential-bearing URLs, raw private PAC или browsing history.
+          required: true
+        - label: Это не приватный security report; для уязвимости я использую SECURITY.md.
+          required: true

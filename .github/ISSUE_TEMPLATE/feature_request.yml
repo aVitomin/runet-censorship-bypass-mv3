@@ -1,0 +1,49 @@
+name: Предложить улучшение
+description: Предложение для текущего Chromium MV3 продукта или документации
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Опишите пользовательскую задачу и безопасный ожидаемый результат. Не добавляйте passwords, private proxy credentials, tokens, cookies, private URLs/PAC или browsing history.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какая проблема решается
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое поведение
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Popup / current-site routing
+        - Settings / UX
+        - PAC / routing source
+        - Proxy method / Tor / authentication
+        - Updates / health / diagnostics
+        - Documentation / installation
+        - Development / testing / release
+        - Другое
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы и ограничения
+      description: Укажите влияние на privacy, permissions, routing и совместимость, если оно известно.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Проверка приватности
+      options:
+        - label: Предложение не содержит passwords, private proxy credentials/endpoints, tokens, cookies, credential-bearing URLs, raw private PAC или browsing history.
+          required: true
