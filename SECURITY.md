@@ -8,24 +8,26 @@ upstream не являются поддерживаемым выпуском э�
 
 ## Как сообщить
 
-Не создавайте публичный issue с эксплуатационными деталями или секретами.
+Для уязвимости используйте
+**[GitHub private vulnerability reporting](https://github.com/aVitomin/runet-censorship-bypass-mv3/security/advisories/new)**.
+Не создавайте публичный issue с описанием уязвимости.
 
-Механизм private vulnerability reporting сейчас выключен в настройках
-репозитория.
-Если после изменения этой настройки GitHub показывает **Security → Report a
-vulnerability**, используйте приватную форму.
+В приватном отчёте укажите затронутую версию, краткое описание влияния,
+предварительные условия воспроизведения и очищенное доказательство. Не
+публикуйте и не прикладывайте без необходимости реальные exploit details,
+пароли, private proxy data или PAC contents, tokens, cookies и browsing
+history.
 
-До этого используйте форму
-**[Запросить приватный канал](https://github.com/aVitomin/runet-censorship-bypass-mv3/issues/new?template=security_contact.yml)**.
-Она создаёт публичный issue, поэтому укажите только безопасную категорию,
-затронутую публичную версию и просьбу о контакте. Не описывайте уязвимость до
-установления приватного канала.
+Если приватная форма GitHub временно недоступна, используйте обычную
+[форму bug report](https://github.com/aVitomin/runet-censorship-bypass-mv3/issues/new?template=bug_report.yml)
+только для публичного запроса на безопасный канал связи. Пометьте заголовок как
+`[Security contact]`, а в обязательных публичных полях укажите лишь
+`contact-only`, когда раскрытие ответа нежелательно. Такой запрос не должен
+содержать технических деталей уязвимости или секретов: сопровождающие сначала
+установят приватный канал и лишь затем запросят подробности.
 
-Только после установления приватного канала укажите браузер и ОС, минимальные
-шаги, ожидаемый эффект и безопасное доказательство. Даже в приватном сообщении
-не отправляйте реальные пароли, proxy credentials, tokens, cookies, private
-URLs/PAC, browser profile, NetLog или browsing history без необходимости и
-предварительного согласования.
+Обычные ошибки без security-sensitive деталей следует отправлять через
+[форму bug report](https://github.com/aVitomin/runet-censorship-bypass-mv3/issues/new?template=bug_report.yml).
 
 ## Область особого внимания
 

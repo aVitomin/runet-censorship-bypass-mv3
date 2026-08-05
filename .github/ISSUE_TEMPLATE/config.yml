@@ -3,6 +3,6 @@ contact_links:
   - name: Установка и решение проблем
     url: https://github.com/aVitomin/runet-censorship-bypass-mv3/blob/main/docs/user/TROUBLESHOOTING.md
     about: Проверьте актуальные безопасные шаги перед созданием bug report.
-  - name: Политика безопасности
-    url: https://github.com/aVitomin/runet-censorship-bypass-mv3/security/policy
-    about: Не публикуйте детали уязвимости или секреты в обычном issue.
+  - name: Сообщить об уязвимости приватно
+    url: https://github.com/aVitomin/runet-censorship-bypass-mv3/security/advisories/new
+    about: Не раскрывайте уязвимости публично; отправьте детали только через приватную форму GitHub.
