@@ -4,7 +4,6 @@ const gulp = require('gulp');
 const del = require('del');
 const through = require('through2');
 const PluginError = require('plugin-error');
-const changed = require('gulp-changed');
 
 const PluginName = 'Template literals';
 
