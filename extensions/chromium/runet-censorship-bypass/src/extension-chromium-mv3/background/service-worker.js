@@ -58,7 +58,7 @@ const PHASE_TEN_STATUS = Object.freeze({
 
 let pacDownloadPromise = null;
 let pacCookPromise = null;
-let proxyHealthCheckPromise = null;
+let activeProxyHealthCheck = null;
 let pacProxyOperationQueue = Promise.resolve();
 let activePacApplyOperation = null;
 let actionOperationSequence = 0;
@@ -70,7 +70,6 @@ const ACTION_OPERATION_PRIORITIES = Object.freeze({
   apply: 3,
   clear: 4,
 });
-const proxyErrorDebounce = new Map();
 const NO_PROXY_CANDIDATE_MESSAGE =
   'No proxy is enabled. Enable Tor, WARP, or an own proxy.';
 const PAC_APPLY_STALE_ERROR = Object.freeze({
@@ -182,6 +181,21 @@ function createUiOperationRecord(record, kind, transientStatus) {
 
 }
 
+function createUiProxyHealthRecord(record) {
+
+  const result = createUiOperationRecord(record, 'check', 'checking');
+  [
+    'candidateKey',
+    'candidateRevision',
+    'checkSequence',
+    'nextCheckAt',
+    'retryStep',
+    'sessionId',
+  ].forEach((key) => delete result[key]);
+  return result;
+
+}
+
 function createUiPeriodicUpdateRecord(record) {
 
   const result = cloneRpcRecord(record);
@@ -217,6 +231,9 @@ function createUiProxyApplyRecord(record) {
 
 async function beginActionOperation(kind) {
 
+  if (kind !== 'check') {
+    cancelActiveProxyHealthCheck(`superseded-by-${kind}`);
+  }
   const operation = Object.freeze({
     kind,
     sequence: ++actionOperationSequence,
@@ -609,11 +626,7 @@ const RPC_METHODS = Object.freeze({
       periodicUpdate,
       reliability: {
         autoUpdate: getPacAutoUpdateSummary(state),
-        proxyHealth: createUiOperationRecord(
-            state.proxyHealth,
-            'check',
-            'checking',
-        ),
+        proxyHealth: createUiProxyHealthRecord(state.proxyHealth),
       },
       stale: {
         cookedPac: cookedPacStale,
@@ -642,7 +655,8 @@ const RPC_METHODS = Object.freeze({
 
   async setPacMods(params = {}) {
 
-    const state = await mv3State.saveRpcPacMods(params.pacMods, {
+    cancelActiveProxyHealthCheck('proxy-configuration-changed');
+    let state = await mv3State.saveRpcPacMods(params.pacMods, {
       ifResetProxyHealth(previousPacMods, nextPacMods) {
 
         return mv3ProxyHealth.getCandidateFingerprint(previousPacMods) !==
@@ -663,6 +677,7 @@ const RPC_METHODS = Object.freeze({
 
       },
     });
+    state = await reconcileProxyHealthSupervisor({startupDelay: true});
     await requestActionStatusRefresh({state});
     return {ok: true};
 
@@ -806,8 +821,10 @@ const RPC_METHODS = Object.freeze({
   async resetMv3State() {
 
     invalidatePacApplyFreshness();
+    cancelActiveProxyHealthCheck('state-reset');
     await mv3State.resetState();
-    await updateActionStatusFromStoredState({});
+    const state = await reconcileProxyHealthSupervisor({startupDelay: false});
+    await requestActionStatusRefresh({state});
     return {ok: true};
 
   },
@@ -920,8 +937,9 @@ const RPC_METHODS = Object.freeze({
 
   async getProxyHealth() {
 
+    await actionStatusRecoveryPromise.catch(() => undefined);
     const state = await mv3State.loadState();
-    return state.proxyHealth;
+    return createUiProxyHealthRecord(state.proxyHealth);
 
   },
 
@@ -950,6 +968,7 @@ const RPC_METHODS = Object.freeze({
     return runWithActionOperation('apply', async () => {
       const result = await applyCookedPacAndPersist(params);
       await handleProxyOperationResult(result, 'Proxy apply failed.');
+      await reconcileProxyHealthSupervisor({startupDelay: true});
       return result;
     });
 
@@ -960,6 +979,7 @@ const RPC_METHODS = Object.freeze({
     return runWithActionOperation('clear', async () => {
       const result = await clearProxyAndPersist();
       await handleProxyOperationResult(result, 'Proxy clear failed.');
+      await reconcileProxyHealthSupervisor({startupDelay: false});
       return result;
     });
 
@@ -1070,10 +1090,12 @@ const RPC_METHODS = Object.freeze({
         ['currentPacProviderKey', 'pacMods'].includes(field),
       )
     ) {
+      cancelActiveProxyHealthCheck('legacy-proxy-configuration-changed');
       await invalidatePacWorkflowFreshness();
     }
     const result = await mv3LegacyMigrationApply.applyLegacyMigration(params);
-    await updateActionStatusFromStoredState({});
+    const state = await reconcileProxyHealthSupervisor({startupDelay: true});
+    await requestActionStatusRefresh({state});
     return result;
 
   },
@@ -1103,8 +1125,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
   console.info('MV3 service worker shell installed.');
   initializeAutomaticPacUpdates('installed');
-  updateActionStatusFromStoredState({})
-      .catch((err) => console.warn('Failed to update action status.', err));
+  initializeProxyHealthAfterLifecycle('installed');
 
 });
 
@@ -1112,13 +1133,20 @@ chrome.runtime.onStartup.addListener(() => {
 
   console.info('MV3 service worker shell started.');
   initializeAutomaticPacUpdates('browser-startup');
-  updateActionStatusFromStoredState({})
-      .catch((err) => console.warn('Failed to update action status.', err));
+  initializeProxyHealthAfterLifecycle('browser-startup');
 
 });
 
 if (chrome.alarms && chrome.alarms.onAlarm) {
   chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm && alarm.name === mv3ProxyHealth.ALARM_NAME) {
+      runAutomaticProxyHealthCheck({trigger: 'alarm'})
+          .catch((err) => console.warn(
+              'Automatic proxy-health check failed.',
+              err,
+          ));
+      return;
+    }
     if (
       alarm &&
       [
@@ -1263,7 +1291,23 @@ function initializeAutomaticPacUpdates(trigger) {
 async function recoverActionStatusOnWorkerStart() {
 
   const refreshed = await refreshProxyControlAndPersistWithState();
-  return requestActionStatusRefresh({state: refreshed.state});
+  const state = await initializeProxyHealthSupervisor(
+      'service-worker-startup',
+      refreshed.state,
+  );
+  return requestActionStatusRefresh({state});
+
+}
+
+function initializeProxyHealthAfterLifecycle(trigger) {
+
+  return actionStatusRecoveryPromise
+      .then(() => initializeProxyHealthSupervisor(trigger))
+      .then((state) => requestActionStatusRefresh({state}))
+      .catch((err) => console.warn(
+          `Failed to initialize proxy health (${trigger}).`,
+          err,
+      ));
 
 }
 
@@ -1835,11 +1879,7 @@ async function createPopupState(tabUrl, state) {
       'refresh',
       'cooking',
   );
-  const proxyHealth = createUiOperationRecord(
-      state.proxyHealth,
-      'check',
-      'checking',
-  );
+  const proxyHealth = createUiProxyHealthRecord(state.proxyHealth);
   const proxyControl = state.proxyControl || {};
   const ifLivePacControlled = Boolean(
       proxyControl.controlledByThisExtension === true &&
@@ -2834,12 +2874,215 @@ async function getProxyStatusFromState(state, cookedPacStale) {
     },
     currentPacProviderKey: state.currentPacProviderKey,
     cookedPacCache: await summarizeCookedPacCache(state.cookedPacCache),
-    proxyHealth: createUiOperationRecord(
-        state.proxyHealth,
-        'check',
-        'checking',
-    ),
+    proxyHealth: createUiProxyHealthRecord(state.proxyHealth),
   };
+
+}
+
+function getProxyHealthRelevance(state, options = {}) {
+
+  const candidate = mv3ProxyHealth.getCandidateSummary(state.pacMods);
+  const targetOrigin = mv3ProxyHealth.sanitizeOrigin(
+      state.proxyHealth && state.proxyHealth.targetOrigin,
+  );
+  let host = '';
+  if (targetOrigin) {
+    host = new URL(targetOrigin).hostname.toLowerCase();
+  }
+  const control = state.proxyControl || {};
+  const relevant = Boolean(
+      candidate.type &&
+      options.ifPacFresh !== false &&
+      targetOrigin &&
+      host &&
+      getPopupHostRuleState(state.pacMods, host).mode === 'proxy' &&
+      state.proxyApply.status === 'applied' &&
+      control.controlledByThisExtension === true &&
+      control.rawValue &&
+      control.rawValue.mode === 'pac_script',
+  );
+  return {
+    relevant,
+    candidate,
+    targetOrigin,
+  };
+
+}
+
+function ifProxyHealthCheckIsActive(proxyHealth) {
+
+  return Boolean(
+      activeProxyHealthCheck &&
+      !activeProxyHealthCheck.cancelled &&
+      proxyHealth &&
+      activeProxyHealthCheck.checkSequence === proxyHealth.checkSequence,
+  );
+
+}
+
+function ifProxyHealthNeedsInvalidation(proxyHealth) {
+
+  const health = proxyHealth || {};
+  return health.status !== 'unknown' ||
+    Boolean(
+        health.candidateKey ||
+        health.candidateRevision !== null &&
+          health.candidateRevision !== undefined ||
+        health.nextCheckAt ||
+        health.sessionId ||
+        health.lastErrorAt ||
+        health.lastSuccessAt,
+    );
+
+}
+
+function ifProxyHealthRecordsMatch(left, right) {
+
+  return JSON.stringify(left) === JSON.stringify(right);
+
+}
+
+async function reconcileProxyHealthSupervisor(options = {}) {
+
+  const sessionId = await mv3ProxyHealth.ensureSessionId();
+  const now = Date.now();
+  const evaluatedState = options.reconstructedState || await mv3State.loadState();
+  const evaluatedRelevance = getProxyHealthRelevance(evaluatedState);
+  const ifPacFresh = !evaluatedRelevance.relevant ||
+    !(await getCookedPacStaleness(evaluatedState)).stale;
+  const evaluatedRevision = evaluatedState.pacModsRevision;
+  let scheduledAt = null;
+  const state = await mv3State.updateStateAtomically((currentState) => {
+    const relevance = getProxyHealthRelevance(currentState, {
+      ifPacFresh:
+        ifPacFresh && currentState.pacModsRevision === evaluatedRevision,
+    });
+    const current = currentState.proxyHealth || {};
+    if (!relevance.relevant) {
+      scheduledAt = null;
+      if (!ifProxyHealthNeedsInvalidation(current)) {
+        return mv3State.ATOMIC_NO_CHANGE;
+      }
+      return {
+        proxyHealth: mv3State.createInvalidatedProxyHealth(current),
+      };
+    }
+
+    const classification = mv3ProxyHealth.classifyFreshness(current, {
+      candidate: relevance.candidate,
+      candidateRevision: currentState.pacModsRevision,
+      sessionId,
+    }, {
+      now,
+      ifCheckingActive: ifProxyHealthCheckIsActive(current),
+    });
+    let next = Object.assign({}, current);
+    if (classification.stale) {
+      next = mv3State.createInvalidatedProxyHealth(current);
+      Object.assign(next, {
+        candidateType: relevance.candidate.type,
+        candidateProxyType: relevance.candidate.proxyType,
+        candidateEndpoint: relevance.candidate.endpoint,
+        candidateKey: relevance.candidate.key,
+        candidateRevision: currentState.pacModsRevision,
+        targetOrigin: relevance.targetOrigin,
+        sessionId,
+      });
+    } else if (classification.status !== current.status) {
+      next.status = classification.status;
+      next.lastCheckedAt = classification.status === 'error' ?
+        current.lastErrorAt :
+        current.lastSuccessAt;
+    }
+
+    if (classification.status === 'checking') {
+      scheduledAt = null;
+      next.nextCheckAt = null;
+    } else if (classification.status === 'ok') {
+      scheduledAt = next.lastSuccessAt + mv3ProxyHealth.HEALTHY_TTL_MS;
+      next.nextCheckAt = scheduledAt;
+    } else if (classification.status === 'error') {
+      const persistedNext = Number(next.nextCheckAt) || 0;
+      scheduledAt = persistedNext > now ?
+        persistedNext :
+        now + (
+          options.startupDelay === true ?
+            mv3ProxyHealth.STARTUP_DELAY_MS :
+            mv3ProxyHealth.getFailureRetryMs(next.retryStep)
+        );
+      next.nextCheckAt = scheduledAt;
+    } else {
+      const persistedNext = Number(next.nextCheckAt) || 0;
+      scheduledAt = persistedNext > now ?
+        persistedNext :
+        now + mv3ProxyHealth.STARTUP_DELAY_MS;
+      next.nextCheckAt = scheduledAt;
+    }
+    return ifProxyHealthRecordsMatch(current, next) ?
+      mv3State.ATOMIC_NO_CHANGE :
+      {proxyHealth: next};
+  });
+  await mv3ProxyHealth.reconcileAlarm(scheduledAt);
+  return state;
+
+}
+
+function initializeProxyHealthSupervisor(trigger, reconstructedState) {
+
+  return reconcileProxyHealthSupervisor({
+    reconstructedState,
+    startupDelay: true,
+    trigger,
+  });
+
+}
+
+function cancelActiveProxyHealthCheck(reason) {
+
+  const active = activeProxyHealthCheck;
+  if (!active || active.cancelled) {
+    return false;
+  }
+  active.cancelled = true;
+  active.cancelReason = reason || 'superseded';
+  if (active.controller) {
+    active.controller.abort();
+  }
+  return true;
+
+}
+
+async function runAutomaticProxyHealthCheck(params = {}) {
+
+  const state = await mv3State.loadState();
+  const ifPacFresh = !(await getCookedPacStaleness(state)).stale;
+  const relevance = getProxyHealthRelevance(state, {ifPacFresh});
+  if (!relevance.relevant) {
+    await reconcileProxyHealthSupervisor({startupDelay: false});
+    return createProxyCheckResult(
+        'inconclusive',
+        'PROXY_CHECK_NOT_RELEVANT',
+        'No current proxy-health target is available.',
+        createUiProxyHealthRecord(state.proxyHealth),
+    );
+  }
+  if (
+    state.proxyHealth.nextCheckAt &&
+    state.proxyHealth.nextCheckAt > Date.now() + 1000
+  ) {
+    await reconcileProxyHealthSupervisor({startupDelay: false});
+    return createProxyCheckResult(
+        'inconclusive',
+        'PROXY_CHECK_ALARM_STALE',
+        'The proxy-health alarm was superseded.',
+        createUiProxyHealthRecord(state.proxyHealth),
+    );
+  }
+  return runProxyHealthCheck({
+    source: 'automatic',
+    tabUrl: relevance.targetOrigin,
+    trigger: params.trigger || 'alarm',
+  });
 
 }
 
@@ -2894,8 +3137,17 @@ async function recordProxyHealthFailure(details) {
   if (!mv3ProxyHealth.isProxyError(errorCode)) {
     return {ok: false, status: 'ignored'};
   }
+  const sessionId = await mv3ProxyHealth.ensureSessionId();
   const state = await mv3State.loadState();
-  if (state.proxyApply.status !== 'applied') {
+  if (
+    state.proxyApply.status !== 'applied' ||
+    !state.proxyHealth ||
+    state.proxyHealth.status !== 'checking'
+  ) {
+    return {ok: false, status: 'ignored'};
+  }
+  const pacStaleness = await getCookedPacStaleness(state);
+  if (pacStaleness.stale) {
     return {ok: false, status: 'ignored'};
   }
   const control = await mv3ProxySettings.getProxyControlState();
@@ -2913,40 +3165,65 @@ async function recordProxyHealthFailure(details) {
     getPopupHostRuleState(state.pacMods, failureHost).mode === 'proxy';
   const candidate = ifExplicitProxyRule ?
     mv3ProxyHealth.getCandidateSummary(state.pacMods) :
-    {type: null, endpoint: ''};
-  const debounceKey = mv3ProxyHealth.getNotificationKey(
-      errorCode,
-      candidate.type,
-  );
+    {type: null, endpoint: '', key: ''};
+  if (
+    !failureOrigin ||
+    !candidate.type ||
+    state.proxyHealth.targetOrigin !== failureOrigin
+  ) {
+    return {ok: false, status: 'ignored'};
+  }
   const now = Date.now();
-  const lastDebouncedAt = proxyErrorDebounce.get(debounceKey) || 0;
-  if (now - lastDebouncedAt < mv3ProxyHealth.ERROR_DEBOUNCE_MS) {
-    return {ok: false, status: 'debounced'};
-  }
-  proxyErrorDebounce.set(debounceKey, now);
-  if (proxyErrorDebounce.size > 50) {
-    for (const [key, at] of proxyErrorDebounce) {
-      if (now - at >= mv3ProxyHealth.ERROR_DEBOUNCE_MS) {
-        proxyErrorDebounce.delete(key);
-      }
-    }
-  }
   let ifRecorded = false;
   let ifNotify = false;
   let latestCandidate = candidate;
   const committedState = await mv3State.updateStateAtomically((currentState) => {
-    if (currentState.proxyApply.status !== 'applied') {
+    if (
+      currentState.proxyApply.status !== 'applied' ||
+      currentState.pacModsRevision !== state.pacModsRevision
+    ) {
       return mv3State.ATOMIC_NO_CHANGE;
     }
     const ifLatestExplicitProxyRule = failureHost &&
       getPopupHostRuleState(currentState.pacMods, failureHost).mode === 'proxy';
     latestCandidate = ifLatestExplicitProxyRule ?
       mv3ProxyHealth.getCandidateSummary(currentState.pacMods) :
-      {type: null, endpoint: ''};
+      {type: null, endpoint: '', key: ''};
+    if (!latestCandidate.type) {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
     const previous = currentState.proxyHealth || {};
-    const targetOrigin = ifLatestExplicitProxyRule ?
-      failureOrigin :
-      previous.targetOrigin;
+    if (
+      previous.status !== 'checking' ||
+      previous.targetOrigin !== failureOrigin ||
+      previous.candidateKey !== latestCandidate.key ||
+      previous.candidateRevision !== currentState.pacModsRevision ||
+      previous.sessionId !== sessionId
+    ) {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    const eventAt = Number(details && details.timeStamp) || now;
+    if (
+      previous.lastCheckedAt &&
+      eventAt < previous.lastCheckedAt &&
+      ['checking', 'ok'].includes(previous.status)
+    ) {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    const ifSameCandidate =
+      previous.candidateKey === latestCandidate.key &&
+      previous.candidateRevision === currentState.pacModsRevision &&
+      previous.sessionId === sessionId;
+    let retryStep = ifSameCandidate ?
+      mv3ProxyHealth.normalizeRetryStep(previous.retryStep) :
+      0;
+    if (
+      ifSameCandidate &&
+      previous.status === 'checking' &&
+      previous.lastErrorAt
+    ) {
+      retryStep = mv3ProxyHealth.getNextRetryStep(retryStep);
+    }
     ifNotify = mv3ProxyHealth.shouldNotify(
         previous,
         errorCode,
@@ -2961,8 +3238,14 @@ async function recordProxyHealthFailure(details) {
       lastErrorMessage: errorCode,
       lastErrorUrl: failureHost,
       candidateType: latestCandidate.type,
+      candidateProxyType: latestCandidate.proxyType,
       candidateEndpoint: latestCandidate.endpoint || null,
-      targetOrigin: targetOrigin || null,
+      candidateKey: latestCandidate.key,
+      candidateRevision: currentState.pacModsRevision,
+      targetOrigin: failureOrigin,
+      sessionId,
+      retryStep,
+      nextCheckAt: now + mv3ProxyHealth.getFailureRetryMs(retryStep),
     };
     if (ifNotify) {
       patch.lastNotificationAt = now;
@@ -2986,11 +3269,12 @@ async function recordProxyHealthFailure(details) {
       message: getProxyHealthMessage(latestCandidate.type, true),
     });
   }
+  await reconcileProxyHealthSupervisor({startupDelay: false});
   await updateActionStatusFromStoredState({});
   return {
     ok: false,
     status: 'error',
-    proxyHealth,
+    proxyHealth: createUiProxyHealthRecord(proxyHealth),
   };
 
 }
@@ -3002,34 +3286,64 @@ function createProxyCheckResult(status, code, message, proxyHealth) {
     status,
     code,
     message,
-    proxyHealth,
+    proxyHealth: proxyHealth ? createUiProxyHealthRecord(proxyHealth) : null,
   };
 
 }
 
 function runProxyHealthCheck(params = {}) {
 
-  if (proxyHealthCheckPromise) {
-    return Promise.resolve(createProxyCheckResult(
-        'checking',
-        'PROXY_CHECK_IN_PROGRESS',
-        'A proxy check is already running.',
-        null,
-    ));
+  const source = params.source === 'automatic' ? 'automatic' : 'manual';
+  if (activeProxyHealthCheck) {
+    if (source === 'manual' && activeProxyHealthCheck.source === 'automatic') {
+      cancelActiveProxyHealthCheck('superseded-by-manual');
+    } else {
+      return Promise.resolve(createProxyCheckResult(
+          'checking',
+          'PROXY_CHECK_IN_PROGRESS',
+          'A proxy check is already running.',
+          null,
+      ));
+    }
   }
-  proxyHealthCheckPromise = runWithActionOperation(
-      'check',
-      () => runProxyHealthCheckInternal(params),
-  )
-      .finally(() => {
-        proxyHealthCheckPromise = null;
-      });
-  return proxyHealthCheckPromise;
+  const task = {
+    cancelled: false,
+    cancelReason: null,
+    checkSequence: null,
+    controller: null,
+    source,
+  };
+  activeProxyHealthCheck = task;
+  task.promise = (async () => {
+    if (source === 'manual') {
+      await mv3ProxyHealth.reconcileAlarm(null);
+    }
+    const result = await runWithActionOperation(
+        'check',
+        () => runProxyHealthCheckInternal(params, task),
+    );
+    await reconcileProxyHealthSupervisor({startupDelay: false});
+    return result;
+  })().finally(() => {
+    if (activeProxyHealthCheck === task) {
+      activeProxyHealthCheck = null;
+    }
+  });
+  return task.promise;
 
 }
 
-async function runProxyHealthCheckInternal(params) {
+async function runProxyHealthCheckInternal(params, task) {
 
+  const sessionId = await mv3ProxyHealth.ensureSessionId();
+  if (task.cancelled) {
+    return Promise.resolve(createProxyCheckResult(
+        'inconclusive',
+        'PROXY_CHECK_SUPERSEDED',
+        'The proxy check was superseded.',
+        null,
+    ));
+  }
   const state = await mv3State.loadState();
   const requestedTarget = params.tabUrl ||
     state.proxyHealth && state.proxyHealth.targetOrigin;
@@ -3052,6 +3366,14 @@ async function runProxyHealthCheckInternal(params) {
     );
   }
   if (state.proxyApply.status !== 'applied') {
+    return createProxyCheckResult(
+        'inconclusive',
+        'PROXY_CHECK_NOT_APPLIED',
+        'Apply proxy settings before checking.',
+        state.proxyHealth,
+    );
+  }
+  if ((await getCookedPacStaleness(state)).stale) {
     return createProxyCheckResult(
         'inconclusive',
         'PROXY_CHECK_NOT_APPLIED',
@@ -3085,7 +3407,23 @@ async function runProxyHealthCheckInternal(params) {
   const startedAt = Date.now();
   let previousHealth;
   let startFailure = null;
+  let candidateRevision = null;
+  let checkSequence = null;
   const startedState = await mv3State.updateStateAtomically((currentState) => {
+    if (task.cancelled) {
+      startFailure = {
+        code: 'PROXY_CHECK_SUPERSEDED',
+        message: 'The proxy check was superseded.',
+      };
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    if (currentState.pacModsRevision !== state.pacModsRevision) {
+      startFailure = {
+        code: 'PROXY_CHECK_SUPERSEDED',
+        message: 'The proxy configuration changed before checking.',
+      };
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
     if (getPopupHostRuleState(currentState.pacMods, host).mode !== 'proxy') {
       startFailure = {
         code: 'PROXY_CHECK_REQUIRES_PROXY_RULE',
@@ -3094,6 +3432,18 @@ async function runProxyHealthCheckInternal(params) {
       return mv3State.ATOMIC_NO_CHANGE;
     }
     if (currentState.proxyApply.status !== 'applied') {
+      startFailure = {
+        code: 'PROXY_CHECK_NOT_APPLIED',
+        message: 'Apply proxy settings before checking.',
+      };
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    const currentControl = currentState.proxyControl || {};
+    if (
+      currentControl.controlledByThisExtension !== true ||
+      !currentControl.rawValue ||
+      currentControl.rawValue.mode !== 'pac_script'
+    ) {
       startFailure = {
         code: 'PROXY_CHECK_NOT_APPLIED',
         message: 'Apply proxy settings before checking.',
@@ -3109,13 +3459,22 @@ async function runProxyHealthCheckInternal(params) {
       return mv3State.ATOMIC_NO_CHANGE;
     }
     previousHealth = currentState.proxyHealth;
+    candidateRevision = currentState.pacModsRevision;
+    checkSequence = mv3State.getNextProxyHealthCheckSequence(previousHealth);
+    task.checkSequence = checkSequence;
     return {
       proxyHealth: {
         status: 'checking',
         lastCheckedAt: startedAt,
         candidateType: candidate.type,
+        candidateProxyType: candidate.proxyType,
         candidateEndpoint: candidate.endpoint || null,
+        candidateKey: candidate.key,
+        candidateRevision,
         targetOrigin,
+        sessionId,
+        checkSequence,
+        nextCheckAt: null,
       },
     };
   });
@@ -3128,6 +3487,10 @@ async function runProxyHealthCheckInternal(params) {
     );
   }
   const controller = new AbortController();
+  task.controller = controller;
+  if (task.cancelled) {
+    controller.abort();
+  }
   const timeoutId = setTimeout(
       () => controller.abort(),
       mv3ProxyHealth.CHECK_TIMEOUT_MS,
@@ -3153,8 +3516,12 @@ async function runProxyHealthCheckInternal(params) {
           const currentHealth = currentState.proxyHealth;
           if (
             currentHealth.status !== 'checking' ||
-            currentHealth.lastCheckedAt !== startedAt ||
-            currentHealth.targetOrigin !== targetOrigin
+            currentHealth.checkSequence !== checkSequence ||
+            currentHealth.candidateKey !== candidate.key ||
+            currentHealth.candidateRevision !== candidateRevision ||
+            currentHealth.sessionId !== sessionId ||
+            currentHealth.targetOrigin !== targetOrigin ||
+            currentState.pacModsRevision !== candidateRevision
           ) {
             ifSuperseded = true;
             return mv3State.ATOMIC_NO_CHANGE;
@@ -3169,8 +3536,14 @@ async function runProxyHealthCheckInternal(params) {
               lastErrorMessage: null,
               lastErrorUrl: null,
               candidateType: candidate.type,
+              candidateProxyType: candidate.proxyType,
               candidateEndpoint: candidate.endpoint || null,
+              candidateKey: candidate.key,
+              candidateRevision,
               targetOrigin,
+              sessionId,
+              retryStep: 0,
+              nextCheckAt: checkedAt + mv3ProxyHealth.HEALTHY_TTL_MS,
               lastNotificationAt: null,
               lastNotificationKey: null,
             },
@@ -3207,32 +3580,47 @@ async function runProxyHealthCheckInternal(params) {
           const currentHealth = currentState.proxyHealth;
           if (
             currentHealth.status === 'error' &&
-            currentHealth.lastErrorAt >= startedAt
+            currentHealth.lastErrorAt >= startedAt &&
+            currentHealth.checkSequence === checkSequence &&
+            currentHealth.candidateKey === candidate.key &&
+            currentHealth.candidateRevision === candidateRevision &&
+            currentHealth.sessionId === sessionId
           ) {
             ifBrowserError = true;
             return mv3State.ATOMIC_NO_CHANGE;
           }
           if (
             currentHealth.status !== 'checking' ||
-            currentHealth.lastCheckedAt !== startedAt ||
-            currentHealth.targetOrigin !== targetOrigin
+            currentHealth.checkSequence !== checkSequence ||
+            currentHealth.candidateKey !== candidate.key ||
+            currentHealth.candidateRevision !== candidateRevision ||
+            currentHealth.sessionId !== sessionId ||
+            currentHealth.targetOrigin !== targetOrigin ||
+            currentState.pacModsRevision !== candidateRevision
           ) {
             return mv3State.ATOMIC_NO_CHANGE;
           }
-          const restoreError = previousHealth.status === 'error';
+          const restoredStatus = ['ok', 'error'].includes(previousHealth.status) ?
+            previousHealth.status :
+            'unknown';
           return {
             proxyHealth: {
-              status: restoreError ? 'error' : 'unknown',
-              lastCheckedAt: checkedAt,
+              status: restoredStatus,
+              lastCheckedAt: restoredStatus === 'ok' ?
+                previousHealth.lastSuccessAt :
+                restoredStatus === 'error' ?
+                  previousHealth.lastErrorAt :
+                  checkedAt,
               candidateType: candidate.type,
+              candidateProxyType: candidate.proxyType,
               candidateEndpoint: candidate.endpoint || null,
+              candidateKey: candidate.key,
+              candidateRevision,
               targetOrigin,
-              lastErrorAt: restoreError ? previousHealth.lastErrorAt : null,
-              lastErrorCode: restoreError ? previousHealth.lastErrorCode : null,
-              lastErrorMessage: restoreError ?
-                previousHealth.lastErrorMessage :
+              sessionId,
+              nextCheckAt: restoredStatus === 'unknown' ?
+                checkedAt + mv3ProxyHealth.INCONCLUSIVE_RETRY_MS :
                 null,
-              lastErrorUrl: restoreError ? previousHealth.lastErrorUrl : null,
             },
           };
         },
@@ -3305,9 +3693,11 @@ async function handleProxySettingsChanged() {
     !proxyControl.rawValue ||
     proxyControl.rawValue.mode !== 'pac_script'
   ) {
+    cancelActiveProxyHealthCheck('proxy-control-changed');
     await mv3State.resetProxyHealth();
     state = await mv3State.loadState();
   }
+  state = await reconcileProxyHealthSupervisor({startupDelay: true});
   return requestActionStatusRefresh({state});
 
 }

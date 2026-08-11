@@ -112,10 +112,17 @@
 
   function handleStoredStateChange(changes, areaName) {
 
+    const stateChange = changes && changes.mv3State;
+    const previousHealth = stateChange && stateChange.oldValue &&
+      stateChange.oldValue.proxyHealth;
+    const nextHealth = stateChange && stateChange.newValue &&
+      stateChange.newValue.proxyHealth;
+    const ifHealthChanged = JSON.stringify(previousHealth || null) !==
+      JSON.stringify(nextHealth || null);
     if (
       areaName === 'local' &&
-      changes && changes.mv3State &&
-      (!latestState || isOperationBusy(latestState))
+      stateChange &&
+      (!latestState || isOperationBusy(latestState) || ifHealthChanged)
     ) {
       requestPopupRefresh();
     }

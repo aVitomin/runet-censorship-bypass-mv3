@@ -117,14 +117,14 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
           'alarmCreates',
         ];
         const expected = {
-          storageGets: 3,
-          storageSets: 1,
+          storageGets: 5,
+          storageSets: 2,
           indexedDbOpens: 0,
           tabQueries: 1,
           actionCalls: 5,
           hashOperations: 1,
           proxySettingsReads: 1,
-          alarmGets: 1,
+          alarmGets: 2,
           alarmCreates: 1,
         };
 

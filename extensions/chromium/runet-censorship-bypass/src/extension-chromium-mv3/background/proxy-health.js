@@ -5,8 +5,21 @@
 (function(exports) {
 
   const CHECK_TIMEOUT_MS = 9000;
-  const ERROR_DEBOUNCE_MS = 10 * 1000;
   const NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
+  const ALARM_NAME = 'mv3-proxy-health';
+  const SESSION_STORAGE_KEY = 'mv3ProxyHealthSessionId';
+  const STARTUP_DELAY_MS = 30 * 1000;
+  const HEALTHY_TTL_MS = 60 * 60 * 1000;
+  const FAILED_TTL_MS = 60 * 60 * 1000;
+  const INCONCLUSIVE_RETRY_MS = 60 * 60 * 1000;
+  const FAILURE_RETRY_MS = Object.freeze([
+    1 * 60 * 1000,
+    5 * 60 * 1000,
+    15 * 60 * 1000,
+    30 * 60 * 1000,
+    60 * 60 * 1000,
+  ]);
+  let sessionIdPromise = null;
   // Keep this allowlist limited to proxy failures from Chromium's net errors.
   // Destination/DNS/TLS errors are deliberately inconclusive.
   const PROXY_ERROR_CODES = Object.freeze([
@@ -89,42 +102,78 @@
       proxy.enabled !== false && proxy.host && proxy.port,
     );
     if (ownProxy) {
-      return {
+      return createCandidateSummary({
         type: 'ownProxy',
-        endpoint: sanitizeEndpoint(ownProxy.host, ownProxy.port),
-      };
+        proxyType: ownProxy.type,
+        host: ownProxy.host,
+        port: ownProxy.port,
+      });
     }
     if (normalized.localTor.enabled) {
-      return {
+      return createCandidateSummary({
         type: 'localTor',
-        endpoint: sanitizeEndpoint(
-            normalized.localTor.host,
-            normalized.localTor.port,
-        ),
-      };
+        proxyType: normalized.localTor.type,
+        host: normalized.localTor.host,
+        port: normalized.localTor.port,
+      });
     }
     if (normalized.torBrowser.enabled) {
-      return {
+      return createCandidateSummary({
         type: 'torBrowser',
-        endpoint: sanitizeEndpoint(
-            normalized.torBrowser.host,
-            normalized.torBrowser.port,
-        ),
-      };
+        proxyType: normalized.torBrowser.type,
+        host: normalized.torBrowser.host,
+        port: normalized.torBrowser.port,
+      });
     }
     if (normalized.warp.enabled) {
       const candidate = mv3PacMods.splitProxyString(
           normalized.warp.proxyString,
       )[0];
       const parsed = candidate ? mv3PacMods.parseProxyString(candidate) : null;
-      return {
+      return createCandidateSummary({
         type: 'warp',
-        endpoint: parsed ? sanitizeEndpoint(parsed.host, parsed.port) : '',
-      };
+        proxyType: parsed && parsed.type,
+        host: parsed && parsed.host,
+        port: parsed && parsed.port,
+      });
     }
     return {
       type: null,
+      proxyType: null,
       endpoint: '',
+      key: '',
+    };
+
+  }
+
+  function createCandidateSummary(candidate) {
+
+    const type = [
+      'localTor',
+      'torBrowser',
+      'warp',
+      'ownProxy',
+    ].includes(candidate && candidate.type) ? candidate.type : null;
+    const proxyType = String(candidate && candidate.proxyType || '')
+        .trim()
+        .toUpperCase();
+    const endpoint = sanitizeEndpoint(
+        candidate && candidate.host,
+        candidate && candidate.port,
+    );
+    if (!type || !proxyType || !endpoint) {
+      return {
+        type: null,
+        proxyType: null,
+        endpoint: '',
+        key: '',
+      };
+    }
+    return {
+      type,
+      proxyType,
+      endpoint,
+      key: `${type}|${proxyType}|${endpoint}`,
     };
 
   }
@@ -132,12 +181,210 @@
   function getCandidateFingerprint(pacMods) {
 
     const normalized = mv3PacMods.normalizePacMods(pacMods);
-    return JSON.stringify({
-      localTor: normalized.localTor,
-      torBrowser: normalized.torBrowser,
-      warp: normalized.warp,
-      ownProxies: normalized.ownProxies,
+    return JSON.stringify(
+        mv3PacMods.getProxyRuleCandidates(normalized)
+            .map((entry) => mv3PacMods.parseProxyString(entry))
+            .filter(Boolean)
+            .map((entry) => ({
+              proxyType: entry.type,
+              endpoint: sanitizeEndpoint(entry.host, entry.port),
+            })),
+    );
+
+  }
+
+  function normalizeRetryStep(value) {
+
+    const step = Number(value);
+    if (!Number.isSafeInteger(step) || step < 0) {
+      return 0;
+    }
+    return Math.min(step, FAILURE_RETRY_MS.length - 1);
+
+  }
+
+  function getFailureRetryMs(retryStep) {
+
+    return FAILURE_RETRY_MS[normalizeRetryStep(retryStep)];
+
+  }
+
+  function getNextRetryStep(retryStep) {
+
+    return Math.min(
+        normalizeRetryStep(retryStep) + 1,
+        FAILURE_RETRY_MS.length - 1,
+    );
+
+  }
+
+  function isCurrentIdentity(health, expected) {
+
+    return Boolean(
+        health &&
+        expected &&
+        expected.candidate &&
+        expected.candidate.key &&
+        health.candidateKey === expected.candidate.key &&
+        health.candidateRevision === expected.candidateRevision,
+    );
+
+  }
+
+  function classifyFreshness(health, expected, options = {}) {
+
+    const value = health && typeof health === 'object' ? health : {};
+    const now = Number.isFinite(options.now) ? options.now : Date.now();
+    const ifIdentityCurrent = isCurrentIdentity(value, expected);
+    if (
+      value.status === 'checking' &&
+      options.ifCheckingActive === true &&
+      ifIdentityCurrent &&
+      value.sessionId === expected.sessionId
+    ) {
+      return {status: 'checking', stale: false, reason: null};
+    }
+    if (value.status === 'checking') {
+      const ifErrorWasLatest = value.lastErrorAt &&
+        (!value.lastSuccessAt || value.lastErrorAt >= value.lastSuccessAt);
+      if (
+        ifErrorWasLatest &&
+        ifIdentityCurrent &&
+        value.sessionId === expected.sessionId &&
+        now - value.lastErrorAt <= FAILED_TTL_MS
+      ) {
+        return {status: 'error', stale: false, reason: 'interrupted-check'};
+      }
+      if (
+        value.lastSuccessAt &&
+        (!value.lastErrorAt || value.lastSuccessAt > value.lastErrorAt) &&
+        ifIdentityCurrent &&
+        now - value.lastSuccessAt <= HEALTHY_TTL_MS
+      ) {
+        return {status: 'ok', stale: false, reason: 'interrupted-check'};
+      }
+      return {status: 'unknown', stale: true, reason: 'interrupted-check'};
+    }
+    if (!ifIdentityCurrent) {
+      return {status: 'unknown', stale: true, reason: 'candidate-changed'};
+    }
+    if (
+      value.status === 'ok' &&
+      value.lastCheckedAt &&
+      value.lastSuccessAt &&
+      now - value.lastSuccessAt <= HEALTHY_TTL_MS
+    ) {
+      return {status: 'ok', stale: false, reason: null};
+    }
+    if (value.status === 'ok') {
+      return {status: 'unknown', stale: true, reason: 'healthy-expired'};
+    }
+    if (
+      value.status === 'error' &&
+      value.lastCheckedAt &&
+      value.lastErrorAt &&
+      value.sessionId === expected.sessionId &&
+      now - value.lastErrorAt <= FAILED_TTL_MS
+    ) {
+      return {status: 'error', stale: false, reason: null};
+    }
+    if (value.status === 'error' && value.sessionId !== expected.sessionId) {
+      return {status: 'unknown', stale: true, reason: 'previous-session'};
+    }
+    if (value.status === 'error') {
+      return {status: 'unknown', stale: true, reason: 'failure-expired'};
+    }
+    return {status: 'unknown', stale: true, reason: 'no-result'};
+
+  }
+
+  function createSessionId() {
+
+    if (crypto && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+        .map((value) => value.toString(16).padStart(2, '0'))
+        .join('');
+
+  }
+
+  function ensureSessionId() {
+
+    if (sessionIdPromise) {
+      return sessionIdPromise;
+    }
+    sessionIdPromise = new Promise((resolve, reject) => {
+      const area = chrome.storage && chrome.storage.session;
+      if (!area || typeof area.get !== 'function' || typeof area.set !== 'function') {
+        reject(new Error('Session storage is unavailable.'));
+        return;
+      }
+      area.get({[SESSION_STORAGE_KEY]: null}, (items) => {
+        const readError = chrome.runtime.lastError;
+        if (readError) {
+          reject(new Error(readError.message));
+          return;
+        }
+        const current = items && items[SESSION_STORAGE_KEY];
+        if (typeof current === 'string' && current) {
+          resolve(current);
+          return;
+        }
+        const sessionId = createSessionId();
+        area.set({[SESSION_STORAGE_KEY]: sessionId}, () => {
+          const writeError = chrome.runtime.lastError;
+          if (writeError) {
+            reject(new Error(writeError.message));
+            return;
+          }
+          resolve(sessionId);
+        });
+      });
+    }).catch((err) => {
+      sessionIdPromise = null;
+      throw err;
     });
+    return sessionIdPromise;
+
+  }
+
+  function getAlarm() {
+
+    return new Promise((resolve) => {
+      chrome.alarms.get(ALARM_NAME, (alarm) => resolve(alarm || null));
+    });
+
+  }
+
+  function getAlarmTime(alarm) {
+
+    if (!alarm) {
+      return null;
+    }
+    return Number(alarm.scheduledTime || alarm.when) || null;
+
+  }
+
+  async function reconcileAlarm(when) {
+
+    const requestedAt = Number(when) || null;
+    const alarm = await getAlarm();
+    const scheduledAt = getAlarmTime(alarm);
+    if (!requestedAt) {
+      if (!alarm) {
+        return {status: 'absent', scheduledAt: null};
+      }
+      await new Promise((resolve) => chrome.alarms.clear(ALARM_NAME, resolve));
+      return {status: 'cleared', scheduledAt: null};
+    }
+    if (scheduledAt && Math.abs(scheduledAt - requestedAt) < 1000) {
+      return {status: 'unchanged', scheduledAt};
+    }
+    chrome.alarms.create(ALARM_NAME, {when: requestedAt});
+    return {status: 'scheduled', scheduledAt: requestedAt};
 
   }
 
@@ -186,11 +433,29 @@
       ownProxySummaryHasNoCredentials:
         own.endpoint === 'proxy.example:8443' &&
         !JSON.stringify(own).includes(samplePassword),
+      candidateFingerprintHasNoCredentials:
+        !getCandidateFingerprint({
+          ownProxies: [{
+            enabled: true,
+            type: 'HTTPS',
+            host: 'proxy.example',
+            port: 8443,
+            username: 'user',
+            password: samplePassword,
+          }],
+        }).includes(samplePassword),
       torBrowserSummary:
-        getCandidateSummary({torBrowser: {enabled: true}}).type ===
-        'torBrowser',
+        getCandidateSummary({torBrowser: {enabled: true}}).key ===
+        'torBrowser|SOCKS5|127.0.0.1:9150',
       localTorSummary:
-        getCandidateSummary({localTor: {enabled: true}}).type === 'localTor',
+        getCandidateSummary({localTor: {enabled: true}}).key ===
+        'localTor|SOCKS5|127.0.0.1:9050',
+      retrySchedule:
+        FAILURE_RETRY_MS.map((value, index) => getFailureRetryMs(index))
+            .join(',') === FAILURE_RETRY_MS.join(','),
+      retryScheduleCaps:
+        getFailureRetryMs(99) === FAILURE_RETRY_MS[4] &&
+        getNextRetryStep(4) === 4,
       duplicateNotificationLimited:
         shouldNotify({
           lastNotificationKey:
@@ -210,16 +475,30 @@
 
   exports.mv3ProxyHealth = Object.freeze({
     CHECK_TIMEOUT_MS,
-    ERROR_DEBOUNCE_MS,
     NOTIFICATION_COOLDOWN_MS,
+    ALARM_NAME,
+    SESSION_STORAGE_KEY,
+    STARTUP_DELAY_MS,
+    HEALTHY_TTL_MS,
+    FAILED_TTL_MS,
+    INCONCLUSIVE_RETRY_MS,
+    FAILURE_RETRY_MS,
     PROXY_ERROR_CODES,
     normalizeErrorCode,
     isProxyError,
     sanitizeHostname,
     sanitizeOrigin,
     sanitizeEndpoint,
+    createCandidateSummary,
     getCandidateSummary,
     getCandidateFingerprint,
+    normalizeRetryStep,
+    getFailureRetryMs,
+    getNextRetryStep,
+    classifyFreshness,
+    ensureSessionId,
+    getAlarm,
+    reconcileAlarm,
     getNotificationKey,
     shouldNotify,
     selfTest,
