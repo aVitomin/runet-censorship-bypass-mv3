@@ -274,6 +274,14 @@ Mocha.describe('MV3 atomic derived-state callers', function() {
 
         const fetchGate = createGate();
         const harness = await createRuntimeHarness({
+          pacMods: {
+            localTor: {enabled: true},
+            exceptions: [{
+              pattern: 'audit.example',
+              action: 'PROXY',
+              enabled: true,
+            }],
+          },
           async fetch() {
 
             fetchGate.markStarted();
@@ -281,14 +289,6 @@ Mocha.describe('MV3 atomic derived-state callers', function() {
             throw new Error('Synthetic inconclusive health check.');
 
           },
-        });
-        await harness.context.mv3State.savePacMods({
-          localTor: {enabled: true},
-          exceptions: [{
-            pattern: 'audit.example',
-            action: 'PROXY',
-            enabled: true,
-          }],
         });
         await harness.context.mv3State.setProxyApplyState({status: 'applied'});
 

@@ -117,7 +117,11 @@ async function createRuntimeHarness(options = {}) {
   const asyncCounterWaiters = [];
   let completedHashOperations = 0;
   const storageData = {};
+  const sessionStorageData = clone(options.initialSessionStorage || {});
   const alarms = new Map();
+  (options.initialAlarms || []).forEach((alarm) => {
+    alarms.set(alarm.name, clone(alarm));
+  });
   const rawArtifacts = new Map();
   const cookedArtifacts = new Map();
   const tabs = new Map([
@@ -170,6 +174,20 @@ async function createRuntimeHarness(options = {}) {
       pacScript: {data: 'installed PAC', mandatory: false},
     },
   };
+  const NativeDate = Date;
+  const RuntimeDate = options.clock ? class extends NativeDate {
+    constructor(...args) {
+
+      super(...(args.length ? args : [options.clock.now]));
+
+    }
+
+    static now() {
+
+      return options.clock.now;
+
+    }
+  } : NativeDate;
 
   function notifyAsyncCounterWaiters() {
 
@@ -212,7 +230,10 @@ async function createRuntimeHarness(options = {}) {
       create(name, details) {
 
         ++counts.alarmCreates;
-        alarms.set(name, Object.assign({name}, details));
+        alarms.set(name, Object.assign({
+          name,
+          scheduledTime: details.when,
+        }, details));
 
       },
       get(name, callback) {
@@ -374,6 +395,28 @@ async function createRuntimeHarness(options = {}) {
 
         },
       },
+      session: {
+        get(keysOrDefaults, callback) {
+
+          ++counts.storageGets;
+          const result = {};
+          Object.keys(keysOrDefaults || {}).forEach((key) => {
+            result[key] = Object.prototype.hasOwnProperty.call(
+                sessionStorageData,
+                key,
+            ) ? clone(sessionStorageData[key]) : clone(keysOrDefaults[key]);
+          });
+          callback(result);
+
+        },
+        set(values, callback) {
+
+          ++counts.storageSets;
+          Object.assign(sessionStorageData, clone(values));
+          callback();
+
+        },
+      },
     },
     tabs: {
       onActivated: events.tabActivated,
@@ -432,7 +475,7 @@ async function createRuntimeHarness(options = {}) {
     Boolean,
     console: options.console || {info() {}, warn() {}, error() {}},
     crypto: Crypto.webcrypto,
-    Date,
+    Date: RuntimeDate,
     Error,
     fetch: options.fetch || (async () => {
       throw new Error('Unexpected network request in runtime audit harness.');
@@ -719,6 +762,11 @@ async function createRuntimeHarness(options = {}) {
     '  downloadPacAndPersist,\n' +
     '  executePeriodicUpdatePipeline,\n' +
     '  handleProxySettingsChanged,\n' +
+    '  initializeProxyHealthSupervisor,\n' +
+    '  reconcileProxyHealthSupervisor,\n' +
+    '  recordProxyHealthFailure,\n' +
+    '  runAutomaticProxyHealthCheck,\n' +
+    '  runProxyHealthCheck,\n' +
     '};', context, {filename: 'service-worker.js'});
   await context.__runtimeAudit.actionStatusRecoveryPromise;
   await waitForAsyncWork();
@@ -890,6 +938,16 @@ async function createRuntimeHarness(options = {}) {
     getState() {
 
       return clone(storageData.mv3State);
+
+    },
+    getAlarms() {
+
+      return Array.from(alarms.values()).map(clone);
+
+    },
+    getSessionStorage() {
+
+      return clone(sessionStorageData);
 
     },
     getActionState() {

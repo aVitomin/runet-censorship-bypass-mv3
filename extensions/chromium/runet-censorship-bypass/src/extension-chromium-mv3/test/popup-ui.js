@@ -406,10 +406,10 @@ function createPopupHarness(options = {}) {
       return Promise.all(proxyListeners.map((listener) => listener()));
 
     },
-    emitStorageChange() {
+    emitStorageChange(oldValue, newValue = {}) {
 
       return Promise.all(storageListeners.map((listener) => listener(
-          {mv3State: {newValue: {}}},
+          {mv3State: {oldValue, newValue}},
           'local',
       )));
 
@@ -885,6 +885,46 @@ describe('MV3 popup UI', () => {
         expect(harness.root.textContent).to.include('Extension proxy is on');
         expect(harness.root.textContent).to.not.include('Testing proxy connection');
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
+        expect(harness.calls.filter((call) => call.method === 'getPopupState'))
+            .to.have.length(2);
+
+      });
+
+  it('refreshes an open popup after automatic proxy-health recovery',
+      async () => {
+
+        const failedHealth = {
+          status: 'error',
+          lastCheckedAt: Date.now() - 1000,
+          candidateType: 'torBrowser',
+        };
+        const healthyHealth = {
+          status: 'ok',
+          lastCheckedAt: Date.now(),
+          candidateType: 'torBrowser',
+        };
+        let currentState = createPopupState({proxyHealth: failedHealth});
+        const harness = createPopupHarness({
+          rpcHandler: async (method) => method === 'getPopupState' ?
+            currentState : {ok: true},
+        });
+        harness.start();
+        await flushUi();
+        expect(harness.root.textContent).to.include(
+            'Could not connect to Tor Browser',
+        );
+
+        currentState = createPopupState({proxyHealth: healthyHealth});
+        await harness.emitStorageChange(
+            {proxyHealth: failedHealth},
+            {proxyHealth: healthyHealth},
+        );
+        await flushUi();
+
+        expect(harness.root.textContent).to.include('Working');
+        expect(harness.root.textContent).to.not.include(
+            'Could not connect to Tor Browser',
+        );
         expect(harness.calls.filter((call) => call.method === 'getPopupState'))
             .to.have.length(2);
 

@@ -160,8 +160,15 @@
       lastErrorMessage: null,
       lastErrorUrl: null,
       candidateType: null,
+      candidateProxyType: null,
       candidateEndpoint: null,
+      candidateKey: null,
+      candidateRevision: null,
       targetOrigin: null,
+      sessionId: null,
+      checkSequence: 0,
+      retryStep: 0,
+      nextCheckAt: null,
       lastNotificationAt: null,
       lastNotificationKey: null,
     }),
@@ -785,6 +792,18 @@
       'warp',
       'ownProxy',
     ].includes(source.candidateType) ? source.candidateType : null;
+    const candidateProxyType = [
+      'PROXY',
+      'HTTPS',
+      'SOCKS4',
+      'SOCKS5',
+    ].includes(source.candidateProxyType) ? source.candidateProxyType : null;
+    const candidateRevision = Number.isSafeInteger(source.candidateRevision) &&
+      source.candidateRevision >= 0 ? source.candidateRevision : null;
+    const checkSequence = Number.isSafeInteger(source.checkSequence) &&
+      source.checkSequence >= 0 ? source.checkSequence : 0;
+    const retryStep = Number.isSafeInteger(source.retryStep) &&
+      source.retryStep >= 0 ? Math.min(source.retryStep, 4) : 0;
     return {
       status,
       lastCheckedAt: normalizeNullableNumber(source.lastCheckedAt),
@@ -794,11 +813,39 @@
       lastErrorMessage: normalizeNullableString(source.lastErrorMessage),
       lastErrorUrl: normalizeNullableString(source.lastErrorUrl),
       candidateType,
+      candidateProxyType,
       candidateEndpoint: normalizeNullableString(source.candidateEndpoint),
+      candidateKey: normalizeNullableString(source.candidateKey),
+      candidateRevision,
       targetOrigin: normalizeNullableString(source.targetOrigin),
+      sessionId: normalizeNullableString(source.sessionId),
+      checkSequence,
+      retryStep,
+      nextCheckAt: normalizeNullableNumber(source.nextCheckAt),
       lastNotificationAt: normalizeNullableNumber(source.lastNotificationAt),
       lastNotificationKey: normalizeNullableString(source.lastNotificationKey),
     };
+
+  }
+
+  function getNextProxyHealthCheckSequence(proxyHealth) {
+
+    const current = proxyHealth && proxyHealth.checkSequence;
+    return Number.isSafeInteger(current) && current < Number.MAX_SAFE_INTEGER ?
+      current + 1 :
+      1;
+
+  }
+
+  function createInvalidatedProxyHealth(proxyHealth, options = {}) {
+
+    const current = normalizeProxyHealth(proxyHealth);
+    const invalidated = clone(DEFAULT_STATE.proxyHealth);
+    invalidated.checkSequence = getNextProxyHealthCheckSequence(current);
+    if (options.preserveTarget !== false) {
+      invalidated.targetOrigin = current.targetOrigin;
+    }
+    return invalidated;
 
   }
 
@@ -1334,7 +1381,14 @@
           patch.proxyControl,
       );
     }
-    if (isObject(patch.proxyHealth)) {
+    if (
+      Object.prototype.hasOwnProperty.call(patch, 'proxyHealth') &&
+      patch.proxyHealth === null
+    ) {
+      mergedState.proxyHealth = createInvalidatedProxyHealth(
+          currentState.proxyHealth,
+      );
+    } else if (isObject(patch.proxyHealth)) {
       mergedState.proxyHealth = Object.assign(
           {},
           currentState.proxyHealth,
@@ -1461,7 +1515,7 @@
       pacMods: normalizePacMods(pacMods, true),
     };
     if (options.resetProxyHealth === true) {
-      patch.proxyHealth = clone(DEFAULT_STATE.proxyHealth);
+      patch.proxyHealth = null;
     }
     return saveStatePatch(patch);
 
@@ -1482,7 +1536,7 @@
         typeof options.ifResetProxyHealth === 'function' &&
         options.ifResetProxyHealth(currentState.pacMods, restoredPacMods)
       ) {
-        patch.proxyHealth = clone(DEFAULT_STATE.proxyHealth);
+        patch.proxyHealth = null;
       }
       if (typeof options.onBeforeSave === 'function') {
         const additionalPatch = options.onBeforeSave(
@@ -1551,6 +1605,10 @@
         1 :
         currentState.pacWorkflowGeneration + 1;
     defaultState.pacModsRevision = currentState.pacModsRevision + 1;
+    defaultState.proxyHealth = createInvalidatedProxyHealth(
+        currentState.proxyHealth,
+        {preserveTarget: false},
+    );
     await mv3Storage.set({[STORAGE_KEY]: defaultState});
     return defaultState;
 
@@ -1693,11 +1751,14 @@
 
   }
 
-  async function resetProxyHealth() {
+  async function resetProxyHealth(options = {}) {
 
-    const state = await saveStatePatch({
-      proxyHealth: clone(DEFAULT_STATE.proxyHealth),
-    });
+    const state = await updateStateAtomically((currentState) => ({
+      proxyHealth: createInvalidatedProxyHealth(
+          currentState.proxyHealth,
+          options,
+      ),
+    }));
     return state.proxyHealth;
 
   }
@@ -2055,6 +2116,8 @@
   exports.mv3State = Object.freeze({
     STORAGE_KEY,
     ATOMIC_NO_CHANGE,
+    createInvalidatedProxyHealth,
+    getNextProxyHealthCheckSequence,
     loadState,
     saveStatePatch,
     updateStateAtomically,
