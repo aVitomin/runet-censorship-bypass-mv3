@@ -2,8 +2,10 @@
 
 Текущая цель репозитория —
 `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3`.
-Корневой `package.json` исторически относится к Open Collective и не должен
-использоваться для установки или сборки расширения.
+Корневого npm-пакета нет. Старый Open Collective donation package удалён как
+не связанный со сборкой и содержавший устаревший lifecycle hook. Это не меняет
+[GPL-3.0](../../LICENSE), upstream-атрибуцию или историю спонсоров в
+[архивном README](../legacy/UPSTREAM_README.md).
 
 ## Требования
 
@@ -21,8 +23,9 @@ Set-Location .\runet-censorship-bypass-mv3
 npm ci --prefix .\extensions\chromium\runet-censorship-bypass
 ```
 
-Не запускайте `npm install` в корне репозитория. Единственный основной lockfile
-для MV3-инструментов находится в каталоге расширения.
+Не запускайте `npm install`, `npm ci` или npm-скрипты в корне репозитория.
+Используйте только extension-scoped команды: канонический пакет и его lockfile
+находятся в `extensions/chromium/runet-censorship-bypass`.
 
 ## Основные команды
 

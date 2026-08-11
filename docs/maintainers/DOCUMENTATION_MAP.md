@@ -18,7 +18,7 @@
 | Runtime source | 160 | 88 файлов текущего MV3 runtime/tests плюс 62 common, 8 full, 1 mini и `src/templates-data.js`; nested source build inputs входят в эту группу |
 | Build tooling | 10 | extension `package.json`/lockfile, `gulpfile.js`, ESLint/Git attributes, tools, `grep.sh`, workflow и tooling `.gitignore` |
 | Required legal/license material | 1 | Корневой `LICENSE` (GPL-3.0); дополнительные vendor license копируются из установленной pinned зависимости при сборке |
-| Obsolete or unreferenced candidate | 1 | Корневой `package.json`, оставленный до явного решения сопровождающего |
+| Obsolete or unreferenced candidate | 0 | Корневой `package.json` удалён как obsolete donation tooling после отдельного решения сопровождающего |
 | Uncertain/supporting repository content | 8 | `.gitignore`, `.rgignore`, `.vscode/settings.json` и пять исходных SVG assets |
 | Generated output tracked | 0 | `build/`, `dist/`, `coverage/`, `.tmp/`, profiles и logs игнорируются |
 | Internal/local report tracked | 0 | Четыре локальных отчёта находятся в ignored `.local/project-reports/` |
@@ -107,7 +107,7 @@ Tooling-root и legacy-options README теперь только направля
 | Пять browser QA документов | Move to current development docs | Актуальны сопровождающим, не должны лежать в tooling root. |
 | Legacy migration notes | Archive phase snapshot; replace with current guide | Runtime migration остаётся текущей совместимостью, но старые phase/RC notes не должны быть канонической инструкцией. |
 | `.github/FUNDING.yml` | Remove | Показывал donation link upstream как настройку этого standalone fork; sponsor history сохранена в archived README. |
-| Корневой `package.json` | Requires maintainer decision; keep now | Только `opencollective postinstall` для upstream, без lockfile; CI/build/release его не используют. Рекомендуется удалить отдельным решением, если upstream donation prompt не является политикой форка. |
+| Корневой `package.json` | Remove (completed) | Не использовался CI/build/test/release; удаление устраняет obsolete lifecycle, риск случайной root-установки, путаницу для contributors и неоднозначную ISC metadata внутри GPL-репозитория. Атрибуция и sponsor history сохранены отдельно. |
 | `grep.sh` | Requires maintainer decision; keep | Нереференсный POSIX helper; не влияет на runtime, но может быть удобен не-Windows сопровождающим. |
 | Пять SVG в tooling `assets/` | Requires maintainer decision; keep | Прямых ссылок не найдено, но это source artwork с attribution/history; безопасное удаление требует решения о сохранении исходников. |
 | `.vscode/settings.json`, `.rgignore` | Keep in place | Активно исключают generated/vendor noise и соответствуют рабочему процессу. |
@@ -115,18 +115,20 @@ Tooling-root и legacy-options README теперь только направля
 | MV3 placeholder pages | Keep in place | Ссылаются на shared placeholder runtime и входят в проверенный пакет. |
 | Четыре project reports | Keep local/ignored | Внутренние планы/reviews не являются публичной документацией и не входят в package. |
 
-Кроме `.github/FUNDING.yml`, кодовые или tooling-файлы в этом refresh не
-удалялись. Неопределённые кандидаты сохранены согласно правилу недеструктивного
+В documentation refresh из tooling удалялся только `.github/FUNDING.yml`.
+Корневой donation package позже удалён отдельным maintenance-изменением;
+остальные неопределённые кандидаты сохранены согласно правилу недеструктивного
 аудита.
 
-## Корневой package.json
+## Удалённый корневой package.json
 
-Файл объявляет пакет `subjective-good-is-evil`, лицензию ISC, единственный
+Удалённый файл объявлял пакет `subjective-good-is-evil`, лицензию ISC, единственный
 `postinstall` через `opencollective` и ссылку на upstream collective. Поиск всего
 дерева не нашёл использования в GitHub Actions, Gulp, тестах, сборке, упаковке
-или выпуске. У него нет корневого lockfile, а актуальная документация прямо
-запрещает устанавливать зависимости в корне.
+или выпуске. У него не было корневого lockfile; поддерживаемого корневого
+npm-пакета теперь нет, а все команды направляются в extension tooling package.
 
-Рекомендация: после явного решения о funding policy удалить этот файл отдельным
-не-runtime изменением. До решения он остаётся, чтобы refresh документации не
-принимал за сопровождающего решение о donation automation и лицензии metadata.
+Файл удалён из-за obsolete lifecycle, риска случайной root-установки, путаницы
+для contributors и неоднозначной ISC package metadata внутри GPL-3.0
+репозитория. Корневой `LICENSE`, upstream-атрибуция и исторические сведения о
+спонсорах сохранены независимо в текущем README и legacy-документации.
