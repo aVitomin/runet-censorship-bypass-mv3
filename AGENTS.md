@@ -8,7 +8,7 @@ This fork keeps the legacy Runet Censorship Bypass extension while developing a 
 - MV3 runtime: `src/extension-chromium-mv3`; `background/service-worker.js` is the entry point and `pages/` is the MV3 UI.
 - Shared inputs: selected icons, locales, and page libraries under `src/extension-common`. Gulp deliberately excludes the legacy common background scripts and page implementations from MV3.
 - Legacy MV2: `src/extension-common` plus `src/extension-full` or `src/extension-mini`; beta also uses full sources with a separate template context.
-- Build/version authority: `src/templates-data.js`, `gulpfile.js`, and the manifest templates. The outer `package.json` is unrelated donation tooling; do not use it to build the extension.
+- Build/version authority: `src/templates-data.js`, `gulpfile.js`, and the manifest templates. The repository intentionally has no root npm package: never run `npm install`, `npm ci`, or npm scripts at the repository root; scope every package command to the authoritative `extensions/chromium/runet-censorship-bypass` package.
 - Generated/local-only context: any `node_modules`, `build`, `dist`, `coverage`, `.tmp`, browser profile, archive, log, or options-page `dist`. Do not broadly inspect vendored/minified Ace files.
 
 From the repository root in PowerShell:

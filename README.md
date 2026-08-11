@@ -144,8 +144,11 @@ Firefox is not part of the current MV3 release. See the
 
 ## Быстрый старт для разработки
 
-Проверенная среда CI — Node.js 22. Устанавливайте зависимости только в каталоге
-инструментов расширения; корневой `package.json` к сборке не относится.
+Проверенная среда CI — Node.js 22. Поддерживаемого корневого npm-пакета нет:
+все команды разработки явно направляйте в канонический пакет
+`extensions/chromium/runet-censorship-bypass`. Устаревшие funding metadata и
+lifecycle удалены; историческая атрибуция и сведения о спонсорах сохранены в
+[upstream README](docs/legacy/UPSTREAM_README.md).
 
 ```powershell
 npm ci --prefix ./extensions/chromium/runet-censorship-bypass
