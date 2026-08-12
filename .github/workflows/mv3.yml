@@ -52,6 +52,9 @@ jobs:
       - name: Build MV3
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run build:mv3
 
+      - name: Run aggregate verification
+        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run verify
+
       - name: Validate exact MV3 output
         run: |
           package_dir='./extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3'
