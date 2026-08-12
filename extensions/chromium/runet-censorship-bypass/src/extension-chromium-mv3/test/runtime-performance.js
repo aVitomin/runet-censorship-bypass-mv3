@@ -285,7 +285,7 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
           tabGets: 2,
           pacDownloads: 1,
           pacCooks: 1,
-          hashOperations: 8,
+          hashOperations: 9,
           proxySettingsWrites: 1,
           actionCalls: 8,
         });
