@@ -1,7 +1,7 @@
 'use strict';
 
 const gulp = require('gulp');
-const del = require('del');
+const buildCleanup = require('./build-cleanup');
 const through = require('through2');
 const PluginError = require('plugin-error');
 
@@ -45,7 +45,7 @@ const templatePlugin = (context) => through.obj(function(file, encoding, cb) {
 
 const clean = function(cb) {
 
-  del.sync('./build');
+  buildCleanup.cleanBuild();
   return cb();
 
 };
@@ -136,7 +136,7 @@ const copyBeta = function(cb) {
 
 const cleanChromiumMv3 = function(cb) {
 
-  del.sync(chromiumMv3Dst);
+  buildCleanup.cleanChromiumMv3();
   return cb();
 
 };
