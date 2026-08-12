@@ -1,7 +1,7 @@
 'use strict';
 
 /* global importScripts, mv3LegacyMigrationApply, mv3LegacyMigrationAudit */
-/* global mv3ActionStatus, mv3PacArtifacts, mv3PacCook, mv3PacDownload */
+/* global mv3ActionStatus, mv3Hash, mv3PacArtifacts, mv3PacCook, mv3PacDownload */
 /* global mv3PacMods, mv3PeriodicUpdate, mv3SiteScope */
 /* global mv3Providers, mv3ProxyAuth, mv3ProxyHealth, mv3ProxySettings */
 /* global mv3State */
@@ -125,6 +125,14 @@ function getProviderForState(state, providerKey, ifIncludeDisabled) {
 function invalidatePacApplyFreshness() {
 
   activePacApplyOperation = null;
+
+}
+
+function invalidateStartupProxyRestoreFreshness() {
+
+  if (activePacApplyOperation && activePacApplyOperation.startupRestore) {
+    activePacApplyOperation = null;
+  }
 
 }
 
@@ -262,6 +270,9 @@ async function finishActionOperation(operation) {
 
 async function runWithActionOperation(kind, execute) {
 
+  if (kind === 'apply' || kind === 'clear') {
+    invalidatePacApplyFreshness();
+  }
   const operation = await beginActionOperation(kind);
   try {
     return await execute();
@@ -328,9 +339,13 @@ async function savePacWorkflowStatePatch(workflow, patch) {
 
 }
 
-function beginPacApplyOperation(workflow) {
+function beginPacApplyOperation(workflow, options = {}) {
 
-  const operation = Object.freeze({workflow});
+  const operation = Object.freeze({
+    startupAuthorization: options.startupAuthorization || null,
+    startupRestore: options.startupRestore === true,
+    workflow,
+  });
   activePacApplyOperation = operation;
   return operation;
 
@@ -383,6 +398,120 @@ function createPacApplyFingerprint(state) {
 function ifPacApplyFingerprintsMatch(left, right) {
 
   return Object.keys(left).every((key) => left[key] === right[key]);
+
+}
+
+function createStartupProxyRestoreSkip(reason, state) {
+
+  return {
+    allowed: false,
+    reason,
+    state,
+  };
+
+}
+
+function createStartupProxyRestoreAuthorization(state) {
+
+  const proxyApply = state.proxyApply || {};
+  return Object.freeze({
+    appliedAt: proxyApply.appliedAt || null,
+    cookedPacSha256: proxyApply.cookedPacSha256 || null,
+    providerKey: proxyApply.providerKey || null,
+    status: proxyApply.status || null,
+  });
+
+}
+
+function ifStartupProxyRestoreAuthorizationMatches(authorization, state) {
+
+  if (!authorization) {
+    return true;
+  }
+  const proxyApply = state && state.proxyApply || {};
+  return authorization.status === 'applied' &&
+    proxyApply.status === authorization.status &&
+    proxyApply.providerKey === authorization.providerKey &&
+    proxyApply.cookedPacSha256 === authorization.cookedPacSha256 &&
+    proxyApply.appliedAt === authorization.appliedAt;
+
+}
+
+async function createStartupProxyRestorePlan(state) {
+
+  const proxyApply = state.proxyApply || {};
+  const control = state.proxyControl || {};
+  if (proxyApply.status !== 'applied') {
+    return createStartupProxyRestoreSkip('persisted proxy intent is off', state);
+  }
+  if (control.controlledByThisExtension === true) {
+    return createStartupProxyRestoreSkip('proxy control is already restored', state);
+  }
+  if (control.levelOfControl !== 'controllable_by_this_extension') {
+    return createStartupProxyRestoreSkip('live proxy settings are not available', state);
+  }
+
+  const providerKey = state.currentPacProviderKey;
+  const provider = getProviderForState(state, providerKey);
+  const rawCache = state.pacCache || {};
+  const cookedCache = state.cookedPacCache || {};
+  if (
+    !providerKey ||
+    !provider ||
+    !proxyApply.appliedAt ||
+    proxyApply.levelOfControl !== 'controlled_by_this_extension' ||
+    proxyApply.providerKey !== providerKey ||
+    proxyApply.cookedPacSha256 !== cookedCache.cookedPacSha256 ||
+    cookedCache.providerKey !== providerKey ||
+    !cookedCache.cookedPacSha256 ||
+    !cookedCache.artifactRef ||
+    !cookedCache.sourceRawPacSha256 ||
+    !cookedCache.pacModsSha256 ||
+    rawCache.providerKey !== providerKey ||
+    rawCache.rawPacSha256 !== cookedCache.sourceRawPacSha256 ||
+    !rawCache.artifactRef
+  ) {
+    return createStartupProxyRestoreSkip(
+        'persisted PAC provenance is incomplete or mismatched',
+        state,
+    );
+  }
+
+  const stale = await getCookedPacStaleness(state);
+  if (stale.stale) {
+    return createStartupProxyRestoreSkip(
+        'persisted PAC provenance is stale',
+        state,
+    );
+  }
+  return {
+    allowed: true,
+    authorization: createStartupProxyRestoreAuthorization(state),
+    state,
+    workflow: Object.freeze({generation: state.pacWorkflowGeneration}),
+  };
+
+}
+
+async function reconcileProxyOwnershipOnWorkerStart(reconstructedState) {
+
+  const plan = await createStartupProxyRestorePlan(reconstructedState);
+  if (!plan.allowed) {
+    return plan;
+  }
+  const result = await applyCookedPacAndPersist(
+      {},
+      plan.workflow,
+      {
+        startupAuthorization: plan.authorization,
+        startupRestore: true,
+      },
+  );
+  return {
+    allowed: true,
+    result,
+    state: await mv3State.loadState(),
+  };
 
 }
 
@@ -472,6 +601,7 @@ async function addCustomPacProvider(params) {
 
 async function updateCustomPacProvider(params) {
 
+  invalidateStartupProxyRestoreFreshness();
   const key = String(params.key || '');
   if (mv3Providers.isBuiltInProviderKey(key)) {
     throw createProviderError(
@@ -556,6 +686,7 @@ async function updateCustomPacProvider(params) {
 
 async function deleteCustomPacProvider(params) {
 
+  invalidateStartupProxyRestoreFreshness();
   const key = String(params.key || '');
   if (mv3Providers.isBuiltInProviderKey(key)) {
     throw createProviderError(
@@ -655,6 +786,7 @@ const RPC_METHODS = Object.freeze({
 
   async setPacMods(params = {}) {
 
+    invalidateStartupProxyRestoreFreshness();
     cancelActiveProxyHealthCheck('proxy-configuration-changed');
     let state = await mv3State.saveRpcPacMods(params.pacMods, {
       ifResetProxyHealth(previousPacMods, nextPacMods) {
@@ -762,6 +894,7 @@ const RPC_METHODS = Object.freeze({
 
   async setCurrentPacProvider(params = {}) {
 
+    invalidateStartupProxyRestoreFreshness();
     const providerKey = params.providerKey === undefined ? null : params.providerKey;
     let ifProviderChanged = false;
     const state = await mv3State.updateStateAtomically((currentState) => {
@@ -965,8 +1098,9 @@ const RPC_METHODS = Object.freeze({
           'Periodic PAC update is already running.',
       );
     }
+    const workflow = await beginPacWorkflow();
     return runWithActionOperation('apply', async () => {
-      const result = await applyCookedPacAndPersist(params);
+      const result = await applyCookedPacAndPersist(params, workflow);
       await handleProxyOperationResult(result, 'Proxy apply failed.');
       await reconcileProxyHealthSupervisor({startupDelay: true});
       return result;
@@ -976,8 +1110,9 @@ const RPC_METHODS = Object.freeze({
 
   async clearProxy() {
 
+    const invalidation = invalidatePacWorkflowFreshness();
     return runWithActionOperation('clear', async () => {
-      const result = await clearProxyAndPersist();
+      const result = await clearProxyAndPersist(invalidation);
       await handleProxyOperationResult(result, 'Proxy clear failed.');
       await reconcileProxyHealthSupervisor({startupDelay: false});
       return result;
@@ -1291,9 +1426,10 @@ function initializeAutomaticPacUpdates(trigger) {
 async function recoverActionStatusOnWorkerStart() {
 
   const refreshed = await refreshProxyControlAndPersistWithState();
+  const ownership = await reconcileProxyOwnershipOnWorkerStart(refreshed.state);
   const state = await initializeProxyHealthSupervisor(
       'service-worker-startup',
-      refreshed.state,
+      ownership.state,
   );
   return requestActionStatusRefresh({state});
 
@@ -1417,6 +1553,7 @@ async function updatePopupDraft(params = {}) {
 
 async function applyPopupChanges(params = {}) {
 
+  invalidateStartupProxyRestoreFreshness();
   const operation = params.operation || 'apply';
   if (!['save', 'updatePac', 'apply'].includes(operation)) {
     throw new TypeError('Unsupported popup operation.');
@@ -2736,6 +2873,10 @@ async function assertPacApplyIsFresh(operation, fingerprint) {
   if (
     !ifPacApplyOperationIsFresh(operation) ||
     !ifPacWorkflowIsFresh(operation.workflow, latestState) ||
+    !ifStartupProxyRestoreAuthorizationMatches(
+        operation.startupAuthorization,
+        latestState,
+    ) ||
     !ifPacApplyFingerprintsMatch(
         fingerprint,
         createPacApplyFingerprint(latestState),
@@ -2784,6 +2925,41 @@ function createProxyApplyState(status, metadata = {}) {
     error: metadata.error || null,
     warnings: metadata.warnings || [],
   };
+
+}
+
+async function assertCookedPacArtifactMatchesCache(artifact, cache) {
+
+  const metadataMatches = Boolean(
+      artifact &&
+      artifact.artifactRef === cache.artifactRef &&
+      artifact.providerKey === cache.providerKey &&
+      artifact.cookedPacSha256 === cache.cookedPacSha256 &&
+      artifact.sourceRawPacSha256 === cache.sourceRawPacSha256 &&
+      artifact.pacModsSha256 === cache.pacModsSha256 &&
+      artifact.cookedPacSize === cache.cookedPacSize,
+  );
+  if (!metadataMatches) {
+    throw createStructuredError(
+        'PAC_ARTIFACT_MISMATCH',
+        'Cooked PAC artifact provenance does not match current PAC metadata.',
+        {
+          providerKey: cache.providerKey,
+          cookedPacSha256: cache.cookedPacSha256,
+        },
+    );
+  }
+  const actualSha256 = await mv3Hash.sha256Hex(artifact.cookedPacData);
+  if (actualSha256 !== cache.cookedPacSha256) {
+    throw createStructuredError(
+        'PAC_ARTIFACT_MISMATCH',
+        'Cooked PAC artifact content does not match its recorded hash.',
+        {
+          providerKey: cache.providerKey,
+          cookedPacSha256: cache.cookedPacSha256,
+        },
+    );
+  }
 
 }
 
@@ -3849,13 +4025,17 @@ async function persistProxyFailure(
 
 }
 
-async function applyCookedPacAndPersist(params = {}, workflow = null) {
+async function applyCookedPacAndPersist(
+    params = {},
+    workflow = null,
+    operationOptions = {},
+) {
 
   const currentWorkflow = workflow || await beginPacWorkflow();
   if (!await getFreshPacWorkflowState(currentWorkflow)) {
     return createPacApplyStaleResult();
   }
-  const operation = beginPacApplyOperation(currentWorkflow);
+  const operation = beginPacApplyOperation(currentWorkflow, operationOptions);
   return enqueuePacProxyOperation(() =>
     applyCookedPacAndPersistForOperation(params, operation),
   ).finally(() => {
@@ -3869,7 +4049,14 @@ async function applyCookedPacAndPersist(params = {}, workflow = null) {
 async function applyCookedPacAndPersistForOperation(params, operation) {
 
   const state = await getFreshPacWorkflowState(operation.workflow);
-  if (!state || !ifPacApplyOperationIsFresh(operation)) {
+  if (
+    !state ||
+    !ifPacApplyOperationIsFresh(operation) ||
+    !ifStartupProxyRestoreAuthorizationMatches(
+        operation.startupAuthorization,
+        state,
+    )
+  ) {
     return createPacApplyStaleResult();
   }
   const providerKey = state.currentPacProviderKey;
@@ -3968,6 +4155,10 @@ async function applyCookedPacAndPersistForOperation(params, operation) {
           {providerKey, cookedPacSha256: cache.cookedPacSha256},
       );
     }
+    await assertCookedPacArtifactMatchesCache(cookedArtifact, cache);
+    if (!ifPacApplyOperationIsFresh(operation)) {
+      return createPacApplyStaleResult();
+    }
     await mv3ProxySettings.applyPacScript({
       cookedPacData: cookedArtifact.cookedPacData,
       beforeSet: () => assertPacApplyIsFresh(operation, fingerprint),
@@ -4056,9 +4247,11 @@ async function applyCookedPacAndPersistForOperation(params, operation) {
 
 }
 
-function clearProxyAndPersist() {
+function clearProxyAndPersist(
+    invalidation = invalidatePacWorkflowFreshness(),
+) {
 
-  const invalidation = invalidatePacWorkflowFreshness();
+  invalidatePacApplyFreshness();
   return enqueuePacProxyOperation(async () => {
     await invalidation;
     return clearProxyAndPersistForOperation();

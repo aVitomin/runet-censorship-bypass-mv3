@@ -119,6 +119,7 @@ async function createRuntimeHarness(options = {}) {
   const storageData = {};
   const sessionStorageData = clone(options.initialSessionStorage || {});
   const alarms = new Map();
+  const alarmCreateNames = [];
   (options.initialAlarms || []).forEach((alarm) => {
     alarms.set(alarm.name, clone(alarm));
   });
@@ -163,17 +164,19 @@ async function createRuntimeHarness(options = {}) {
   let markPacCookStarted = null;
   let cookedArtifactReads = 0;
   let cookedArtifactReadGate = null;
+  let ifCookedArtifactReadHookCalled = false;
+  let ifProxySettingsReadHookCalled = false;
   let proxySettingsReadGate = null;
   let proxySettingsSetGate = null;
-  let nextProxySettingsSetError = null;
+  let nextProxySettingsSetError = options.initialProxySettingsSetError || null;
   const proxySettingsSetValues = [];
-  let proxyDetails = {
+  let proxyDetails = clone(options.initialProxyDetails || {
     levelOfControl: 'controlled_by_this_extension',
     value: {
       mode: 'pac_script',
       pacScript: {data: 'installed PAC', mandatory: false},
     },
-  };
+  });
   const NativeDate = Date;
   const RuntimeDate = options.clock ? class extends NativeDate {
     constructor(...args) {
@@ -230,6 +233,7 @@ async function createRuntimeHarness(options = {}) {
       create(name, details) {
 
         ++counts.alarmCreates;
+        alarmCreateNames.push(name);
         alarms.set(name, Object.assign({
           name,
           scheduledTime: details.when,
@@ -279,6 +283,13 @@ async function createRuntimeHarness(options = {}) {
         get(details, callback) {
 
           ++counts.proxySettingsReads;
+          if (
+            !ifProxySettingsReadHookCalled &&
+            typeof options.onProxySettingsRead === 'function'
+          ) {
+            ifProxySettingsReadHookCalled = true;
+            options.onProxySettingsRead(context);
+          }
           if (
             proxySettingsReadGate &&
             counts.proxySettingsReads === proxySettingsReadGate.target
@@ -699,6 +710,13 @@ async function createRuntimeHarness(options = {}) {
       countIndexedDb('read');
       ++cookedArtifactReads;
       if (
+        !ifCookedArtifactReadHookCalled &&
+        typeof options.onCookedArtifactRead === 'function'
+      ) {
+        ifCookedArtifactReadHookCalled = true;
+        options.onCookedArtifactRead(context);
+      }
+      if (
         cookedArtifactReadGate &&
         cookedArtifactReads >= cookedArtifactReadGate.target
       ) {
@@ -763,6 +781,7 @@ async function createRuntimeHarness(options = {}) {
     '  executePeriodicUpdatePipeline,\n' +
     '  handleProxySettingsChanged,\n' +
     '  initializeProxyHealthSupervisor,\n' +
+    '  reconcileProxyOwnershipOnWorkerStart,\n' +
     '  reconcileProxyHealthSupervisor,\n' +
     '  recordProxyHealthFailure,\n' +
     '  runAutomaticProxyHealthCheck,\n' +
@@ -943,6 +962,11 @@ async function createRuntimeHarness(options = {}) {
     getAlarms() {
 
       return Array.from(alarms.values()).map(clone);
+
+    },
+    getAlarmCreateCount(name) {
+
+      return alarmCreateNames.filter((createdName) => createdName === name).length;
 
     },
     getSessionStorage() {
