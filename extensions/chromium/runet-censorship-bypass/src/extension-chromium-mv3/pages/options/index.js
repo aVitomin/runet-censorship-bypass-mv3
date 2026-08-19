@@ -664,8 +664,6 @@
     renderDiagnosticsSection(main);
     renderAdvancedSection(main);
     renderGlobalActionBar(main);
-    const footer = append(main, 'footer', 'options-footer');
-    appendText(footer, 'p', t('optionsMv3Credits'));
     append(shell, 'div', 'ui-sr-only').setAttribute('aria-live', 'polite');
     activateSection(getSectionFromHash(), false);
     updateDraftPresentation();
@@ -2996,74 +2994,12 @@
         'optionsNavDiagnostics',
         'optionsDiagnosticsDescriptionNew',
     );
-    const card = append(section, 'div', 'settings-card ui-card');
-    appendText(card, 'h3', t('optionsSystemCheck'));
-    const grid = append(card, 'div', 'diagnostic-grid');
-    const control = deriveControlView();
-    appendDiagnosticItem(
-        grid,
-        t('optionsProxyOwnership'),
-        control.title,
-        control.tone,
-    );
-    appendDiagnosticItem(
-        grid,
-        t('optionsActiveRoutingSource'),
-        getProviderLabel(getSelectedProvider()),
-        getSelectedProvider() ? 'success' : 'warning',
-    );
-    appendDiagnosticItem(
-        grid,
-        t('optionsProxyMethodAvailability'),
-        formatCount(
-            getProxyCandidateCount(),
-            'optionsOneProxyMethod',
-            'optionsManyProxyMethods',
-        ),
-        getProxyCandidateCount() ? 'success' : 'warning',
-    );
-    appendDiagnosticItem(
-        grid,
-        t('popupProxyHealth'),
-        getHealthView().text,
-        getHealthView().tone,
-    );
-    appendDiagnosticItem(
-        grid,
-        t('optionsLastApplyResult'),
-        localizeStatusValue(
-            state.snapshot.state.proxyApply &&
-            state.snapshot.state.proxyApply.status,
-        ),
-        control.kind === 'error' ? 'error' : '',
-    );
-    appendDiagnosticItem(
-        grid,
-        t('optionsLastSuccessfulPacUpdate'),
-        formatTime(
-            state.snapshot.reliability &&
-            state.snapshot.reliability.autoUpdate &&
-            state.snapshot.reliability.autoUpdate.lastSuccessfulUpdateAt,
-        ),
-        '',
-    );
     const details = createDetails(
         section,
         'diagnostics-expert',
         t('optionsShowExpertDetails'),
     );
     renderSafeExpertDetails(details.content);
-
-  }
-
-  function appendDiagnosticItem(parent, label, value, tone) {
-
-    const item = append(parent, 'div', 'diagnostic-item');
-    appendText(item, 'span', label, 'compact-label');
-    appendText(item, 'strong', value);
-    if (tone) {
-      item.dataset.statusTone = tone;
-    }
 
   }
 
@@ -3706,13 +3642,47 @@
         'about',
         t('optionsAbout'),
     );
-    appendText(disclosure.content, 'p', t('optionsAboutHint'));
-    appendText(
-        disclosure.content,
-        'p',
-        t('optionsAboutBehaviorBoundary'),
-        'technical-note',
+    const manifest = chrome.runtime.getManifest();
+    const details = append(disclosure.content, 'dl', 'technical-list');
+    appendDefinition(
+        details,
+        t('optionsVersion'),
+        manifest.version_name || manifest.version,
     );
+    appendDefinition(
+        details,
+        t('optionsReleaseChannel'),
+        t('optionsLimitedBeta'),
+    );
+    const links = append(disclosure.content, 'ul', 'about-links');
+    [
+      [
+        'optionsGitHubRepository',
+        'https://github.com/aVitomin/runet-censorship-bypass-mv3',
+      ],
+      [
+        'optionsWhatsNew',
+        'https://github.com/aVitomin/runet-censorship-bypass-mv3/releases',
+      ],
+      [
+        'optionsReportIssue',
+        'https://github.com/aVitomin/runet-censorship-bypass-mv3/issues/new/choose',
+      ],
+      [
+        'optionsLicense',
+        'https://github.com/aVitomin/runet-censorship-bypass-mv3/blob/main/LICENSE',
+      ],
+      [
+        'optionsUpstreamProject',
+        'https://github.com/anticensority/runet-censorship-bypass',
+      ],
+    ].forEach(([labelKey, href]) => {
+      const item = append(links, 'li');
+      const link = appendText(item, 'a', t(labelKey));
+      link.href = href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    });
 
   }
 

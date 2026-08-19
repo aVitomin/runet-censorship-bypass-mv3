@@ -261,15 +261,13 @@ ul:last-child {
 }
 
 .summary-grid,
-.diagnostic-grid,
 .method-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--ui-space-1);
 }
 
-.summary-item,
-.diagnostic-item {
+.summary-item {
   min-width: 0;
   padding: var(--ui-space-1-5);
   border: 1px solid var(--ui-color-divider);
@@ -277,8 +275,7 @@ ul:last-child {
   background: var(--ui-color-surface-subtle);
 }
 
-.summary-item .compact-label,
-.diagnostic-item .compact-label {
+.summary-item .compact-label {
   display: block;
   margin-bottom: var(--ui-space-0-5);
 }
@@ -522,6 +519,15 @@ details.disclosure[open] > summary {
   overflow-wrap: anywhere;
 }
 
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1) var(--ui-space-2);
+  margin: var(--ui-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
 .global-action-bar {
   position: sticky;
   z-index: 5;
@@ -556,13 +562,6 @@ details.disclosure[open] > summary {
   display: flex;
   flex: 0 0 auto;
   gap: var(--ui-space-1);
-}
-
-.options-footer {
-  margin-top: var(--ui-space-3);
-  color: var(--ui-color-text-muted);
-  font-size: var(--ui-font-size-body);
-  text-align: center;
 }
 
 .loading-shell {
@@ -628,7 +627,6 @@ details.disclosure[open] > summary {
   }
 
   .summary-grid,
-  .diagnostic-grid,
   .method-grid,
   .field-grid {
     grid-template-columns: 1fr;

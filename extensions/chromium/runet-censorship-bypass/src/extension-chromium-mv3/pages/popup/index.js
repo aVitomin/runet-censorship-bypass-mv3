@@ -268,7 +268,6 @@
     renderSiteCard(root, state);
     renderConnectionCard(root, state);
     renderAdvancedDisclosure(root, state);
-    renderFooter(root);
     renderLiveAnnouncement(root, state, presentation, lastOperation);
     focusRequestedControl();
 
@@ -827,14 +826,6 @@
           'status-message warning',
       );
     });
-
-  }
-
-  function renderFooter(parent) {
-
-    const footer = append(parent, 'footer', 'footer');
-    const actions = append(footer, 'div', 'footer-actions');
-    appendSettingsButton(actions, false);
 
   }
 

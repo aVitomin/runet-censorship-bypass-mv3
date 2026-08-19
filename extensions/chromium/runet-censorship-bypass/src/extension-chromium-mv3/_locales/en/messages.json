@@ -322,28 +322,8 @@
   "providerOnlyOwnSitesDescription": {
     "message": "Use only manually configured site rules and proxy candidates."
   },
-  "popupLoading": {
-    "message": "Loading..."
-  },
-  "popupLoadError": {
-    "message": "Popup failed to load."
-  },
-  "popupPacScript": {
-    "message": "PAC script"
-  },
   "popupPacProvider": {
     "message": "PAC provider"
-  },
-  "popupPacProviderHelp": {
-    "message": "PAC decides which sites use proxy by default."
-  },
-  "popupProviderStatus": {
-    "message": "Provider: $PROVIDER$",
-    "placeholders": {
-      "provider": {
-        "content": "$1"
-      }
-    }
   },
   "popupNotSelected": {
     "message": "not selected"
@@ -351,35 +331,17 @@
   "popupSelectProvider": {
     "message": "Select provider"
   },
-  "popupUpdatePac": {
-    "message": "Update PAC"
-  },
-  "popupUpdatePacHelp": {
-    "message": "Download and rebuild PAC without applying proxy."
-  },
-  "popupCurrentSite": {
-    "message": "Current site"
-  },
   "popupPageCannotBeControlled": {
     "message": "This page cannot be controlled."
   },
   "popupAutoMode": {
     "message": "Auto"
   },
-  "popupAutoModeHelp": {
-    "message": "Remove your custom rule. PAC decides."
-  },
   "popupProxyMode": {
     "message": "Proxy"
   },
-  "popupProxyModeHelp": {
-    "message": "Force this site through Tor, WARP, or own proxy."
-  },
   "popupDirectMode": {
     "message": "Direct"
-  },
-  "popupDirectModeHelp": {
-    "message": "Force this site to bypass proxy."
   },
   "popupScope": {
     "message": "Scope"
@@ -390,9 +352,6 @@
   "popupDomainAndSubdomains": {
     "message": "Domain and subdomains"
   },
-  "popupDomainScopeHelp": {
-    "message": "Apply the rule to the base domain and its subdomains, for example *.example.com."
-  },
   "popupRulePreview": {
     "message": "Rule: $PATTERN$",
     "placeholders": {
@@ -401,20 +360,11 @@
       }
     }
   },
-  "popupSubdomainHeuristicNote": {
-    "message": "Domain scope uses the registrable domain and respects public suffix boundaries."
-  },
-  "popupQuickProxies": {
-    "message": "Quick proxies"
-  },
   "popupUsePacScriptProxies": {
     "message": "Use PAC script proxies"
   },
   "popupUsePacScriptProxiesHelp": {
     "message": "Use proxies from selected PAC provider."
-  },
-  "popupUsePacScriptProxiesHint": {
-    "message": "PAC proxies"
   },
   "popupOwnProxiesOnlyForOwnSites": {
     "message": "Own proxies only for own site rules"
@@ -422,26 +372,17 @@
   "popupOwnProxiesOnlyForOwnSitesHelp": {
     "message": "Use own proxies only for your site rules."
   },
-  "popupOwnProxiesOnlyForOwnSitesHint": {
-    "message": "site rules only"
-  },
   "popupLocalTor": {
     "message": "Tor service"
   },
   "popupLocalTorHelp": {
     "message": "Tor service, usually 127.0.0.1:9050."
   },
-  "popupLocalTorHint": {
-    "message": "127.0.0.1:9050"
-  },
   "popupTorBrowser": {
     "message": "Tor Browser"
   },
   "popupTorBrowserHelp": {
     "message": "Requires opened Tor Browser, usually 127.0.0.1:9150."
-  },
-  "popupTorBrowserHint": {
-    "message": "127.0.0.1:9150"
   },
   "popupTorModeNote": {
     "message": "Use one Tor mode at a time."
@@ -472,26 +413,8 @@
   "popupOwnProxiesConfigure": {
     "message": "Own proxies: configure in full settings."
   },
-  "popupStatus": {
-    "message": "Status"
-  },
-  "popupProvider": {
-    "message": "Provider"
-  },
   "popupPac": {
     "message": "PAC"
-  },
-  "popupUpdated": {
-    "message": "Updated"
-  },
-  "popupProxy": {
-    "message": "Proxy"
-  },
-  "popupCandidate": {
-    "message": "Candidate"
-  },
-  "popupMissing": {
-    "message": "missing"
   },
   "popupNotDownloaded": {
     "message": "not downloaded"
@@ -511,35 +434,11 @@
   "popupApplied": {
     "message": "applied"
   },
-  "popupNotApplied": {
-    "message": "not applied"
-  },
   "popupApplyChanges": {
     "message": "Apply"
   },
-  "popupApplyChangesHelp": {
-    "message": "Save, rebuild PAC, and apply proxy."
-  },
-  "popupClearProxy": {
-    "message": "Clear proxy"
-  },
-  "popupClearProxyHelp": {
-    "message": "Disable this extension's browser proxy settings. Your rules and PAC cache are kept."
-  },
-  "popupFullSettings": {
-    "message": "Full settings"
-  },
-  "popupApplying": {
-    "message": "Applying..."
-  },
-  "popupUpdating": {
-    "message": "Updating..."
-  },
   "popupClearing": {
     "message": "Clearing..."
-  },
-  "popupPacChanged": {
-    "message": "PAC settings changed. Apply changes to activate."
   },
   "popupOperationFailed": {
     "message": "Operation failed."
@@ -621,9 +520,6 @@
   },
   "optionsAddSiteRule": {
     "message": "Add site rule"
-  },
-  "optionsSite": {
-    "message": "Site"
   },
   "optionsNote": {
     "message": "Note"
@@ -727,9 +623,6 @@
   "optionsTorBrowserHelp": {
     "message": "Use the Tor proxy started by Tor Browser, usually SOCKS5 127.0.0.1:9150. Tor Browser must be open."
   },
-  "popupPacDownloadedAndCookedMessage": {
-    "message": "PAC downloaded and cooked."
-  },
   "popupSettingsApplied": {
     "message": "Settings applied."
   },
@@ -766,14 +659,32 @@
   "optionsNone": {
     "message": "none"
   },
-  "optionsMv3Credits": {
-    "message": "MV3 migration: @aVitomin with Codex"
-  },
   "optionsAbout": {
     "message": "About"
   },
-  "optionsAboutHint": {
-    "message": "Version details, credits, and non-intrusive compatibility notes."
+  "optionsVersion": {
+    "message": "Version"
+  },
+  "optionsReleaseChannel": {
+    "message": "Release channel"
+  },
+  "optionsLimitedBeta": {
+    "message": "Limited MV3 beta"
+  },
+  "optionsGitHubRepository": {
+    "message": "GitHub repository"
+  },
+  "optionsWhatsNew": {
+    "message": "What's new"
+  },
+  "optionsReportIssue": {
+    "message": "Report an issue"
+  },
+  "optionsLicense": {
+    "message": "GNU GPL v3 license"
+  },
+  "optionsUpstreamProject": {
+    "message": "Upstream project"
   },
   "optionsWarpLocalProxyWarning": {
     "message": "WARP is treated as a local proxy."
@@ -792,9 +703,6 @@
   },
   "optionsNextRun": {
     "message": "Next run"
-  },
-  "optionsError": {
-    "message": "Error"
   },
   "optionsScanLegacySettings": {
     "message": "Scan legacy MV2 settings"
@@ -823,14 +731,8 @@
   "optionsLastAudit": {
     "message": "Last audit"
   },
-  "optionsLastApply": {
-    "message": "Last apply"
-  },
   "optionsDetectedLegacyData": {
     "message": "Detected legacy data"
-  },
-  "optionsDetected": {
-    "message": "Detected"
   },
   "optionsSettingsAvailableForMigration": {
     "message": "Settings available for migration"
@@ -967,9 +869,6 @@
       }
     }
   },
-  "popupPacUpdateFailed": {
-    "message": "PAC update failed"
-  },
   "popupProxyHealth": {
     "message": "Proxy health"
   },
@@ -1045,15 +944,6 @@
   "proxyHealthLocalTorNotification": {
     "message": "The Tor service is unavailable. Start Tor and try again."
   },
-  "proxyHealthTorBrowserShort": {
-    "message": "Tor Browser is unavailable"
-  },
-  "proxyHealthLocalTorShort": {
-    "message": "Tor service is unavailable"
-  },
-  "proxyHealthGenericShort": {
-    "message": "Configured proxy is unavailable"
-  },
   "optionsAutoUpdateEveryTwelveHours": {
     "message": "Automatically update PAC every 12 hours"
   },
@@ -1115,7 +1005,7 @@
     "message": "Control automatic routing-data refreshes and check a configured proxy connection."
   },
   "optionsDiagnosticsDescriptionNew": {
-    "message": "Review safe, user-focused checks before opening sanitized expert details."
+    "message": "Review technical status details useful for support and troubleshooting."
   },
   "optionsAdvancedDescriptionNew": {
     "message": "Manage uncommon routing policies, maintenance, and expert operations."
@@ -1476,20 +1366,11 @@
   "optionsHealthCheckNeedsProxyRuleHelp": {
     "message": "A meaningful check requires an applied Proxy rule and a previously known target site."
   },
-  "optionsSystemCheck": {
-    "message": "System check"
-  },
-  "optionsProxyOwnership": {
-    "message": "Proxy ownership"
-  },
-  "optionsLastApplyResult": {
-    "message": "Last apply result"
-  },
   "optionsShowExpertDetails": {
-    "message": "Show sanitized expert details"
+    "message": "Technical details"
   },
   "optionsExpertDetailsRedactionHelp": {
-    "message": "These details omit PAC bodies, source addresses, credentials, hashes, artifact references, and raw browser errors."
+    "message": "Sensitive routing data and credentials are omitted."
   },
   "optionsControlLevel": {
     "message": "Control availability"
@@ -1586,9 +1467,6 @@
   },
   "optionsMigrationAppliedSafely": {
     "message": "Selected legacy settings were migrated. Proxy settings were not applied."
-  },
-  "optionsAboutBehaviorBoundary": {
-    "message": "This interface changes presentation and saved settings only; PAC routing and security rules remain authoritative in the background."
   },
   "optionsConfigurationActions": {
     "message": "Configuration status and actions"

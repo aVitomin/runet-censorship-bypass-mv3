@@ -109,8 +109,8 @@ refresh.
 
 ## Локальные и generated материалы
 
-`.local/project-reports/` хранит четыре неизменённых локальных отчёта и целиком
-игнорируется Git. `.tmp/` содержит QA profiles, screenshots и release checks;
+`.local/project-reports/` хранит локальные рабочие отчёты и целиком игнорируется
+Git. `.tmp/` содержит QA profiles, screenshots и release checks;
 только четыре отобранных, проверенных изображения скопированы в
 `docs/assets/readme/`. `build/`, `dist/` и browser profiles также ignored и не
 должны попадать в историю или extension ZIP.
@@ -136,8 +136,8 @@ refresh.
 | Пять SVG в tooling `assets/` | Requires maintainer decision; keep | Прямых ссылок не найдено, но это source artwork с attribution/history; безопасное удаление требует решения о сохранении исходников. |
 | `.vscode/settings.json`, `.rgignore` | Keep in place | Активно исключают generated/vendor noise и соответствуют рабочему процессу. |
 | `extension-common/full/mini` и Ace vendor | Keep in place | Нужны legacy compatibility build, общим assets и проверяемому vendor provenance. |
-| MV3 placeholder pages | Keep in place | Ссылаются на shared placeholder runtime и входят в проверенный пакет. |
-| Четыре project reports | Keep local/ignored | Внутренние планы/reviews не являются публичной документацией и не входят в package. |
+| MV3 placeholder pages | Remove (completed) | Четыре недоступные из manifest/UI страницы показывали только migration-era текст через отдельный `getPageStatus` RPC; страницы, shared placeholder assets и RPC удалены вместе. |
+| Локальные project reports | Keep local/ignored | Внутренние планы/reviews не являются публичной документацией и не входят в package. |
 
 В documentation refresh из tooling удалялся только `.github/FUNDING.yml`.
 Корневой donation package позже удалён отдельным maintenance-изменением;

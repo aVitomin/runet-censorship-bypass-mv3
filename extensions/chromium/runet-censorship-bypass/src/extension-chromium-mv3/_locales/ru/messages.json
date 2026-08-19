@@ -322,28 +322,8 @@
   "providerOnlyOwnSitesDescription": {
     "message": "Использовать только вручную настроенные правила сайтов и прокси-кандидаты."
   },
-  "popupLoading": {
-    "message": "Загрузка..."
-  },
-  "popupLoadError": {
-    "message": "Не удалось загрузить popup."
-  },
-  "popupPacScript": {
-    "message": "PAC-скрипт"
-  },
   "popupPacProvider": {
     "message": "Поставщик PAC"
-  },
-  "popupPacProviderHelp": {
-    "message": "PAC по умолчанию решает, какие сайты идут через прокси."
-  },
-  "popupProviderStatus": {
-    "message": "Поставщик: $PROVIDER$",
-    "placeholders": {
-      "provider": {
-        "content": "$1"
-      }
-    }
   },
   "popupNotSelected": {
     "message": "не выбран"
@@ -351,35 +331,17 @@
   "popupSelectProvider": {
     "message": "Выберите поставщика"
   },
-  "popupUpdatePac": {
-    "message": "Обновить PAC"
-  },
-  "popupUpdatePacHelp": {
-    "message": "Скачать и пересобрать PAC без применения прокси."
-  },
-  "popupCurrentSite": {
-    "message": "Текущий сайт"
-  },
   "popupPageCannotBeControlled": {
     "message": "Этой страницей нельзя управлять."
   },
   "popupAutoMode": {
     "message": "Авто"
   },
-  "popupAutoModeHelp": {
-    "message": "Удалить ваше правило. Решает PAC."
-  },
   "popupProxyMode": {
     "message": "Через прокси"
   },
-  "popupProxyModeHelp": {
-    "message": "Открывать сайт через Tor, WARP или свой прокси."
-  },
   "popupDirectMode": {
     "message": "Напрямую"
-  },
-  "popupDirectModeHelp": {
-    "message": "Принудительно открыть сайт без прокси."
   },
   "popupScope": {
     "message": "Область"
@@ -390,9 +352,6 @@
   "popupDomainAndSubdomains": {
     "message": "Домен и поддомены"
   },
-  "popupDomainScopeHelp": {
-    "message": "Применить правило к базовому домену и его поддоменам, например *.example.com."
-  },
   "popupRulePreview": {
     "message": "Правило: $PATTERN$",
     "placeholders": {
@@ -401,20 +360,11 @@
       }
     }
   },
-  "popupSubdomainHeuristicNote": {
-    "message": "Область домена использует регистрируемый домен и учитывает границы публичных суффиксов."
-  },
-  "popupQuickProxies": {
-    "message": "Быстрые прокси"
-  },
   "popupUsePacScriptProxies": {
     "message": "Использовать прокси из PAC"
   },
   "popupUsePacScriptProxiesHelp": {
     "message": "Использовать прокси из выбранного PAC."
-  },
-  "popupUsePacScriptProxiesHint": {
-    "message": "PAC-прокси"
   },
   "popupOwnProxiesOnlyForOwnSites": {
     "message": "Свои прокси только для своих правил сайтов"
@@ -422,26 +372,17 @@
   "popupOwnProxiesOnlyForOwnSitesHelp": {
     "message": "Использовать свои прокси только для ваших правил сайтов."
   },
-  "popupOwnProxiesOnlyForOwnSitesHint": {
-    "message": "только правила"
-  },
   "popupLocalTor": {
     "message": "Служба Tor"
   },
   "popupLocalTorHelp": {
     "message": "Служба Tor, обычно 127.0.0.1:9050."
   },
-  "popupLocalTorHint": {
-    "message": "127.0.0.1:9050"
-  },
   "popupTorBrowser": {
     "message": "Tor Browser"
   },
   "popupTorBrowserHelp": {
     "message": "Нужен открытый Tor Browser, обычно 127.0.0.1:9150."
-  },
-  "popupTorBrowserHint": {
-    "message": "127.0.0.1:9150"
   },
   "popupTorModeNote": {
     "message": "Включайте только один режим Tor."
@@ -472,26 +413,8 @@
   "popupOwnProxiesConfigure": {
     "message": "Свои прокси: настройте в полных настройках."
   },
-  "popupStatus": {
-    "message": "Статус"
-  },
-  "popupProvider": {
-    "message": "Поставщик"
-  },
   "popupPac": {
     "message": "PAC"
-  },
-  "popupUpdated": {
-    "message": "Обновлено"
-  },
-  "popupProxy": {
-    "message": "Прокси"
-  },
-  "popupCandidate": {
-    "message": "Кандидат"
-  },
-  "popupMissing": {
-    "message": "нет"
   },
   "popupNotDownloaded": {
     "message": "не скачан"
@@ -511,35 +434,11 @@
   "popupApplied": {
     "message": "применен"
   },
-  "popupNotApplied": {
-    "message": "не применен"
-  },
   "popupApplyChanges": {
     "message": "Применить"
   },
-  "popupApplyChangesHelp": {
-    "message": "Сохранить, пересобрать PAC и применить."
-  },
-  "popupClearProxy": {
-    "message": "Сбросить прокси"
-  },
-  "popupClearProxyHelp": {
-    "message": "Отключить настройки прокси этого расширения. Правила и кэш PAC сохраняются."
-  },
-  "popupFullSettings": {
-    "message": "Полные настройки"
-  },
-  "popupApplying": {
-    "message": "Применение..."
-  },
-  "popupUpdating": {
-    "message": "Обновление..."
-  },
   "popupClearing": {
     "message": "Сброс..."
-  },
-  "popupPacChanged": {
-    "message": "Настройки PAC изменены. Нажмите «Применить», чтобы активировать."
   },
   "popupOperationFailed": {
     "message": "Операция не выполнена."
@@ -621,9 +520,6 @@
   },
   "optionsAddSiteRule": {
     "message": "Добавить правило сайта"
-  },
-  "optionsSite": {
-    "message": "Сайт"
   },
   "optionsNote": {
     "message": "Заметка"
@@ -727,9 +623,6 @@
   "optionsTorBrowserHelp": {
     "message": "Использовать прокси, который запускает Tor Browser, обычно SOCKS5 127.0.0.1:9150. Tor Browser должен быть открыт."
   },
-  "popupPacDownloadedAndCookedMessage": {
-    "message": "PAC скачан и собран."
-  },
   "popupSettingsApplied": {
     "message": "Настройки применены."
   },
@@ -766,14 +659,32 @@
   "optionsNone": {
     "message": "нет"
   },
-  "optionsMv3Credits": {
-    "message": "Миграция на MV3: @aVitomin with Codex"
-  },
   "optionsAbout": {
     "message": "О расширении"
   },
-  "optionsAboutHint": {
-    "message": "Версия, благодарности и ненавязчивые заметки о совместимости."
+  "optionsVersion": {
+    "message": "Версия"
+  },
+  "optionsReleaseChannel": {
+    "message": "Канал выпуска"
+  },
+  "optionsLimitedBeta": {
+    "message": "Ограниченная бета-версия MV3"
+  },
+  "optionsGitHubRepository": {
+    "message": "Репозиторий GitHub"
+  },
+  "optionsWhatsNew": {
+    "message": "Что нового"
+  },
+  "optionsReportIssue": {
+    "message": "Сообщить о проблеме"
+  },
+  "optionsLicense": {
+    "message": "Лицензия GNU GPL v3"
+  },
+  "optionsUpstreamProject": {
+    "message": "Исходный проект"
   },
   "optionsWarpLocalProxyWarning": {
     "message": "WARP используется как локальный прокси."
@@ -792,9 +703,6 @@
   },
   "optionsNextRun": {
     "message": "Следующий запуск"
-  },
-  "optionsError": {
-    "message": "Ошибка"
   },
   "optionsScanLegacySettings": {
     "message": "Сканировать старые настройки MV2"
@@ -823,14 +731,8 @@
   "optionsLastAudit": {
     "message": "Последний аудит"
   },
-  "optionsLastApply": {
-    "message": "Последнее применение"
-  },
   "optionsDetectedLegacyData": {
     "message": "Найдены старые данные"
-  },
-  "optionsDetected": {
-    "message": "Найдено"
   },
   "optionsSettingsAvailableForMigration": {
     "message": "Настройки, доступные для миграции"
@@ -967,9 +869,6 @@
       }
     }
   },
-  "popupPacUpdateFailed": {
-    "message": "Ошибка обновления PAC"
-  },
   "popupProxyHealth": {
     "message": "Прокси"
   },
@@ -1045,15 +944,6 @@
   "proxyHealthLocalTorNotification": {
     "message": "Служба Tor не отвечает. Запустите Tor и попробуйте снова."
   },
-  "proxyHealthTorBrowserShort": {
-    "message": "Tor Browser не отвечает"
-  },
-  "proxyHealthLocalTorShort": {
-    "message": "Служба Tor не отвечает"
-  },
-  "proxyHealthGenericShort": {
-    "message": "Настроенный прокси не отвечает"
-  },
   "optionsAutoUpdateEveryTwelveHours": {
     "message": "Автоматически обновлять PAC каждые 12 часов"
   },
@@ -1115,7 +1005,7 @@
     "message": "Управляйте автообновлением правил и проверяйте настроенное прокси-подключение."
   },
   "optionsDiagnosticsDescriptionNew": {
-    "message": "Сначала просмотрите понятные безопасные проверки, затем при необходимости откройте технические сведения."
+    "message": "Просмотрите технические сведения, полезные для поддержки и устранения неполадок."
   },
   "optionsAdvancedDescriptionNew": {
     "message": "Управляйте редкими политиками маршрутизации, обслуживанием и экспертными операциями."
@@ -1476,20 +1366,11 @@
   "optionsHealthCheckNeedsProxyRuleHelp": {
     "message": "Для содержательной проверки нужно применённое правило «Через прокси» и ранее известный целевой сайт."
   },
-  "optionsSystemCheck": {
-    "message": "Проверка системы"
-  },
-  "optionsProxyOwnership": {
-    "message": "Управление прокси"
-  },
-  "optionsLastApplyResult": {
-    "message": "Результат последнего применения"
-  },
   "optionsShowExpertDetails": {
-    "message": "Показать безопасные технические сведения"
+    "message": "Технические сведения"
   },
   "optionsExpertDetailsRedactionHelp": {
-    "message": "Здесь нет содержимого PAC, адресов источников, учётных данных, хешей, ссылок на артефакты и исходных ошибок браузера."
+    "message": "Конфиденциальные данные маршрутизации и учётные данные не показываются."
   },
   "optionsControlLevel": {
     "message": "Доступность управления"
@@ -1586,9 +1467,6 @@
   },
   "optionsMigrationAppliedSafely": {
     "message": "Выбранные старые настройки перенесены. Настройки прокси не применялись."
-  },
-  "optionsAboutBehaviorBoundary": {
-    "message": "Этот интерфейс меняет только представление и сохранённые настройки; правила маршрутизации и безопасности остаются под контролем фоновой части."
   },
   "optionsConfigurationActions": {
     "message": "Состояние и действия с конфигурацией"

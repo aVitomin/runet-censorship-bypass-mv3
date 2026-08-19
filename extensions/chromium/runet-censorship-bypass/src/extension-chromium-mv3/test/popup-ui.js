@@ -502,7 +502,7 @@ describe('MV3 popup UI', () => {
           node.tagName === 'BUTTON' &&
           node.getAttribute('aria-label') === 'Open settings',
         );
-        expect(settings).to.have.length(2);
+        expect(settings).to.have.length(1);
 
       });
 

@@ -574,6 +574,13 @@ async function createHarness(options = {}) {
   const context = Vm.createContext({
     URL,
     chrome: {
+      runtime: {
+        getManifest() {
+
+          return {version: '0.0.2.0', version_name: '0.0.2.00'};
+
+        },
+      },
       i18n: {
         getMessage(key, substitutions) {
 
@@ -700,6 +707,27 @@ describe('MV3 options UI', function() {
         ]);
         expect(harness.root.textContent).to.include('Overview');
         expect(harness.root.textContent).to.include('Routing sources');
+        expect(harness.root.textContent).to.include('0.0.2.00');
+        expect(harness.root.textContent).to.include('Limited MV3 beta');
+        expect(harness.root.textContent).not.to.include('MV3 migration:');
+        const aboutLinks = harness.root.querySelectorAll('.about-links a');
+        expect(aboutLinks.map((link) => link.textContent)).to.deep.equal([
+          'GitHub repository',
+          'What\'s new',
+          'Report an issue',
+          'GNU GPL v3 license',
+          'Upstream project',
+        ]);
+        expect(aboutLinks.map((link) => link.href)).to.deep.equal([
+          'https://github.com/aVitomin/runet-censorship-bypass-mv3',
+          'https://github.com/aVitomin/runet-censorship-bypass-mv3/releases',
+          'https://github.com/aVitomin/runet-censorship-bypass-mv3/issues/new/choose',
+          'https://github.com/aVitomin/runet-censorship-bypass-mv3/blob/main/LICENSE',
+          'https://github.com/anticensority/runet-censorship-bypass',
+        ]);
+        expect(aboutLinks.every((link) =>
+          link.target === '_blank' && link.rel === 'noopener noreferrer',
+        )).to.equal(true);
         expect(getSection(harness.root, 'overview').hidden).to.equal(false);
         expect(getSection(harness.root, 'site-rules').hidden).to.equal(true);
         const current = harness.root.querySelector(
@@ -1608,7 +1636,7 @@ describe('MV3 options UI', function() {
         expect(getInput(harness.root, 'proxy.username').value)
             .to.equal('"><img src=x onerror=user()>');
         const diagnostics = getSection(harness.root, 'diagnostics');
-        expect(diagnostics.textContent).to.include(
+        expect(harness.root.textContent).to.include(
             '<img src=x onerror=alert(1)>',
         );
         expect(diagnostics.textContent).not.to.include('token=private');
@@ -1783,6 +1811,12 @@ describe('MV3 options UI', function() {
         expect(harness.root.textContent).to.include('Источники правил');
         expect(harness.root.textContent).to.include(
             'Обновления и проверка',
+        );
+        expect(harness.root.textContent).to.include(
+            'Ограниченная бета-версия MV3',
+        );
+        expect(harness.root.textContent).to.include(
+            'Сообщить о проблеме',
         );
         expect(
             harness.root.textContent.includes('Применить конфигурацию') ||
