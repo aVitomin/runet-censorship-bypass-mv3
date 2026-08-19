@@ -1,6 +1,5 @@
 'use strict';
 
-/* eslint-env node */
 /* eslint-disable no-bitwise */
 
 // From the extension tooling root:

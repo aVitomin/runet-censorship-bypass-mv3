@@ -1,6 +1,5 @@
 'use strict';
 
-/* eslint-env node, mocha */
 
 const Assert = require('assert');
 const Fs = require('node:fs');

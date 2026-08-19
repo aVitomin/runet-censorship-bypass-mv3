@@ -1,6 +1,5 @@
 'use strict';
 
-/* eslint-env node */
 
 const Assert = require('assert');
 const Fs = require('fs');
