@@ -14,12 +14,12 @@
 | --- | --- |
 | Current public product documentation | `README.md`, `docs/README.md`, `docs/user/*`, `docs/assets/readme/*`, `docs/release-current.json`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md` |
 | Current maintainer/developer documentation | `docs/development/*`, `docs/maintainers/DOCUMENTATION_MAP.md`, `AGENTS.md`, `.agents/skills/*`, MV3 nested `AGENTS.md`, tooling-root и legacy-options pointer README, asset attribution README |
-| Legacy upstream documentation | `docs/legacy/*`, включая исторический README, compatibility pointer для его исходной относительной ссылки, store description, MV2 reviewer/options notes, старые architecture/migration audits и beta RC snapshot |
+| Legacy upstream documentation | `docs/legacy/*`, включая исторический README, compatibility pointer для его исходной относительной ссылки, store description, MV2 reviewer/options notes, старые architecture/migration audits, beta RC snapshot и архив исходников icon font |
 | Runtime source | Текущий MV3 runtime/tests, common/full/mini compatibility inputs и `src/templates-data.js` |
-| Build and verification tooling | Extension `package.json`/lockfile, `gulpfile.js`, ESLint/Git attributes, tools, `grep.sh`, `scripts/verify-docs.mjs`, workflow и tooling `.gitignore` |
+| Build and verification tooling | Extension `package.json`/lockfile, `gulpfile.js`, ESLint/Git attributes, tools, `scripts/verify-docs.mjs`, workflow и tooling `.gitignore` |
 | Required legal/license material | Корневой `LICENSE` (GPL-3.0); дополнительные vendor license копируются из установленной pinned зависимости при сборке |
 | Obsolete or unreferenced candidate | Корневой `package.json` удалён как obsolete donation tooling после отдельного решения сопровождающего |
-| Uncertain/supporting repository content | `.gitignore`, `.rgignore`, `.vscode/settings.json` и пять исходных SVG assets |
+| Uncertain/supporting repository content | `.gitignore`, `.rgignore` и `.vscode/settings.json` |
 | Generated output | `build/`, `dist/`, `coverage/`, `.tmp/`, profiles и logs игнорируются и не tracked |
 | Internal/local reports | Локальные отчёты находятся в ignored `.local/project-reports/` |
 
@@ -61,8 +61,9 @@ Tooling-root и legacy-options README теперь только направля
   сопровождения исходников; они остаются рядом с областью действия.
 - `scripts/verify-docs.mjs` — dependency-free structural/metadata gate; network
   audit доступен отдельно и не делает обычный CI зависимым от внешних сайтов.
-- `extensions/chromium/runet-censorship-bypass/assets/README.md` — происхождение
-  исходных графических assets и attribution, поэтому остаётся на месте.
+- `extensions/chromium/runet-censorship-bypass/assets/README.md` — происхождение,
+  copyright и лицензия используемых графических assets; пять нереференсных SVG
+  authoring sources сохранены в `docs/legacy/assets/icon-font-sources/`.
 
 ## Архив
 
@@ -132,8 +133,8 @@ Git. `.tmp/` содержит QA profiles, screenshots и release checks;
 | Legacy migration notes | Archive phase snapshot; replace with current guide | Runtime migration остаётся текущей совместимостью, но старые phase/RC notes не должны быть канонической инструкцией. |
 | `.github/FUNDING.yml` | Remove | Показывал donation link upstream как настройку этого standalone fork; sponsor history сохранена в archived README. |
 | Корневой `package.json` | Remove (completed) | Не использовался CI/build/test/release; удаление устраняет obsolete lifecycle, риск случайной root-установки, путаницу для contributors и неоднозначную ISC metadata внутри GPL-репозитория. Атрибуция и sponsor history сохранены отдельно. |
-| `grep.sh` | Requires maintainer decision; keep | Нереференсный POSIX helper; не влияет на runtime, но может быть удобен не-Windows сопровождающим. |
-| Пять SVG в tooling `assets/` | Requires maintainer decision; keep | Прямых ссылок не найдено, но это source artwork с attribution/history; безопасное удаление требует решения о сохранении исходников. |
+| `grep.sh` | Remove (completed) | Нереференсный non-executable POSIX helper дублировал `rg`, не входил в docs, CI или npm scripts и требовал явного shell запуска. |
+| Пять SVG в tooling `assets/` | Move to legacy (completed) | HTML/CSS/manifest/tests/build их не используют; архив сохраняет исходники, commit provenance и MIT attribution для по-прежнему используемого `emoji.woff`. |
 | `.vscode/settings.json`, `.rgignore` | Keep in place | Активно исключают generated/vendor noise и соответствуют рабочему процессу. |
 | `extension-common/full/mini` и Ace vendor | Keep in place | Нужны legacy compatibility build, общим assets и проверяемому vendor provenance. |
 | MV3 placeholder pages | Remove (completed) | Четыре недоступные из manifest/UI страницы показывали только migration-era текст через отдельный `getPageStatus` RPC; страницы, shared placeholder assets и RPC удалены вместе. |
@@ -141,8 +142,9 @@ Git. `.tmp/` содержит QA profiles, screenshots и release checks;
 
 В documentation refresh из tooling удалялся только `.github/FUNDING.yml`.
 Корневой donation package позже удалён отдельным maintenance-изменением;
-остальные неопределённые кандидаты сохранены согласно правилу недеструктивного
-аудита.
+housekeeping удалил нереференсный `grep.sh` и перенёс пять SVG source assets в
+legacy archive без удаления attribution. Остальные неопределённые кандидаты
+сохранены согласно правилу недеструктивного аудита.
 
 ## Удалённый корневой package.json
 

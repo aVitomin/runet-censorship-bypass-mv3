@@ -441,7 +441,6 @@
           generatedPac += `
 /******/
 /******/    /* EXCEPTIONS START */
-            // TODO: handle wildcards.
 /******/    const isHostInDomain = (domain, ifWild) => {
               if (ifWild) {
                 return dotHost.endsWith(domain.substr(1));
