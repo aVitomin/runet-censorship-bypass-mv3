@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: Версия расширения или commit
-      placeholder: v0.0.2.0-beta1
+      placeholder: v0.0.2.0-beta2
     validations:
       required: true
   - type: input

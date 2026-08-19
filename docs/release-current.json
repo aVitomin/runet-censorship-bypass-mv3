@@ -1,0 +1,12 @@
+{
+  "versionName": "0.0.2.0-beta2",
+  "tag": "v0.0.2.0-beta2",
+  "releaseUrl": "https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.0-beta2",
+  "targetCommit": "b6b5cd6b0db9e206299266efd47eb8fefe8fe098",
+  "prerelease": true,
+  "publishedAt": "2026-08-12T19:37:25Z",
+  "zipFilename": "runet-censorship-bypass-mv3-0.0.2.0-beta2-b6b5cd6.zip",
+  "zipSize": 356944,
+  "zipSha256": "ad9462f19b02c64f2a2e2cff0363612bd7467f978608cd9dfe183b26899915ef",
+  "checksumFilename": "runet-censorship-bypass-mv3-0.0.2.0-beta2-b6b5cd6.sha256.txt"
+}

@@ -10,6 +10,7 @@ root. Полная настройка: [docs/development/DEVELOPMENT.md](docs/de
 
 ```powershell
 $Project = '.\extensions\chromium\runet-censorship-bypass'
+node .\scripts\verify-docs.mjs
 npm ci --prefix $Project
 npm --prefix $Project run test:pac
 npm --prefix $Project run test:mv3
@@ -27,6 +28,10 @@ npm --prefix $Project run build:mv3
 - Добавляйте пользовательские строки одновременно в `en` и `ru`.
 - Не коммитьте `build/`, `dist/`, `.tmp/`, `.local/`, browser profiles, NetLog,
   secrets или локальные отчёты.
+- Обновляйте текущую документацию в том же PR, когда меняются установка,
+  пользовательское поведение, browser support, privacy/security, команды,
+  архитектура или выпуск. Внутренняя реализация без такого эффекта сама по себе
+  не требует README-правок.
 
 Наследуемые MV2/common файлы могут выглядеть неиспользуемыми, но участвовать в
 совместимой сборке или поставлять общие assets. Не удаляйте их без проверки

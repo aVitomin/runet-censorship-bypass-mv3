@@ -84,6 +84,32 @@ Chromium не даёт атомарный compare-and-set между после�
 обработкой `settings.set`. Эта узкая native timing boundary остаётся известным
 ограничением.
 
+### Восстановление после полного browser restart
+
+На старте worker строит план восстановления только для последнего успешно
+применённого PAC. План требует persisted applied intent, совпадения provider,
+modifier revision, provenance, content hash и актуального cooked artifact, а
+также живого состояния Chromium, которым расширение вправе управлять. Он не
+скачивает и не готовит PAC заново.
+
+Persisted Clear/Turn off запрещает восстановление. Новый manual Apply/Clear или
+изменение конфигурации инвалидирует старый startup plan; external controller или
+policy всегда приводит к пропуску без `settings.set`.
+
+## Supervisor здоровья proxy
+
+Health state привязан к точному кандидату, revision, target origin и browser
+session. После startup reconstruction проверка планируется с 30-секундной
+задержкой. Успех имеет TTL один час; proxy-specific failures используют
+ограниченный backoff 1/5/15/30/60 минут, затем максимум один повтор в час.
+Ошибка прошлой browser session становится нейтральной и stale до новой
+проверки. Alarm и durable metadata позволяют восстановить расписание после
+остановки worker.
+
+Supervisor наблюдает browser proxy errors и выполняет credential-free fetch,
+но не меняет PAC, A/P/D, provider или ownership. Неоднозначная destination,
+DNS или TLS ошибка не классифицируется как доказанный отказ proxy.
+
 ## Маршрутизация
 
 `background/site-scope.js` использует bundled `tldts` для доменной области.
