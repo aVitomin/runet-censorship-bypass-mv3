@@ -22,7 +22,7 @@ const REVIEWED_RPC_METHODS = Object.freeze([
   'runPeriodicUpdateNow', 'clearPeriodicUpdateEvents',
   'runLegacyMigrationAudit', 'getLegacyMigrationAuditStatus',
   'getLegacyMigrationPlan', 'clearLegacyMigrationAudit',
-  'applyLegacyMigration', 'getLegacyMigrationApplyStatus', 'getPageStatus',
+  'applyLegacyMigration', 'getLegacyMigrationApplyStatus',
 ]);
 
 function createCredentialPacMods(secret, overrides = {}) {
@@ -171,9 +171,6 @@ Mocha.describe('MV3 RPC credential redaction', function() {
         const migrationApply = await harness.callRpc(
             'getLegacyMigrationApplyStatus',
         );
-        const pageStatus = await harness.callRpc('getPageStatus', {
-          page: 'help',
-        });
         const responses = [
           settings,
           popup,
@@ -194,7 +191,6 @@ Mocha.describe('MV3 RPC credential redaction', function() {
           periodicUpdate,
           migrationAudit,
           migrationApply,
-          pageStatus,
         ];
         responses.forEach((response) =>
           expectNoCredentialExposure(response, [secret]),
@@ -253,10 +249,6 @@ Mocha.describe('MV3 RPC credential redaction', function() {
             providerChanged.currentPacProviderKey === 'Антизапрет' &&
             languageChanged.ok === true &&
             languageChanged.uiLanguage === 'en',
-          placeholderReceivesStatusOnly:
-            typeof pageStatus.backgroundStatus === 'string' &&
-            typeof pageStatus.pacStatus === 'string' &&
-            !Object.prototype.hasOwnProperty.call(pageStatus, 'state'),
         };
         expectChecks(compatibilityFlags);
 

@@ -1240,20 +1240,6 @@ const RPC_METHODS = Object.freeze({
     return mv3State.getLegacyMigrationState();
 
   },
-
-  getPageStatus(params = {}) {
-
-    const page = typeof params.page === 'string' ? params.page : 'unknown';
-    return {
-      page,
-      mv3: true,
-      migrated: false,
-      status: 'This page is not fully migrated to MV3 yet.',
-      backgroundStatus: PHASE_TEN_STATUS.status,
-      pacStatus: PHASE_TEN_STATUS.pac.status,
-    };
-
-  },
 });
 
 chrome.runtime.onInstalled.addListener(() => {

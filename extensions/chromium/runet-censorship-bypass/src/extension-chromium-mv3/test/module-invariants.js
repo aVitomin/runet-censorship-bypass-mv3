@@ -21,7 +21,6 @@ const PAGE_RPC_CLIENT_PATH = Path.resolve(
 const PAGE_CONSUMER_SOURCE = [
   Path.resolve(__dirname, '..', 'pages', 'options', 'index.js'),
   Path.resolve(__dirname, '..', 'pages', 'popup', 'index.js'),
-  Path.resolve(__dirname, '..', 'pages', 'shared', 'placeholder-page.js'),
 ].map((filename) => Fs.readFileSync(filename, 'utf8')).join('\n');
 
 const SELF_TEST_EXPORTS = Object.freeze([

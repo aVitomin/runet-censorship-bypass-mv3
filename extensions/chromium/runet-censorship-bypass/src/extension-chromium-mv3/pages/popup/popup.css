@@ -150,8 +150,7 @@ main {
   background: var(--ui-color-error);
 }
 
-.global-actions,
-.footer-actions {
+.global-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--ui-space-1);
@@ -451,17 +450,6 @@ main {
   font-size: var(--ui-font-size-caption);
 }
 
-.footer {
-  display: grid;
-  gap: var(--ui-space-1);
-  padding-top: var(--ui-space-0-5);
-  border-top: 1px solid var(--ui-color-divider);
-}
-
-.footer-actions .ui-button {
-  margin-left: auto;
-}
-
 .loading-card {
   min-height: 120px;
   align-content: center;
@@ -527,13 +515,11 @@ main {
     white-space: normal;
   }
 
-  .global-actions,
-  .footer-actions {
+  .global-actions {
     display: grid;
   }
 
-  .global-actions .ui-button,
-  .footer-actions .ui-button {
+  .global-actions .ui-button {
     width: 100%;
     margin-left: 0;
   }
