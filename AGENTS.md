@@ -23,6 +23,14 @@ npm --prefix $Project run verify:mv3
 
 Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only when extension dependencies are missing. A functional legacy options bundle additionally needs `npm ci --prefix "$Project\src\extension-common\pages\options"` followed by `npm --prefix "$Project\src\extension-common\pages\options" run build`. `build:mv2` deletes the complete `build` directory, so always build MV2 before the final MV3 build. Whole-tree `npm run lint` has pre-existing legacy failures; use the focused `lint:mv3` check for MV3 work and report the legacy baseline rather than reformatting it.
 
+## Documentation and release ownership
+
+- Treat `README.md` and current docs as product artifacts. Before completing a PR, determine whether the change affects installation, user-visible behavior, supported browsers, security/privacy behavior, developer commands, architecture, or the release process. If it does, update the relevant current documentation in the same PR; do not change docs merely because an internal implementation detail changed.
+- Current fork links use `aVitomin/runet-censorship-bypass-mv3`. Use `anticensority/runet-censorship-bypass` only for attribution/history or an explicitly reused upstream resource. Prefer relative links for files in this repository, never commit local filesystem paths, and never point current installation instructions at upstream MV2 release assets.
+- Before every PR is considered complete, run `node ./scripts/verify-docs.mjs`. The existing `Verify MV3` workflow must keep the same documentation-integrity gate.
+- For every public beta/release: publish or identify the exact release artifact; verify tag target and asset metadata; update the README current-release block and `docs/release-current.json`; verify ZIP/checksum links and SHA-256; run docs integrity; and confirm that old releases are not described as current. Ordinary unreleased tooling commits do not require a README version change: README follows the latest published release, not arbitrary `main`.
+- Preserve `docs/legacy/**` as history. Do not rewrite old upstream URLs merely to make them look current, but keep historical status notices and structural relative links valid.
+
 ## Security, routing, and persistence invariants
 
 - Treat downloaded PAC as untrusted routing code. Extension runtime code may validate, hash, store, cook, and pass it to Chromium, but must not `eval` it or execute it with `Function`.
@@ -43,6 +51,6 @@ Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only 
 - MV3 permissions, service worker, downloads, storage, auth, migration, external requests, or proxy errors: use `$mv3-security-review`, run `lint:mv3`, `test:mv3`, and `build:mv3`; identify real-browser QA.
 - Shared/template/gulp/MV2 changes: run the full tests and `build:mv2`, then rebuild MV3. Report when the legacy options bundle could not be rebuilt.
 - MV3 UI/localization changes: update both `en` and `ru`, build MV3, and manually check affected controls. Never render stored values with HTML injection sinks.
-- Agent/docs-only changes: validate skill frontmatter/paths and run `git diff --check`; do not claim product checks were necessary if no runtime file changed.
+- Agent/docs-only changes: run `node ./scripts/verify-docs.mjs`, validate skill frontmatter/paths when relevant, and run `git diff --check`; do not claim product checks were necessary if no runtime file changed.
 
 Done means the relevant tests and builds actually ran, the complete diff was reviewed, generated/profile/secret material is neither staged nor packaged, unrelated changes remain intact, and browser-dependent gaps are named. Report files changed, commands with pass/fail, security/routing impact, remaining product issues, generated artifacts, and final `git status --short`. Never commit, push, publish, or upload unless separately authorized.

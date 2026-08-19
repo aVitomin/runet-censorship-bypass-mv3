@@ -37,6 +37,9 @@ jobs:
           cache: npm
           cache-dependency-path: extensions/chromium/runet-censorship-bypass/package-lock.json
 
+      - name: Verify documentation integrity
+        run: node ./scripts/verify-docs.mjs
+
       - name: Install extension dependencies
         run: npm ci --prefix ./extensions/chromium/runet-censorship-bypass
 

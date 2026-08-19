@@ -4,6 +4,7 @@
 
 ## Проверки
 
+- [ ] `node ./scripts/verify-docs.mjs`
 - [ ] `test:pac` (если затронута маршрутизация)
 - [ ] `test:mv3`
 - [ ] `lint:mv3`

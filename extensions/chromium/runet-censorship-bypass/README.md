@@ -12,5 +12,5 @@ Canonical instructions are maintained at repository level:
 - [Release process](../../../docs/development/RELEASE_PROCESS.md)
 
 The primary runtime is `src/extension-chromium-mv3`; its build output is
-`build/extension-chromium-mv3`. Do not use the unrelated repository-root npm
-package to build this extension.
+`build/extension-chromium-mv3`. There is no supported repository-root npm
+package; scope dependency and script commands to this tooling directory.

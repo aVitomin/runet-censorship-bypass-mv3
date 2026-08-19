@@ -1,27 +1,27 @@
 # Карта документации и инвентаризация репозитория
 
-Дата инвентаризации: 2026-08-05. Базовая ревизия:
-`4b13af64bb5e9859d52963bcbfcb40e1e3b302b5`.
+Дата актуализации: 2026-08-20. Базовая ревизия актуального `main`:
+`275ba91d32adfe593a266b42a150f8cd689432ad`.
 
-До refresh в репозитории было 203 tracked файла. После предполагаемого
-добавления текущего набора документации — 227 файлов: runtime и packaged bytes
-не меняются, а разница состоит из docs, screenshots, community templates и
-удалённого upstream funding pointer.
+На базовой ревизии было 229 tracked файлов. Этот refresh добавляет только
+`docs/release-current.json` и dependency-free `scripts/verify-docs.mjs`; runtime
+и packaged bytes не меняются. Точные меняющиеся counts следует получать из Git,
+а не поддерживать вручную в классификации ниже.
 
 ## Классификация полного дерева
 
-| Категория | Количество | Пути и назначение |
-| --- | ---: | --- |
-| Current public product documentation | 17 | `README.md`, `docs/README.md`, `docs/user/*`, `docs/assets/readme/*`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md` |
-| Current maintainer/developer documentation | 21 | `docs/development/*`, `docs/maintainers/DOCUMENTATION_MAP.md`, `AGENTS.md`, `.agents/skills/*`, MV3 nested `AGENTS.md`, tooling-root и legacy-options pointer README, asset attribution README |
-| Legacy upstream documentation | 9 | `docs/legacy/*`, включая исторический README, compatibility pointer для его исходной относительной ссылки, store description, MV2 reviewer/options notes, старые architecture/migration audits и beta RC snapshot |
-| Runtime source | 160 | 88 файлов текущего MV3 runtime/tests плюс 62 common, 8 full, 1 mini и `src/templates-data.js`; nested source build inputs входят в эту группу |
-| Build tooling | 10 | extension `package.json`/lockfile, `gulpfile.js`, ESLint/Git attributes, tools, `grep.sh`, workflow и tooling `.gitignore` |
-| Required legal/license material | 1 | Корневой `LICENSE` (GPL-3.0); дополнительные vendor license копируются из установленной pinned зависимости при сборке |
-| Obsolete or unreferenced candidate | 0 | Корневой `package.json` удалён как obsolete donation tooling после отдельного решения сопровождающего |
-| Uncertain/supporting repository content | 8 | `.gitignore`, `.rgignore`, `.vscode/settings.json` и пять исходных SVG assets |
-| Generated output tracked | 0 | `build/`, `dist/`, `coverage/`, `.tmp/`, profiles и logs игнорируются |
-| Internal/local report tracked | 0 | Четыре локальных отчёта находятся в ignored `.local/project-reports/` |
+| Категория | Пути и назначение |
+| --- | --- |
+| Current public product documentation | `README.md`, `docs/README.md`, `docs/user/*`, `docs/assets/readme/*`, `docs/release-current.json`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md` |
+| Current maintainer/developer documentation | `docs/development/*`, `docs/maintainers/DOCUMENTATION_MAP.md`, `AGENTS.md`, `.agents/skills/*`, MV3 nested `AGENTS.md`, tooling-root и legacy-options pointer README, asset attribution README |
+| Legacy upstream documentation | `docs/legacy/*`, включая исторический README, compatibility pointer для его исходной относительной ссылки, store description, MV2 reviewer/options notes, старые architecture/migration audits и beta RC snapshot |
+| Runtime source | Текущий MV3 runtime/tests, common/full/mini compatibility inputs и `src/templates-data.js` |
+| Build and verification tooling | Extension `package.json`/lockfile, `gulpfile.js`, ESLint/Git attributes, tools, `grep.sh`, `scripts/verify-docs.mjs`, workflow и tooling `.gitignore` |
+| Required legal/license material | Корневой `LICENSE` (GPL-3.0); дополнительные vendor license копируются из установленной pinned зависимости при сборке |
+| Obsolete or unreferenced candidate | Корневой `package.json` удалён как obsolete donation tooling после отдельного решения сопровождающего |
+| Uncertain/supporting repository content | `.gitignore`, `.rgignore`, `.vscode/settings.json` и пять исходных SVG assets |
+| Generated output | `build/`, `dist/`, `coverage/`, `.tmp/`, profiles и logs игнорируются и не tracked |
+| Internal/local reports | Локальные отчёты находятся в ignored `.local/project-reports/` |
 
 Файлы в `src/extension-common`, `src/extension-full` и `src/extension-mini`
 классифицированы как runtime/build compatibility source, а не как текущая
@@ -33,6 +33,7 @@
 | Тема | Единственный основной документ |
 | --- | --- |
 | Продукт и краткий старт | [`README.md`](../../README.md) |
+| Последний опубликованный release | [`docs/release-current.json`](../release-current.json) |
 | Установка/обновление/удаление | [`docs/user/INSTALLATION.md`](../user/INSTALLATION.md) |
 | Повседневная работа | [`docs/user/USER_GUIDE.md`](../user/USER_GUIDE.md) |
 | Решение проблем | [`docs/user/TROUBLESHOOTING.md`](../user/TROUBLESHOOTING.md) |
@@ -58,6 +59,8 @@ Tooling-root и legacy-options README теперь только направля
   PAC freshness/download/failure и credential redaction.
 - `AGENTS.md`, `.agents/skills/*` и nested `AGENTS.md` — локальные правила
   сопровождения исходников; они остаются рядом с областью действия.
+- `scripts/verify-docs.mjs` — dependency-free structural/metadata gate; network
+  audit доступен отдельно и не делает обычный CI зависимым от внешних сайтов.
 - `extensions/chromium/runet-censorship-bypass/assets/README.md` — происхождение
   исходных графических assets и attribution, поэтому остаётся на месте.
 
@@ -82,6 +85,27 @@ Tooling-root и legacy-options README теперь только направля
 
 Каждый архивный документ явно предупреждает, что старые store/MV2/Firefox
 инструкции не являются текущим руководством.
+
+## Классификация upstream links
+
+Все ссылки на upstream после текущего аудита относятся к одной из разрешённых
+категорий:
+
+1. `README.md` ссылается на
+   `anticensority/runet-censorship-bypass` только как на происхождение и
+   attribution.
+2. `docs/legacy/**` сохраняет исходные repository/wiki/store/community links
+   как историю; архивные headers прямо запрещают использовать их как текущую
+   установку или support claim.
+3. `src/extension-chromium-mv3/background/pac-providers.js` и
+   `src/templates-data.js` намеренно используют опубликованные upstream PAC
+   resources. Ссылки в `src/extension-common/**` принадлежат сохранённой legacy
+   compatibility surface и upstream resource/attribution UI.
+
+Старых upstream release links в текущих installation docs нет. Это правило
+проверяет `scripts/verify-docs.mjs`; изменение runtime upstream resources требует
+отдельной продуктовой/security проверки и не является задачей documentation
+refresh.
 
 ## Локальные и generated материалы
 

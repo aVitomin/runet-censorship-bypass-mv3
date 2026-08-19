@@ -32,6 +32,7 @@ npm ci --prefix .\extensions\chromium\runet-censorship-bypass
 ```powershell
 $Project = '.\extensions\chromium\runet-censorship-bypass'
 
+node .\scripts\verify-docs.mjs
 npm --prefix $Project run test:pac
 npm --prefix $Project run test:mv3
 npm --prefix $Project run lint:mv3
@@ -41,6 +42,8 @@ npm --prefix $Project run verify:mv3
 
 `verify:mv3` последовательно запускает lint, весь набор MV3-тестов и сборку.
 Фокусный `test:pac` полезно запускать отдельно при работе с маршрутизацией.
+Dependency-free docs verifier запускается из корня и не требует корневого
+`package.json` или `npm install`.
 
 ## Пути исходников и сборки
 
@@ -101,8 +104,10 @@ npm run build:mv3
 
 Workflow [`.github/workflows/mv3.yml`](../../.github/workflows/mv3.yml) работает
 на Node 22 для push и pull request в `main`. Он устанавливает только зависимости
-расширения, запускает PAC/MV3 tests, lint, build, проверяет чистоту tracked tree
-и на push в `main` сохраняет краткоживущий unpacked artifact.
+расширения, проверяет документацию, запускает PAC/MV3 tests, lint, build,
+aggregate `verify`, package/icons и чистоту tracked tree. Только trusted push в
+`main` сохраняет краткоживущий unpacked artifact; pull request artifact не
+публикуется.
 
 ## Ветки и pull request
 
@@ -111,6 +116,9 @@ Workflow [`.github/workflows/mv3.yml`](../../.github/workflows/mv3.yml) рабо
   без необходимости.
 - Не коммитьте generated output, браузерные профили, секреты или локальные
   отчёты.
+- Выполните `node .\scripts\verify-docs.mjs`; если изменение затрагивает
+  установку, поведение, browser support, privacy/security, команды, архитектуру
+  или выпуск, обновите соответствующий текущий документ.
 - Опишите влияние на безопасность, маршрутизацию и требуемую браузерную QA.
 - Дождитесь успешного workflow и ответьте на review до слияния.
 

@@ -10,6 +10,17 @@ npm ci --prefix $Project
 
 ## Автоматические проверки
 
+### Documentation integrity
+
+```powershell
+node .\scripts\verify-docs.mjs
+```
+
+Dependency-free проверка сканирует tracked Markdown, relative links, images и
+anchors, запрещает developer-machine paths и stale current-release/default-
+branch/install metadata. Она не делает CI зависимым от доступности внешних
+сайтов; отдельный bounded аудит можно запустить с `--audit-external`.
+
 ### PAC semantics
 
 ```powershell
@@ -64,6 +75,17 @@ npm --prefix $Project run verify:mv3
 
 CI дополнительно запускает `test:pac` явно и проверяет `git diff --exit-code`
 после сборки.
+
+### Aggregate verification
+
+```powershell
+npm --prefix $Project run verify
+```
+
+Aggregate gate запускает полный extension test suite, focused MV3 lint,
+совместимую MV2 build и затем финальную MV3 build. Именно этот gate вместе с
+docs integrity обязан присутствовать и пройти в trusted-main release CI; набор
+отдельных зелёных команд не заменяет отсутствующий обязательный gate.
 
 ## Проверка release package
 

@@ -5,11 +5,10 @@
 
 ## Скачать выпуск
 
-1. Откройте [Releases](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases).
-2. Выберите актуальный prerelease. Текущий публичный выпуск —
-   [`v0.0.2.0-beta1`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.0-beta1).
-3. В блоке **Assets** скачайте ZIP расширения и соответствующий файл
-   `*.sha256.txt`.
+1. Откройте [текущий публичный prerelease `v0.0.2.0-beta2`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.0-beta2).
+2. В блоке **Assets** скачайте ZIP расширения и соответствующий файл
+   `*.sha256.txt`. Точные имена и опубликованный SHA-256 также приведены в
+   [блоке текущего выпуска](../../README.md#текущий-выпуск).
 
 Не используйте автоматически созданные GitHub архивы **Source code**, если вам
 нужна готовая сборка расширения.
