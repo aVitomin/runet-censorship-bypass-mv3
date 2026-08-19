@@ -1,6 +1,5 @@
 'use strict';
 
-/* eslint-env node */
 
 const Crypto = require('crypto');
 const Fs = require('fs');

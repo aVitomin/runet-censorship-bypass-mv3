@@ -1,6 +1,5 @@
 'use strict';
 
-/* eslint-env node, mocha */
 
 const {expect} = require('chai');
 const Fs = require('fs');
