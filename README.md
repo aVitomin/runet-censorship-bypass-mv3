@@ -8,7 +8,7 @@ PAC-правилам. Текущий продукт использует Manifes
 всего на Brave.
 
 > **Статус: ограниченная бета.** Текущий публичный выпуск —
-> [`v0.0.2.0-beta2`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.0-beta2).
+> [`v0.0.2.1-beta3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.1-beta3).
 > Он предназначен для ручной установки и тестирования, а не объявлен стабильным
 > магазинным выпуском.
 
@@ -19,20 +19,20 @@ PAC-правилам. Текущий продукт использует Manifes
 
 ## Текущий выпуск
 
-- Версия: [`v0.0.2.0-beta2`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.0-beta2)
-- Архив (356 944 байта):
-  [`runet-censorship-bypass-mv3-0.0.2.0-beta2-b6b5cd6.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.0-beta2/runet-censorship-bypass-mv3-0.0.2.0-beta2-b6b5cd6.zip)
+- Версия: [`v0.0.2.1-beta3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.1-beta3)
+- Архив (353 022 байта):
+  [`runet-censorship-bypass-mv3-0.0.2.1-beta3-323cd19.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.1-beta3/runet-censorship-bypass-mv3-0.0.2.1-beta3-323cd19.zip)
 - SHA-256:
-  `ad9462f19b02c64f2a2e2cff0363612bd7467f978608cd9dfe183b26899915ef`
+  `d3248319705a69c335f7b69f56e3afe95856756233dfff6e6de02c203d9d99e5`
 - Опубликованный файл контрольной суммы:
-  [`runet-censorship-bypass-mv3-0.0.2.0-beta2-b6b5cd6.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.0-beta2/runet-censorship-bypass-mv3-0.0.2.0-beta2-b6b5cd6.sha256.txt)
+  [`runet-censorship-bypass-mv3-0.0.2.1-beta3-323cd19.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.1-beta3/runet-censorship-bypass-mv3-0.0.2.1-beta3-323cd19.sha256.txt)
 - Установка: [пошаговая инструкция](docs/user/INSTALLATION.md)
 
 <details>
 <summary>English summary</summary>
 
 Runet Censorship Bypass is a limited-beta Chromium Manifest V3 extension for
-selective PAC-based routing. The latest public beta is `v0.0.2.0-beta2`. Its
+selective PAC-based routing. The latest public beta is `v0.0.2.1-beta3`. Its
 exact archive was tested in Brave; stable Google Chrome was not available for
 final validation. Other Chromium-compatible browsers are not independently
 verified. Install the unpacked ZIP from this repository's release page.
@@ -41,6 +41,14 @@ Firefox is not part of the current MV3 release. See the
 [privacy and security notes](docs/user/PRIVACY_AND_SECURITY.md).
 
 </details>
+
+## Что нового в beta3
+
+- Улучшена информация о проекте и ссылки на репозиторий, выпуски, сообщения об
+  ошибках, лицензию и upstream.
+- Удалены дублирующие элементы popup/options, устаревшие диагностические и
+  миграционные элементы, а также недостижимые страницы-заглушки.
+- Очищена английская и русская локализация; пакет сокращён с 76 до 70 файлов.
 
 ## Интерфейс
 
@@ -71,7 +79,7 @@ Firefox is not part of the current MV3 release. See the
 - Архитектура Manifest V3 с восстанавливаемым service worker.
 - Русский и английский интерфейс.
 
-## Поведение beta2
+## Надёжность, уже включённая в beta2
 
 - После полного перезапуска Chromium/Brave ранее применённый PAC безопасно
   восстанавливается только при совпадении сохранённой конфигурации, происхождения
@@ -86,7 +94,7 @@ Firefox is not part of the current MV3 release. See the
 
 ## Установка
 
-1. Откройте [страницу `v0.0.2.0-beta2`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.0-beta2)
+1. Откройте [страницу `v0.0.2.1-beta3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.1-beta3)
    и скачайте указанный выше ZIP-архив текущего выпуска.
 2. При необходимости сверьте SHA-256 с приложенным файлом `*.sha256.txt`.
 3. Полностью распакуйте архив в постоянную папку.
@@ -127,9 +135,9 @@ Firefox is not part of the current MV3 release. See the
 
 | Браузер | Текущий статус |
 | --- | --- |
-| Brave | Точный архив beta2 прошёл restart, автоматическое восстановление Tor Browser на порту 9150, Clear/restart, popup и options smoke QA в Brave 1.93.134 / Chromium 151.0.7922.108. |
+| Brave | Точный архив beta3 прошёл обновление профиля beta2, Apply с точным endpoint `127.0.0.1:9150`, Clear/restart, popup и options smoke QA в Chromium 151.0.7922.169. |
 | Другие Chromium-совместимые браузеры | Ожидается совместимость с необходимыми MV3 API; требуется проверка конкретного браузера и версии. |
-| Google Chrome Stable | Финальная beta2 не была отдельно проверена в стабильном Chrome; стабильная Chrome-валидация не заявляется. |
+| Google Chrome Stable | Финальная beta3 не была отдельно проверена в стабильном Chrome; стабильная Chrome-валидация не заявляется. |
 | Firefox | Не входит в текущий выпуск MV3. |
 
 ## Безопасность и приватность
@@ -146,7 +154,7 @@ Firefox is not part of the current MV3 release. See the
 - Расширение проверяет владельца настройки прокси и не должно молча
   перезаписывать управление другого расширения или политики.
 
-Известные границы beta2: PAC применяется с `mandatory: false`; реальный обмен
+Известные границы beta3: PAC применяется с `mandatory: false`; реальный обмен
 с внешним аутентифицируемым прокси покрыт не полностью; Chromium сохраняет
 узкую нативную границу времени между последней проверкой владельца и применением
 настройки; ручная установка требует ручных обновлений.
