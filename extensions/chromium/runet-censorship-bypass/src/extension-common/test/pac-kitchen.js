@@ -1,25 +1,26 @@
 'use strict';
 
-const Storage = require('../../../tools/sinon-storage');
 const Chai = require('chai');
 const Mocha = require('mocha');
+const {
+  createChromeApiStub,
+  createLocalStorageStub,
+} = require('../../../tools/legacy-test-stubs');
 
 const CachelessRequire = require('../../../tools/cacheless-require')(module);
 
 Mocha.describe('window.apis.pacKitchen', function () {
 
+  let chromeStub;
+
   Mocha.beforeEach(function() {
 
-    const sinonChrome = CachelessRequire('sinon-chrome/extensions');
-    global.chrome = Object.assign({}, sinonChrome, {
-      proxy: Object.assign({}, sinonChrome.proxy, {
-        settings: Object.assign({}, sinonChrome.proxy.settings),
-      }),
-    });
+    chromeStub = createChromeApiStub();
+    global.chrome = chromeStub.chrome;
     global.chrome.runtime.getManifest.returns({version: '0.0.0.0'});
     global.window = {
       chrome: global.chrome,
-      localStorage: new Storage(),
+      localStorage: createLocalStorageStub(),
     };
     CachelessRequire('../00-init-apis.js');
 
@@ -81,6 +82,8 @@ Mocha.describe('window.apis.pacKitchen', function () {
 
   Mocha.afterEach(function() {
 
+    chromeStub.reset();
+    chromeStub = null;
     delete global.window;
     delete global.chrome;
 
