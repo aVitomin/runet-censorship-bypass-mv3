@@ -3,6 +3,7 @@
 
 const Assert = require('assert');
 const Fs = require('fs');
+const Os = require('os');
 const Path = require('path');
 
 const PACKAGED_MV3_ROOT = Path.resolve(
@@ -13,6 +14,14 @@ const PACKAGED_MV3_ROOT = Path.resolve(
     'build',
     'extension-chromium-mv3',
 );
+
+const MV3_SOURCE_ROOT = Path.resolve(__dirname, '..');
+const COMMON_SOURCE_ROOT = Path.resolve(
+    MV3_SOURCE_ROOT,
+    '..',
+    'extension-common',
+);
+const MV3_LOCALES = Object.freeze(['en', 'ru']);
 
 const ALLOWED_RUNTIME_DIRECTORIES = new Set([
   'background/vendor/tldts/dist',
@@ -183,6 +192,29 @@ function verifyPackageIntegrity(root) {
 
 }
 
+function verifyPackagedLocalesMatchMv3Sources(
+    root,
+    sourceRoot = MV3_SOURCE_ROOT,
+) {
+
+  for (const locale of MV3_LOCALES) {
+    const relativePath = `_locales/${locale}/messages.json`;
+    const sourcePath = Path.join(sourceRoot, ...relativePath.split('/'));
+    const packagedPath = Path.join(root, ...relativePath.split('/'));
+    Assert.ok(Fs.existsSync(sourcePath), `Missing MV3 locale source: ${sourcePath}`);
+    Assert.ok(
+        Fs.existsSync(packagedPath),
+        `Missing packaged MV3 locale: ${packagedPath}`,
+    );
+    Assert.ok(
+        Fs.readFileSync(packagedPath).equals(Fs.readFileSync(sourcePath)),
+        `Packaged MV3 locale does not match its MV3 source: ${relativePath}`,
+    );
+  }
+  return MV3_LOCALES.length;
+
+}
+
 if (typeof describe === 'function') {
   describe('MV3 package integrity', function() {
 
@@ -237,12 +269,60 @@ if (typeof describe === 'function') {
 
     });
 
+    it('requires packaged locales to match the MV3-specific sources', function() {
+
+      const packageRoot = Fs.mkdtempSync(
+          Path.join(Os.tmpdir(), 'runet-mv3-locales-'),
+      );
+      try {
+        for (const locale of MV3_LOCALES) {
+          const relativePath = `_locales/${locale}/messages.json`;
+          const sourcePath = Path.join(
+              MV3_SOURCE_ROOT,
+              ...relativePath.split('/'),
+          );
+          const packagedPath = Path.join(
+              packageRoot,
+              ...relativePath.split('/'),
+          );
+          Fs.mkdirSync(Path.dirname(packagedPath), {recursive: true});
+          Fs.copyFileSync(sourcePath, packagedPath);
+        }
+
+        Assert.strictEqual(
+            verifyPackagedLocalesMatchMv3Sources(packageRoot),
+            MV3_LOCALES.length,
+        );
+
+        Fs.copyFileSync(
+            Path.join(
+                COMMON_SOURCE_ROOT,
+                '_locales',
+                'en',
+                'messages.tmpl.json',
+            ),
+            Path.join(packageRoot, '_locales', 'en', 'messages.json'),
+        );
+        Assert.throws(
+            () => verifyPackagedLocalesMatchMv3Sources(packageRoot),
+            /does not match its MV3 source/,
+        );
+      } finally {
+        Fs.rmSync(packageRoot, {recursive: true, force: true});
+      }
+
+    });
+
   });
 }
 
 if (require.main === module) {
   const fileCount = verifyPackageIntegrity(PACKAGED_MV3_ROOT);
+  const localeCount = verifyPackagedLocalesMatchMv3Sources(PACKAGED_MV3_ROOT);
   console.log(`Verified MV3 package integrity: ${fileCount} files.`);
+  console.log(
+      `Verified packaged MV3 locales: ${localeCount} source-identical files.`,
+  );
 }
 
 module.exports = {
@@ -251,4 +331,5 @@ module.exports = {
   listPackageEntries,
   PACKAGED_MV3_ROOT,
   verifyPackageIntegrity,
+  verifyPackagedLocalesMatchMv3Sources,
 };

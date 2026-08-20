@@ -52,7 +52,11 @@ const clean = function(cb) {
 
 const contexts = require('./src/templates-data').contexts;
 
-const excFolder = (name) => [`!./src/**/${name}`, `!./src/**/${name}/**/*`];
+const excFolder = (name) => [
+  `!./src/**/${name}`,
+  `!./src/**/${name}/`,
+  `!./src/**/${name}/**/*`,
+];
 const legacyOptionsBuildInputs = [
   '!./src/extension-common/pages/options/.flowconfig',
   '!./src/extension-common/pages/options/README.md',
@@ -89,11 +93,14 @@ const joinSrc = (...args) => [...args, ...excluded];
 
 const commonPageFolder = (name) => [
   `!./src/extension-common/pages/${name}`,
+  `!./src/extension-common/pages/${name}/`,
   `!./src/extension-common/pages/${name}/**/*`,
 ];
 
 const chromiumMv3CommonSrc = [
   commonSrc,
+  '!./src/extension-common/_locales/en/messages.tmpl.json',
+  '!./src/extension-common/_locales/ru/messages.tmpl.json',
   '!./src/extension-common/manifest.tmpl.json',
   '!./src/extension-common/*.js',
   '!./src/extension-common/icons',
@@ -107,7 +114,7 @@ const chromiumMv3CommonSrc = [
 
 const copyMini = function(cb) {
 
-  gulp.src(joinSrc(commonSrc, miniSrc))
+  gulp.src(joinSrc(commonSrc, miniSrc), {encoding: false})
     //.pipe(changed(miniDst))
     .pipe(templatePlugin(contexts.mini))
     .pipe(gulp.dest(miniDst))
@@ -116,7 +123,7 @@ const copyMini = function(cb) {
 
 const copyFull = function(cb) {
 
-  gulp.src(joinSrc(commonSrc, fullSrc))
+  gulp.src(joinSrc(commonSrc, fullSrc), {encoding: false})
     //.pipe(changed(fullDst))
     .pipe(templatePlugin(contexts.full))
     .pipe(gulp.dest(fullDst))
@@ -126,7 +133,7 @@ const copyFull = function(cb) {
 
 const copyBeta = function(cb) {
 
-    gulp.src(joinSrc(commonSrc, fullSrc))
+    gulp.src(joinSrc(commonSrc, fullSrc), {encoding: false})
     //.pipe(changed(fullDst))
     .pipe(templatePlugin(contexts.beta))
     .pipe(gulp.dest(betaDst))
@@ -143,7 +150,10 @@ const cleanChromiumMv3 = function(cb) {
 
 const copyChromiumMv3 = function(cb) {
 
-  gulp.src(joinSrc(...chromiumMv3CommonSrc, chromiumMv3Src))
+  gulp.src(
+      joinSrc(chromiumMv3Src, ...chromiumMv3CommonSrc),
+      {encoding: false},
+  )
     .pipe(templatePlugin(contexts.chromiumMv3))
     .pipe(gulp.dest(chromiumMv3Dst))
     .on('end', cb);
@@ -152,7 +162,10 @@ const copyChromiumMv3 = function(cb) {
 
 const copyChromiumMv3Tldts = function(cb) {
 
-  gulp.src(chromiumMv3TldtsSrc, {base: './node_modules/tldts'})
+  gulp.src(chromiumMv3TldtsSrc, {
+    base: './node_modules/tldts',
+    encoding: false,
+  })
     .pipe(gulp.dest(`${chromiumMv3Dst}/background/vendor/tldts`))
     .on('end', cb);
 
