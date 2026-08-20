@@ -22,6 +22,8 @@ const COMMON_SOURCE_ROOT = Path.resolve(
     'extension-common',
 );
 const MV3_LOCALES = Object.freeze(['en', 'ru']);
+const EXPECTED_MV3_VERSION = '0.0.2.1';
+const EXPECTED_MV3_VERSION_NAME = '0.0.2.01';
 
 const ALLOWED_RUNTIME_DIRECTORIES = new Set([
   'background/vendor/tldts/dist',
@@ -215,6 +217,23 @@ function verifyPackagedLocalesMatchMv3Sources(
 
 }
 
+function verifyPackagedManifestIdentity(root) {
+
+  const manifestPath = Path.join(root, 'manifest.json');
+  Assert.ok(
+      Fs.existsSync(manifestPath),
+      `Missing MV3 manifest: ${manifestPath}`,
+  );
+  const manifest = JSON.parse(Fs.readFileSync(manifestPath, 'utf8'));
+  Assert.strictEqual(manifest.version, EXPECTED_MV3_VERSION);
+  Assert.strictEqual(manifest.version_name, EXPECTED_MV3_VERSION_NAME);
+  return {
+    version: manifest.version,
+    versionName: manifest.version_name,
+  };
+
+}
+
 if (typeof describe === 'function') {
   describe('MV3 package integrity', function() {
 
@@ -318,8 +337,13 @@ if (typeof describe === 'function') {
 
 if (require.main === module) {
   const fileCount = verifyPackageIntegrity(PACKAGED_MV3_ROOT);
+  const manifestIdentity = verifyPackagedManifestIdentity(PACKAGED_MV3_ROOT);
   const localeCount = verifyPackagedLocalesMatchMv3Sources(PACKAGED_MV3_ROOT);
   console.log(`Verified MV3 package integrity: ${fileCount} files.`);
+  console.log(
+      'Verified packaged MV3 version: ' +
+      `${manifestIdentity.version} (${manifestIdentity.versionName}).`,
+  );
   console.log(
       `Verified packaged MV3 locales: ${localeCount} source-identical files.`,
   );
@@ -331,5 +355,6 @@ module.exports = {
   listPackageEntries,
   PACKAGED_MV3_ROOT,
   verifyPackageIntegrity,
+  verifyPackagedManifestIdentity,
   verifyPackagedLocalesMatchMv3Sources,
 };
