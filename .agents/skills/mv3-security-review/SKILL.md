@@ -7,7 +7,7 @@ description: Perform a focused MV3 security review after changes to permissions,
 
 Work from the repository root. Set `$Project = '.\extensions\chromium\runet-censorship-bypass'` and read `AGENTS.md` plus `$Project\src\extension-chromium-mv3\background\AGENTS.md`. Review the complete relevant diff and enough callers to prove impact. Do not echo secrets, credential-bearing strings, full custom provider URLs, or browser-profile data; cite their locations and redact values.
 
-Review, in order:
+Review the affected boundary and any plausible adjacent effects. Use the following order for applicable items; do not add ceremonial `N/A` sections for unrelated categories:
 
 1. Permission or host-access expansion in `manifest.tmpl.json`, including whether `<all_urls>` use grew.
 2. CSP/script execution and the PAC trust boundary: downloaded PAC stays data until Chromium receives it; flag dynamic extension execution.
