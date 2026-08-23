@@ -12,6 +12,7 @@
     "test:legacy": "mocha --recursive ./src/extension-common/test/*",
     "test:mv3": "mocha --recursive ./src/extension-chromium-mv3/test/*",
     "test:pac": "mocha ./src/extension-chromium-mv3/test/pac-regression.js",
+    "test:browser:mv3": "node ./src/extension-chromium-mv3/test/chrome-stable-smoke.js",
     "verify:mv3": "npm run lint:mv3 && npm run test:mv3 && npm run build:mv3",
     "verify": "npm test && npm run lint:mv3 && npm run build:mv2 && npm run build:mv3",
     "subpages": "npm --prefix ./src/extension-common/pages/options run build",
@@ -27,7 +28,8 @@
     "eslint": "^10.8.1",
     "eslint-config-google": "^0.14.0",
     "globals": "^17.11.0",
-    "mocha": "^11.8.0"
+    "mocha": "^11.8.0",
+    "puppeteer-core": "^25.8.0"
   },
   "dependencies": {
     "gulp": "^5.0.1",

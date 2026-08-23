@@ -67,6 +67,30 @@ npm --prefix $Project run build:mv3
 Количество файлов выводится проверкой; не фиксируйте его в документации без
 необходимости.
 
+### Chrome Stable MV3 smoke
+
+После MV3 build можно запустить короткий browser-level smoke на установленном
+Google Chrome Stable:
+
+```powershell
+$env:CHROME_BIN = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+npm --prefix $Project run test:browser:mv3
+```
+
+`CHROME_BIN` — явный авторитетный override. Без него скрипт проверяет только
+несколько стандартных путей установки и никогда не скачивает браузер. Тест
+запускает собранное unpacked MV3-расширение в одноразовом профиле и поднимает
+локальные PAC, origin и два proxy на динамических loopback-портах. Через
+production RPC он сохраняет provider и PAC modifiers, применяет реальный
+`chrome.proxy.settings` и проверяет фактические HTTP receivers для Auto, Proxy
+и Direct. Затем Chrome перезапускается с тем же профилем и повторяется один
+Proxy route для проверки startup recovery. Внешняя сеть не нужна; PAC исполняет
+сам Chrome, а не Node.
+
+Smoke не заменяет ручные проверки Chrome Stable: external-controller takeover,
+остановка worker через DevTools, upgrade существующего профиля и UI остаются в
+browser QA. Authenticated HTTP 407 proxy проверяется отдельной будущей задачей.
+
 ### Полная MV3 verification
 
 ```powershell
