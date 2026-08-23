@@ -2,6 +2,7 @@
 
 
 const Assert = require('assert');
+const Crypto = require('crypto');
 const Fs = require('fs');
 const Http = require('http');
 const Os = require('os');
@@ -19,10 +20,17 @@ const PACKAGED_MV3_ROOT = Path.resolve(
 const SERVICE_WORKER_PATH = '/background/service-worker.js';
 const TEST_HOSTS = Object.freeze({
   auto: 'auto.qa.test',
+  authA: 'auth-a.qa.test',
+  authB: 'auth-b.qa.test',
+  authMismatch: 'auth-mismatch.qa.test',
+  authPasswordless: 'auth-passwordless.qa.test',
+  authWrong: 'auth-wrong.qa.test',
   direct: 'direct.qa.test',
+  origin401: 'origin-401.qa.test',
   proxy: 'proxy.qa.test',
 });
 const CHROME_TIMEOUT_MS = 20 * 1000;
+const AUTH_FAILURE_TIMEOUT_MS = 8 * 1000;
 
 function resolveChromeExecutable() {
 
@@ -141,6 +149,113 @@ function sendText(response, body, contentType = 'text/plain; charset=utf-8') {
 
 }
 
+function createCredentialCanary(label) {
+
+  const username = `qa-${label}-${Crypto.randomBytes(8).toString('hex')}`;
+  const password = `qa-${label}-${Crypto.randomBytes(24).toString('base64url')}`;
+  const basicPayload = Buffer.from(`${username}:${password}`).toString('base64');
+  return Object.freeze({
+    authorization: `Basic ${basicPayload}`,
+    basicPayload,
+    password,
+    reusableValue: `${username}:${password}`,
+    username,
+  });
+
+}
+
+function getCredentialCanaries(credentials) {
+
+  return Object.values(credentials).flatMap((credential) => [
+    credential.password,
+    credential.reusableValue,
+    credential.basicPayload,
+    credential.authorization,
+  ]);
+
+}
+
+function containsTextValue(value, needle, ancestors = new Set()) {
+
+  if (typeof value === 'string') {
+    return needle !== '' && value.includes(needle);
+  }
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return false;
+  }
+  if (ancestors.has(value)) {
+    return false;
+  }
+  ancestors.add(value);
+  const result = Array.isArray(value) ?
+    value.some((item) => containsTextValue(item, needle, ancestors)) :
+    Object.values(value).some((item) =>
+      containsTextValue(item, needle, ancestors),
+    );
+  ancestors.delete(value);
+  return result;
+
+}
+
+function containsCredentialCanary(value, credentialCanaries) {
+
+  return credentialCanaries.some((canary) =>
+    canary && containsTextValue(value, canary),
+  );
+
+}
+
+function assertNoCredentialCanary(value, credentialCanaries, surface) {
+
+  Assert.strictEqual(
+      containsCredentialCanary(value, credentialCanaries),
+      false,
+      `${surface}: a reusable proxy credential canary was exposed.`,
+  );
+
+}
+
+function redactCredentialCanaries(value, credentialCanaries) {
+
+  let text = String(value || '');
+  credentialCanaries.forEach((canary) => {
+    if (canary) {
+      text = text.split(canary).join('[credential-redacted]');
+    }
+  });
+  return text;
+
+}
+
+function createSafeError(error, credentialCanaries) {
+
+  const safeError = new Error(redactCredentialCanaries(
+      error && error.message || error,
+      credentialCanaries,
+  ));
+  safeError.stack = redactCredentialCanaries(
+      error && error.stack || safeError.stack,
+      credentialCanaries,
+  );
+  return safeError;
+
+}
+
+function classifyAuthorization(value, expected, knownAlternatives = []) {
+
+  if (!value) {
+    return 'none';
+  }
+  if (expected && value === expected) {
+    return 'expected';
+  }
+  if (knownAlternatives.includes(value)) {
+    return 'known-wrong';
+  }
+  return 'unexpected';
+
+}
+
 async function createReceiver(kind, traffic) {
 
   const marker = `${kind}-receiver`;
@@ -170,10 +285,99 @@ async function createReceiver(kind, traffic) {
 
 }
 
-async function createPacServer(providerProxyPort) {
+async function createAuthenticatedProxy(options) {
+
+  const marker = `${options.kind}-authenticated-receiver`;
+  const realm = `rucb-${options.kind}`;
+  const server = Http.createServer((request, response) => {
+    const auth = classifyAuthorization(
+        request.headers['proxy-authorization'],
+        options.expectedAuthorization,
+        options.knownAuthorizations,
+    );
+    options.traffic.push({
+      auth,
+      kind: options.kind,
+      method: request.method,
+      url: request.url,
+    });
+    request.resume();
+    if (options.acceptExpected === true && auth === 'expected') {
+      sendText(response, marker);
+      return;
+    }
+    response.writeHead(407, {
+      'Connection': 'close',
+      'Content-Length': '0',
+      'Proxy-Authenticate': `Basic realm="${realm}"`,
+    });
+    response.end();
+  });
+  server.on('connect', (request, socket) => {
+    options.traffic.push({
+      auth: classifyAuthorization(
+          request.headers['proxy-authorization'],
+          options.expectedAuthorization,
+          options.knownAuthorizations,
+      ),
+      kind: options.kind,
+      method: 'CONNECT',
+      url: request.url,
+    });
+    socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+  });
+  return {
+    kind: options.kind,
+    marker,
+    port: await listen(server),
+    server,
+  };
+
+}
+
+async function createUnauthorizedOrigin(traffic, knownAuthorizations) {
+
+  const kind = 'origin-401';
+  const server = Http.createServer((request, response) => {
+    traffic.push({
+      authorization: classifyAuthorization(
+          request.headers.authorization,
+          null,
+          knownAuthorizations,
+      ),
+      kind,
+      method: request.method,
+      proxyAuthorization: classifyAuthorization(
+          request.headers['proxy-authorization'],
+          null,
+          knownAuthorizations,
+      ),
+      url: request.url,
+    });
+    request.resume();
+    response.writeHead(401, {
+      'Connection': 'close',
+      'Content-Length': '0',
+      'WWW-Authenticate': 'Basic realm="rucb-origin-401"',
+    });
+    response.end();
+  });
+  return {
+    kind,
+    port: await listen(server),
+    server,
+  };
+
+}
+
+async function createPacServer(providerProxyPort, authRoutes) {
 
   const pacData = [
     'function FindProxyForURL(url, host) {',
+    ...authRoutes.map((route) =>
+      `  if (host === ${JSON.stringify(route.host)}) ` +
+        `return ${JSON.stringify(route.result)};`,
+    ),
     `  return "PROXY 127.0.0.1:${providerProxyPort}";`,
     '}',
   ].join('\n');
@@ -196,18 +400,87 @@ async function createPacServer(providerProxyPort) {
 async function createInfrastructure() {
 
   const traffic = [];
+  const credentials = Object.freeze({
+    proxyA: createCredentialCanary('proxy-a'),
+    proxyB: createCredentialCanary('proxy-b'),
+    wrongConfigured: createCredentialCanary('wrong-configured'),
+    wrongExpected: createCredentialCanary('wrong-expected'),
+  });
+  const credentialCanaries = getCredentialCanaries(credentials);
+  const knownAuthorizations = Object.values(credentials)
+      .map((credential) => credential.authorization);
   const origin = await createReceiver('origin', traffic);
   const providerProxy = await createReceiver('provider-proxy', traffic);
   const explicitProxy = await createReceiver('explicit-proxy', traffic);
   const helperProxy = await createReceiver('helper-proxy', traffic);
-  const pac = await createPacServer(providerProxy.port);
+  const authProxyA = await createAuthenticatedProxy({
+    acceptExpected: true,
+    expectedAuthorization: credentials.proxyA.authorization,
+    kind: 'auth-proxy-a',
+    knownAuthorizations,
+    traffic,
+  });
+  const authProxyB = await createAuthenticatedProxy({
+    acceptExpected: true,
+    expectedAuthorization: credentials.proxyB.authorization,
+    kind: 'auth-proxy-b',
+    knownAuthorizations,
+    traffic,
+  });
+  const authMismatch = await createAuthenticatedProxy({
+    acceptExpected: false,
+    expectedAuthorization: null,
+    kind: 'auth-mismatch',
+    knownAuthorizations,
+    traffic,
+  });
+  const authPasswordless = await createAuthenticatedProxy({
+    acceptExpected: false,
+    expectedAuthorization: null,
+    kind: 'auth-passwordless',
+    knownAuthorizations,
+    traffic,
+  });
+  const authWrong = await createAuthenticatedProxy({
+    acceptExpected: true,
+    expectedAuthorization: credentials.wrongExpected.authorization,
+    kind: 'auth-wrong',
+    knownAuthorizations,
+    traffic,
+  });
+  const unauthorizedOrigin = await createUnauthorizedOrigin(
+      traffic,
+      knownAuthorizations,
+  );
+  const pac = await createPacServer(providerProxy.port, [
+    {host: TEST_HOSTS.authA, result: `PROXY 127.0.0.1:${authProxyA.port}`},
+    {host: TEST_HOSTS.authB, result: `PROXY 127.0.0.1:${authProxyB.port}`},
+    {
+      host: TEST_HOSTS.authMismatch,
+      result: `PROXY 127.0.0.1:${authMismatch.port}`,
+    },
+    {
+      host: TEST_HOSTS.authPasswordless,
+      result: `PROXY 127.0.0.1:${authPasswordless.port}`,
+    },
+    {host: TEST_HOSTS.authWrong, result: `PROXY 127.0.0.1:${authWrong.port}`},
+    {host: TEST_HOSTS.origin401, result: 'DIRECT'},
+  ]);
   return {
+    authMismatch,
+    authPasswordless,
+    authProxyA,
+    authProxyB,
+    authWrong,
+    credentialCanaries,
+    credentials,
     explicitProxy,
     helperProxy,
     origin,
     pac,
     providerProxy,
     traffic,
+    unauthorizedOrigin,
   };
 
 }
@@ -218,23 +491,49 @@ async function closeInfrastructure(infrastructure) {
     return;
   }
   await Promise.all([
+    infrastructure.authMismatch,
+    infrastructure.authPasswordless,
+    infrastructure.authProxyA,
+    infrastructure.authProxyB,
+    infrastructure.authWrong,
     infrastructure.pac,
     infrastructure.explicitProxy,
     infrastructure.helperProxy,
     infrastructure.providerProxy,
     infrastructure.origin,
+    infrastructure.unauthorizedOrigin,
   ].map((endpoint) => closeServer(endpoint.server)));
 
 }
 
-function attachWorkerDiagnostics(worker, diagnostics, monitoredWorkers) {
+function addDiagnostic(diagnostics, prefix, value, credentialCanaries) {
+
+  if (containsCredentialCanary(value, credentialCanaries)) {
+    diagnostics.push(`${prefix}: credential canary was present.`);
+    return;
+  }
+  diagnostics.push(`${prefix}: ${value}`);
+
+}
+
+function attachWorkerDiagnostics(
+    worker,
+    diagnostics,
+    monitoredWorkers,
+    credentialCanaries,
+) {
 
   if (!worker || monitoredWorkers.has(worker)) {
     return;
   }
   monitoredWorkers.add(worker);
   worker.on('error', (error) => {
-    diagnostics.push(`service worker exception: ${error.message || error}`);
+    addDiagnostic(
+        diagnostics,
+        'service worker exception',
+        error.message || error,
+        credentialCanaries,
+    );
   });
   worker.on('console', (message) => {
     const type = message.type();
@@ -243,24 +542,53 @@ function attachWorkerDiagnostics(worker, diagnostics, monitoredWorkers) {
       ['error', 'assert'].includes(type) ||
       (type === 'warn' && /error|exception|failed/i.test(text))
     ) {
-      diagnostics.push(`service worker console ${type}: ${text}`);
+      addDiagnostic(
+          diagnostics,
+          `service worker console ${type}`,
+          text,
+          credentialCanaries,
+      );
     }
   });
 
 }
 
-function attachPageDiagnostics(page, diagnostics) {
+function attachPageDiagnostics(page, diagnostics, credentialCanaries) {
 
   page.on('pageerror', (error) => {
-    diagnostics.push(`extension page exception: ${error.message || error}`);
+    addDiagnostic(
+        diagnostics,
+        'extension page exception',
+        error.message || error,
+        credentialCanaries,
+    );
   });
   page.on('console', (message) => {
     if (['error', 'assert'].includes(message.type())) {
-      diagnostics.push(
-          `extension page console ${message.type()}: ${message.text()}`,
+      addDiagnostic(
+          diagnostics,
+          `extension page console ${message.type()}`,
+          message.text(),
+          credentialCanaries,
       );
     }
   });
+
+}
+
+function attachCredentialLeakGuard(page, diagnostics, credentialCanaries) {
+
+  const inspect = (surface, value) => {
+    if (containsCredentialCanary(value, credentialCanaries)) {
+      diagnostics.push(`${surface}: credential canary was present.`);
+    }
+  };
+  page.on('pageerror', (error) =>
+    inspect('browser page exception', error.message || error),
+  );
+  page.on('console', (message) =>
+    inspect('browser page console', message.text()),
+  );
 
 }
 
@@ -272,7 +600,11 @@ function isExtensionWorkerTarget(target) {
 
 }
 
-async function launchExtension(chromeExecutable, profilePath) {
+async function launchExtension(
+    chromeExecutable,
+    profilePath,
+    credentialCanaries,
+) {
 
   const diagnostics = [];
   const monitoredWorkers = new WeakSet();
@@ -290,8 +622,14 @@ async function launchExtension(chromeExecutable, profilePath) {
       '--no-first-run',
       '--host-resolver-rules=' + [
         `MAP ${TEST_HOSTS.auto} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authA} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authB} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authMismatch} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authPasswordless} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authWrong} 127.0.0.1`,
         `MAP ${TEST_HOSTS.proxy} 127.0.0.1`,
         `MAP ${TEST_HOSTS.direct} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.origin401} 127.0.0.1`,
       ].join(','),
     ],
     enableExtensions: true,
@@ -308,6 +646,7 @@ async function launchExtension(chromeExecutable, profilePath) {
           await target.worker(),
           diagnostics,
           monitoredWorkers,
+          credentialCanaries,
       );
     } catch (error) {
       diagnostics.push(
@@ -331,9 +670,15 @@ async function launchExtension(chromeExecutable, profilePath) {
   );
   const worker = await workerTarget.worker();
   Assert.ok(worker, 'The MV3 service worker target is not attachable.');
-  attachWorkerDiagnostics(worker, diagnostics, monitoredWorkers);
+  attachWorkerDiagnostics(
+      worker,
+      diagnostics,
+      monitoredWorkers,
+      credentialCanaries,
+  );
   return {
     browser,
+    credentialCanaries,
     diagnostics,
     extensionId,
   };
@@ -343,7 +688,11 @@ async function launchExtension(chromeExecutable, profilePath) {
 async function openExtensionPage(session) {
 
   const page = await session.browser.newPage();
-  attachPageDiagnostics(page, session.diagnostics);
+  attachPageDiagnostics(
+      page,
+      session.diagnostics,
+      session.credentialCanaries,
+  );
   await page.goto(
       `chrome-extension://${session.extensionId}/pages/options/index.html`,
       {waitUntil: 'domcontentloaded'},
@@ -407,6 +756,45 @@ async function readProxySettings(page) {
       });
     });
   }));
+
+}
+
+async function readAppliedPacData(page) {
+
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    chrome.proxy.settings.get({}, (details) => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) {
+        reject(new Error(runtimeError.message));
+        return;
+      }
+      const value = details && details.value || {};
+      const pacScript = value.pacScript || {};
+      resolve(typeof pacScript.data === 'string' ? pacScript.data : '');
+    });
+  }));
+
+}
+
+async function openPopupPage(session) {
+
+  const page = await session.browser.newPage();
+  attachPageDiagnostics(
+      page,
+      session.diagnostics,
+      session.credentialCanaries,
+  );
+  await page.goto(
+      `chrome-extension://${session.extensionId}/pages/popup/index.html`,
+      {waitUntil: 'domcontentloaded'},
+  );
+  await page.waitForFunction(
+      () => document.getElementById('popup-root') &&
+        document.getElementById('popup-root').getAttribute('aria-busy') ===
+          'false',
+      {timeout: CHROME_TIMEOUT_MS},
+  );
+  return page;
 
 }
 
@@ -614,16 +1002,41 @@ async function configureExtension(page, infrastructure) {
   Assert.strictEqual(selected.currentPacProviderKey, providerKey);
 
   const pacMods = await callRpc(page, 'getPacMods');
-  pacMods.ownProxies = [{
+  const createOwnProxy = (endpoint, note, credentials = null) => ({
     enabled: true,
     host: '127.0.0.1',
-    note: 'Chrome Stable MV3 browser smoke proxy',
-    password: '',
-    port: infrastructure.explicitProxy.port,
+    note,
+    password: credentials ? credentials.password : '',
+    port: endpoint.port,
     type: 'PROXY',
-    username: '',
+    username: credentials ? credentials.username : '',
     useAsDirectReplacement: false,
-  }];
+  });
+  pacMods.ownProxies = [
+    createOwnProxy(
+        infrastructure.explicitProxy,
+        'Chrome Stable MV3 browser smoke proxy',
+    ),
+    createOwnProxy(
+        infrastructure.authProxyA,
+        'Chrome Stable authenticated proxy A',
+        infrastructure.credentials.proxyA,
+    ),
+    createOwnProxy(
+        infrastructure.authProxyB,
+        'Chrome Stable authenticated proxy B',
+        infrastructure.credentials.proxyB,
+    ),
+    createOwnProxy(
+        infrastructure.authPasswordless,
+        'Chrome Stable passwordless proxy',
+    ),
+    createOwnProxy(
+        infrastructure.authWrong,
+        'Chrome Stable wrong-credential proxy',
+        infrastructure.credentials.wrongConfigured,
+    ),
+  ];
   pacMods.localTor.enabled = false;
   pacMods.torBrowser.enabled = false;
   pacMods.warp.enabled = false;
@@ -668,6 +1081,11 @@ async function assertRoute(session, infrastructure, scenario) {
   const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const trafficStart = infrastructure.traffic.length;
   const page = await session.browser.newPage();
+  attachCredentialLeakGuard(
+      page,
+      session.diagnostics,
+      session.credentialCanaries,
+  );
   try {
     await page.setCacheEnabled(false);
     const response = await page.goto(
@@ -693,6 +1111,407 @@ async function assertRoute(session, infrastructure, scenario) {
       `${scenario.name}: request reached an unintended receiver: ` +
         JSON.stringify(hits),
   );
+
+}
+
+async function clearProxyAuthEvents(page) {
+
+  const status = await callRpc(page, 'clearProxyAuthEvents');
+  Assert.deepStrictEqual(status.lastEvents, []);
+  return status;
+
+}
+
+async function waitForProxyAuthEvent(page, type, port) {
+
+  const deadline = Date.now() + CHROME_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const status = await callRpc(page, 'getProxyAuthStatus');
+    const event = status.lastEvents.slice().reverse().find((candidate) =>
+      candidate.type === type && String(candidate.port) === String(port),
+    );
+    if (event) {
+      return {event, status};
+    }
+    await delay(100);
+  }
+  Assert.fail(`Proxy auth event ${type} was not observed for the test endpoint.`);
+
+}
+
+function getTrafficForToken(infrastructure, trafficStart, token) {
+
+  return infrastructure.traffic
+      .slice(trafficStart)
+      .filter((entry) => entry.url.includes(token));
+
+}
+
+async function navigateForAuthScenario(
+    session,
+    host,
+    originPort,
+    options = {},
+) {
+
+  const token = `${Date.now()}-${Crypto.randomBytes(8).toString('hex')}`;
+  const page = await session.browser.newPage();
+  attachCredentialLeakGuard(
+      page,
+      session.diagnostics,
+      session.credentialCanaries,
+  );
+  let errorMessage = null;
+  let responseBody = null;
+  let responseStatus = null;
+  try {
+    await page.setCacheEnabled(false);
+    const response = await page.goto(
+        `http://${host}:${originPort}/chrome-auth-smoke?token=${token}`,
+        {
+          timeout: options.timeout || CHROME_TIMEOUT_MS,
+          waitUntil: 'domcontentloaded',
+        },
+    );
+    if (response) {
+      responseStatus = response.status();
+      responseBody = await response.text().catch(() => null);
+    }
+  } catch (error) {
+    assertNoCredentialCanary(
+        error && error.stack || error,
+        session.credentialCanaries,
+        `${options.name || 'auth scenario'} thrown error`,
+    );
+    errorMessage = redactCredentialCanaries(
+        error && error.message || error,
+        session.credentialCanaries,
+    );
+  } finally {
+    await delay(200);
+    await page.close();
+  }
+  return {
+    errorMessage,
+    responseBody,
+    responseStatus,
+    token,
+  };
+
+}
+
+async function assertAuthenticatedProxyRoute(
+    session,
+    optionsPage,
+    infrastructure,
+    scenario,
+) {
+
+  await clearProxyAuthEvents(optionsPage);
+  const trafficStart = infrastructure.traffic.length;
+  const result = await navigateForAuthScenario(
+      session,
+      scenario.host,
+      infrastructure.origin.port,
+      {name: scenario.name},
+  );
+  Assert.strictEqual(result.errorMessage, null, `${scenario.name}: request failed.`);
+  Assert.strictEqual(result.responseStatus, 200);
+  Assert.strictEqual(result.responseBody, scenario.endpoint.marker);
+  const hits = getTrafficForToken(
+      infrastructure,
+      trafficStart,
+      result.token,
+  );
+  Assert.deepStrictEqual(
+      hits.map((entry) => entry.kind),
+      [scenario.endpoint.kind, scenario.endpoint.kind],
+      `${scenario.name}: request reached an unintended receiver.`,
+  );
+  Assert.deepStrictEqual(
+      hits.map((entry) => entry.auth),
+      ['none', 'expected'],
+      `${scenario.name}: expected unauthenticated 407 then authenticated retry.`,
+  );
+  const observed = await waitForProxyAuthEvent(
+      optionsPage,
+      'provided',
+      scenario.endpoint.port,
+  );
+  assertNoCredentialCanary(
+      observed,
+      session.credentialCanaries,
+      `${scenario.name} auth status`,
+  );
+  return hits.map((entry) => entry.auth);
+
+}
+
+async function assertOrigin401Ignored(
+    session,
+    optionsPage,
+    infrastructure,
+) {
+
+  await clearProxyAuthEvents(optionsPage);
+  const trafficStart = infrastructure.traffic.length;
+  const result = await navigateForAuthScenario(
+      session,
+      TEST_HOSTS.origin401,
+      infrastructure.unauthorizedOrigin.port,
+      {
+        name: 'ordinary origin 401',
+        timeout: AUTH_FAILURE_TIMEOUT_MS,
+      },
+  );
+  Assert.notStrictEqual(
+      result.responseStatus,
+      200,
+      'Ordinary origin 401 unexpectedly succeeded.',
+  );
+  const hits = getTrafficForToken(
+      infrastructure,
+      trafficStart,
+      result.token,
+  );
+  Assert.ok(hits.length >= 1, 'Ordinary origin 401 reached no receiver.');
+  Assert.ok(
+      hits.every((entry) => entry.kind === infrastructure.unauthorizedOrigin.kind),
+      'Ordinary origin 401 reached a proxy receiver.',
+  );
+  Assert.ok(
+      hits.every((entry) =>
+        entry.authorization === 'none' && entry.proxyAuthorization === 'none',
+      ),
+      'Ordinary origin 401 received an authorization credential.',
+  );
+  const observed = await waitForProxyAuthEvent(
+      optionsPage,
+      'non_proxy_ignored',
+      infrastructure.unauthorizedOrigin.port,
+  );
+  assertNoCredentialCanary(
+      [result.errorMessage, observed],
+      session.credentialCanaries,
+      'ordinary origin 401 observations',
+  );
+  return {
+    errorMessage: result.errorMessage,
+    receiverEvidence: hits.map((entry) => ({
+      authorization: entry.authorization,
+      proxyAuthorization: entry.proxyAuthorization,
+    })),
+  };
+
+}
+
+async function assertNoCredentialProxyFailure(
+    session,
+    optionsPage,
+    infrastructure,
+    scenario,
+) {
+
+  await clearProxyAuthEvents(optionsPage);
+  const trafficStart = infrastructure.traffic.length;
+  const result = await navigateForAuthScenario(
+      session,
+      scenario.host,
+      infrastructure.origin.port,
+      {name: scenario.name, timeout: AUTH_FAILURE_TIMEOUT_MS},
+  );
+  Assert.notStrictEqual(
+      result.responseStatus,
+      200,
+      `${scenario.name}: challenge unexpectedly succeeded.`,
+  );
+  const hits = getTrafficForToken(
+      infrastructure,
+      trafficStart,
+      result.token,
+  );
+  Assert.ok(hits.length >= 1, `${scenario.name}: proxy received no request.`);
+  Assert.ok(
+      hits.every((entry) => entry.kind === scenario.endpoint.kind),
+      `${scenario.name}: request reached an unintended receiver or DIRECT.`,
+  );
+  Assert.ok(
+      hits.every((entry) => entry.auth === 'none'),
+      `${scenario.name}: a configured credential was reused.`,
+  );
+  const observed = await waitForProxyAuthEvent(
+      optionsPage,
+      'missing_credentials',
+      scenario.endpoint.port,
+  );
+  assertNoCredentialCanary(
+      [result.errorMessage, observed],
+      session.credentialCanaries,
+      `${scenario.name} observations`,
+  );
+  return {
+    errorMessage: result.errorMessage,
+    receiverEvidence: hits.map((entry) => entry.auth),
+  };
+
+}
+
+async function assertWrongCredentialsStop(
+    session,
+    optionsPage,
+    infrastructure,
+) {
+
+  await clearProxyAuthEvents(optionsPage);
+  const trafficStart = infrastructure.traffic.length;
+  const result = await navigateForAuthScenario(
+      session,
+      TEST_HOSTS.authWrong,
+      infrastructure.origin.port,
+      {
+        name: 'wrong credentials retry limit',
+        timeout: AUTH_FAILURE_TIMEOUT_MS,
+      },
+  );
+  Assert.notStrictEqual(
+      result.responseStatus,
+      200,
+      'Wrong proxy credentials unexpectedly succeeded.',
+  );
+  const hits = getTrafficForToken(
+      infrastructure,
+      trafficStart,
+      result.token,
+  );
+  Assert.ok(hits.length >= 2, 'Wrong credential proxy did not receive a retry.');
+  Assert.ok(hits.length <= 3, 'Wrong credential proxy challenge loop was unbounded.');
+  Assert.strictEqual(hits[0].auth, 'none');
+  Assert.ok(
+      hits.slice(1).every((entry) => entry.auth === 'known-wrong'),
+      'Wrong credential proxy received an unknown reusable credential.',
+  );
+  Assert.ok(
+      hits.slice(1).length <= 2,
+      'RUCB supplied credentials beyond the current retry limit.',
+  );
+  Assert.ok(
+      hits.every((entry) => entry.kind === infrastructure.authWrong.kind),
+      'Wrong credential request reached an unintended receiver or DIRECT.',
+  );
+  const observed = await waitForProxyAuthEvent(
+      optionsPage,
+      'retry_limit',
+      infrastructure.authWrong.port,
+  );
+  Assert.strictEqual(observed.status.retryLimit, 2);
+  assertNoCredentialCanary(
+      [result.errorMessage, observed],
+      session.credentialCanaries,
+      'wrong credential observations',
+  );
+  return {
+    errorMessage: result.errorMessage,
+    receiverEvidence: hits.map((entry) => entry.auth),
+  };
+
+}
+
+async function assertCredentialRedaction(
+    session,
+    optionsPage,
+    infrastructure,
+    observedErrors,
+) {
+
+  const rpcSurfaces = await Promise.all([
+    callRpc(optionsPage, 'getState'),
+    callRpc(optionsPage, 'getPacMods'),
+    callRpc(optionsPage, 'getProxyAuthStatus'),
+    callRpc(optionsPage, 'testProxyAuthConfig'),
+  ]);
+  assertNoCredentialCanary(
+      rpcSurfaces,
+      session.credentialCanaries,
+      'RPC response models',
+  );
+
+  const pacData = await readAppliedPacData(optionsPage);
+  Assert.ok(pacData, 'Applied PAC data was unavailable for redaction review.');
+  assertNoCredentialCanary(
+      pacData,
+      session.credentialCanaries,
+      'applied PAC data',
+  );
+  Object.values(infrastructure.credentials).forEach((credential) => {
+    Assert.strictEqual(
+        pacData.includes(credential.username),
+        false,
+        'Applied PAC data exposed an own-proxy username.',
+    );
+  });
+
+  await optionsPage.evaluate(() => {
+    window.location.hash = 'proxy-methods';
+  });
+  await optionsPage.waitForFunction(
+      () => document.querySelectorAll('[name="proxy.password"]').length >= 5,
+      {timeout: CHROME_TIMEOUT_MS},
+  );
+  const optionsDom = await optionsPage.evaluate(() => ({
+    html: document.documentElement.outerHTML,
+    inputValues: Array.from(document.querySelectorAll('input'))
+        .map((input) => input.value),
+    passwordValues: Array.from(
+        document.querySelectorAll('[name="proxy.password"]'),
+    ).map((input) => input.value),
+    text: document.documentElement.textContent,
+  }));
+  assertNoCredentialCanary(
+      optionsDom,
+      session.credentialCanaries,
+      'options DOM',
+  );
+  Assert.ok(
+      optionsDom.passwordValues.every((value) => value === ''),
+      'Options rendered a stored proxy password.',
+  );
+
+  const popupPage = await openPopupPage(session);
+  try {
+    const popupDom = await popupPage.evaluate(() => ({
+      html: document.documentElement.outerHTML,
+      inputValues: Array.from(document.querySelectorAll('input'))
+          .map((input) => input.value),
+      text: document.documentElement.textContent,
+    }));
+    assertNoCredentialCanary(
+        popupDom,
+        session.credentialCanaries,
+        'popup DOM',
+    );
+    Object.values(infrastructure.credentials).forEach((credential) => {
+      Assert.strictEqual(
+          containsTextValue(popupDom, credential.username),
+          false,
+          'Popup DOM exposed an own-proxy username.',
+      );
+    });
+  } finally {
+    await popupPage.close();
+  }
+
+  assertNoCredentialCanary(
+      [session.diagnostics, observedErrors, infrastructure.traffic],
+      session.credentialCanaries,
+      'diagnostics, errors, or receiver logs',
+  );
+  Object.values(infrastructure.credentials).forEach((credential) => {
+    Assert.strictEqual(
+        containsTextValue(session.diagnostics, credential.username),
+        false,
+        'Extension diagnostics exposed an own-proxy username.',
+    );
+  });
 
 }
 
@@ -733,9 +1552,14 @@ async function runSmoke() {
   let browser = null;
   let infrastructure = null;
   let chromeVersion = '';
+  const observedErrors = [];
   try {
     infrastructure = await createInfrastructure();
-    let session = await launchExtension(chromeExecutable, profilePath);
+    let session = await launchExtension(
+        chromeExecutable,
+        profilePath,
+        infrastructure.credentialCanaries,
+    );
     console.log('Chrome smoke: loaded RUCB for initial routing checks.');
     browser = session.browser;
     chromeVersion = await browser.version();
@@ -760,6 +1584,25 @@ async function runSmoke() {
       marker: infrastructure.origin.marker,
       name: 'explicit Direct rule',
     });
+    const authAEvidence = await assertAuthenticatedProxyRoute(
+        session,
+        optionsPage,
+        infrastructure,
+        {
+          endpoint: infrastructure.authProxyA,
+          host: TEST_HOSTS.authA,
+          name: 'authenticated HTTP proxy A',
+        },
+    );
+    await assertCredentialRedaction(
+        session,
+        optionsPage,
+        infrastructure,
+        observedErrors,
+    );
+    console.log(
+        `Chrome smoke 407: proxy A ${authAEvidence.join(' -> ')}.`,
+    );
     assertNoSeriousDiagnostics(session.diagnostics);
     const firstExtensionId = session.extensionId;
     await optionsPage.close();
@@ -767,7 +1610,11 @@ async function runSmoke() {
     browser = null;
 
     console.log('Chrome smoke: verifying applied PAC after browser restart.');
-    session = await launchExtension(chromeExecutable, profilePath);
+    session = await launchExtension(
+        chromeExecutable,
+        profilePath,
+        infrastructure.credentialCanaries,
+    );
     browser = session.browser;
     Assert.strictEqual(
         session.extensionId,
@@ -782,6 +1629,75 @@ async function runSmoke() {
       marker: infrastructure.explicitProxy.marker,
       name: 'restart recovery Proxy rule',
     });
+    const authBEvidence = await assertAuthenticatedProxyRoute(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+        {
+          endpoint: infrastructure.authProxyB,
+          host: TEST_HOSTS.authB,
+          name: 'authenticated HTTP proxy B after restart',
+        },
+    );
+    const origin401Evidence = await assertOrigin401Ignored(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+    );
+    const mismatchEvidence = await assertNoCredentialProxyFailure(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+        {
+          endpoint: infrastructure.authMismatch,
+          host: TEST_HOSTS.authMismatch,
+          name: 'mismatched proxy challenger',
+        },
+    );
+    const passwordlessEvidence = await assertNoCredentialProxyFailure(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+        {
+          endpoint: infrastructure.authPasswordless,
+          host: TEST_HOSTS.authPasswordless,
+          name: 'passwordless configured proxy',
+        },
+    );
+    const wrongEvidence = await assertWrongCredentialsStop(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+    );
+    observedErrors.push(
+        origin401Evidence.errorMessage,
+        mismatchEvidence.errorMessage,
+        passwordlessEvidence.errorMessage,
+        wrongEvidence.errorMessage,
+    );
+    await assertCredentialRedaction(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+        observedErrors,
+    );
+    console.log(
+        `Chrome smoke 407: proxy B after restart ${authBEvidence.join(' -> ')}.`,
+    );
+    console.log(
+        'Chrome smoke 407: origin 401 credentials ' +
+          `${origin401Evidence.receiverEvidence[0].authorization}/` +
+          `${origin401Evidence.receiverEvidence[0].proxyAuthorization}.`,
+    );
+    console.log(
+        'Chrome smoke 407: mismatched/passwordless ' +
+          `${mismatchEvidence.receiverEvidence.join(' -> ')}/` +
+          `${passwordlessEvidence.receiverEvidence.join(' -> ')}.`,
+    );
+    console.log(
+        `Chrome smoke 407: wrong credentials ` +
+          `${wrongEvidence.receiverEvidence.join(' -> ')} then retry limit.`,
+    );
     assertNoSeriousDiagnostics(session.diagnostics);
 
     console.log('Chrome smoke: installing temporary proxy-owner extension.');
@@ -834,7 +1750,11 @@ async function runSmoke() {
     await browser.close();
     browser = null;
     console.log('Chrome smoke: verifying deferred Clear after browser restart.');
-    session = await launchExtension(chromeExecutable, profilePath);
+    session = await launchExtension(
+        chromeExecutable,
+        profilePath,
+        infrastructure.credentialCanaries,
+    );
     browser = session.browser;
     Assert.strictEqual(session.extensionId, firstExtensionId);
     const clearedRestartPage = await openExtensionPage(session);
@@ -851,7 +1771,14 @@ async function runSmoke() {
     console.log(
         'Verified Auto -> provider proxy, Proxy -> explicit proxy, ' +
         'Direct -> origin, restart recovery -> explicit proxy, and ' +
-        'external takeover -> deferred Clear -> direct after release/restart.',
+        'external takeover -> deferred Clear -> direct after release/restart. ' +
+        'Verified real HTTP 407 auth, durable credentials, 401/mismatch/' +
+        'passwordless rejection, retry limiting, and credential redaction.',
+    );
+  } catch (error) {
+    throw createSafeError(
+        error,
+        infrastructure && infrastructure.credentialCanaries || [],
     );
   } finally {
     if (browser) {
