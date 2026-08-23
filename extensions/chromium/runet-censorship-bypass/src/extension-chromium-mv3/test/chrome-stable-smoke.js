@@ -199,9 +199,11 @@ async function createInfrastructure() {
   const origin = await createReceiver('origin', traffic);
   const providerProxy = await createReceiver('provider-proxy', traffic);
   const explicitProxy = await createReceiver('explicit-proxy', traffic);
+  const helperProxy = await createReceiver('helper-proxy', traffic);
   const pac = await createPacServer(providerProxy.port);
   return {
     explicitProxy,
+    helperProxy,
     origin,
     pac,
     providerProxy,
@@ -218,6 +220,7 @@ async function closeInfrastructure(infrastructure) {
   await Promise.all([
     infrastructure.pac,
     infrastructure.explicitProxy,
+    infrastructure.helperProxy,
     infrastructure.providerProxy,
     infrastructure.origin,
   ].map((endpoint) => closeServer(endpoint.server)));
@@ -273,6 +276,7 @@ async function launchExtension(chromeExecutable, profilePath) {
 
   const diagnostics = [];
   const monitoredWorkers = new WeakSet();
+  console.log('Chrome smoke: launching Chrome Stable.');
   const browser = await Puppeteer.launch({
     args: [
       '--disable-background-networking',
@@ -316,7 +320,9 @@ async function launchExtension(chromeExecutable, profilePath) {
     await monitorTarget(target);
   }
 
+  console.log('Chrome smoke: installing unpacked RUCB.');
   const extensionId = await browser.installExtension(PACKAGED_MV3_ROOT);
+  console.log(`Chrome smoke: installed RUCB ${extensionId}.`);
   const workerTarget = await browser.waitForTarget(
       (target) => target.type() === 'service_worker' &&
         target.url() ===
@@ -411,6 +417,162 @@ function assertProxyControl(details) {
     levelOfControl: 'controlled_by_this_extension',
     mandatory: false,
     mode: 'pac_script',
+  });
+
+}
+
+async function waitForProxyOff(page) {
+
+  const deadline = Date.now() + CHROME_TIMEOUT_MS;
+  let details = null;
+  while (Date.now() < deadline) {
+    details = await readProxySettings(page);
+    if (
+      details.levelOfControl === 'controllable_by_this_extension' &&
+      details.mode !== 'pac_script'
+    ) {
+      return details;
+    }
+    await delay(100);
+  }
+  Assert.strictEqual(details.levelOfControl, 'controllable_by_this_extension');
+  Assert.notStrictEqual(details.mode, 'pac_script');
+  return details;
+
+}
+
+async function waitForExternalProxyControl(page) {
+
+  const deadline = Date.now() + CHROME_TIMEOUT_MS;
+  let details = null;
+  while (Date.now() < deadline) {
+    details = await readProxySettings(page);
+    if (
+      details.levelOfControl === 'controlled_by_other_extensions' &&
+      details.mode === 'fixed_servers'
+    ) {
+      return details;
+    }
+    await delay(100);
+  }
+  Assert.strictEqual(details.levelOfControl, 'controlled_by_other_extensions');
+  Assert.strictEqual(details.mode, 'fixed_servers');
+  return details;
+
+}
+
+function createProxyOwnerHelper() {
+
+  const helperPath = Fs.mkdtempSync(
+      Path.join(Os.tmpdir(), 'rucb-mv3-owner-helper-'),
+  );
+  Fs.writeFileSync(
+      Path.join(helperPath, 'manifest.json'),
+      JSON.stringify({
+        background: {service_worker: 'worker.js'},
+        manifest_version: 3,
+        name: 'RUCB Chrome smoke proxy owner',
+        permissions: ['proxy'],
+        version: '1.0.0',
+      }),
+      'utf8',
+  );
+  Fs.writeFileSync(
+      Path.join(helperPath, 'worker.js'),
+      '\'use strict\';\nchrome.runtime.onInstalled.addListener(() => undefined);\n',
+      'utf8',
+  );
+  Fs.writeFileSync(
+      Path.join(helperPath, 'control.html'),
+      '<!doctype html><meta charset="utf-8"><script src="control.js"></script>',
+      'utf8',
+  );
+  Fs.writeFileSync(
+      Path.join(helperPath, 'control.js'),
+      [
+        '\'use strict\';',
+        'window.proxyOwner = {',
+        '  get() {',
+        '    return new Promise((resolve, reject) => {',
+        '      chrome.proxy.settings.get({}, (details) => {',
+        '        if (chrome.runtime.lastError) {',
+        '          reject(new Error(chrome.runtime.lastError.message));',
+        '          return;',
+        '        }',
+        '        resolve(details);',
+        '      });',
+        '    });',
+        '  },',
+        '  release() {',
+        '    return new Promise((resolve, reject) => {',
+        '      chrome.proxy.settings.clear({scope: \'regular\'}, () => {',
+        '        if (chrome.runtime.lastError) {',
+        '          reject(new Error(chrome.runtime.lastError.message));',
+        '          return;',
+        '        }',
+        '        resolve();',
+        '      });',
+        '    });',
+        '  },',
+        '  takeOver(port) {',
+        '    return new Promise((resolve, reject) => {',
+        '      chrome.proxy.settings.set({',
+        '        scope: \'regular\',',
+        '        value: {',
+        '          mode: \'fixed_servers\',',
+        '          rules: {',
+        '            bypassList: [\'<-loopback>\'],',
+        '            singleProxy: {',
+        '              host: \'127.0.0.1\',',
+        '              port,',
+        '              scheme: \'http\',',
+        '            },',
+        '          },',
+        '        },',
+        '      }, () => {',
+        '        if (chrome.runtime.lastError) {',
+        '          reject(new Error(chrome.runtime.lastError.message));',
+        '          return;',
+        '        }',
+        '        resolve();',
+        '      });',
+        '    });',
+        '  },',
+        '};',
+      ].join('\n'),
+      'utf8',
+  );
+  return helperPath;
+
+}
+
+async function openProxyOwnerHelper(browser, helperPath) {
+
+  const extensionId = await browser.installExtension(helperPath);
+  const page = await browser.newPage();
+  await page.goto(
+      `chrome-extension://${extensionId}/control.html`,
+      {waitUntil: 'domcontentloaded'},
+  );
+  await page.waitForFunction(
+      () => window.proxyOwner && typeof window.proxyOwner.takeOver === 'function',
+      {timeout: CHROME_TIMEOUT_MS},
+  );
+  return {extensionId, page};
+
+}
+
+function removeProxyOwnerHelper(helperPath) {
+
+  const temporaryRoot = Path.resolve(Os.tmpdir());
+  const resolved = Path.resolve(helperPath);
+  Assert.strictEqual(Path.dirname(resolved), temporaryRoot);
+  Assert.ok(Path.basename(resolved).startsWith('rucb-mv3-owner-helper-'));
+  Fs.rmSync(resolved, {
+    force: true,
+    maxRetries: 3,
+    recursive: true,
+    retryDelay: 100,
   });
 
 }
@@ -567,16 +729,19 @@ async function runSmoke() {
   const profilePath = Fs.mkdtempSync(
       Path.join(Os.tmpdir(), 'rucb-mv3-smoke-'),
   );
+  const helperPath = createProxyOwnerHelper();
   let browser = null;
   let infrastructure = null;
   let chromeVersion = '';
   try {
     infrastructure = await createInfrastructure();
     let session = await launchExtension(chromeExecutable, profilePath);
+    console.log('Chrome smoke: loaded RUCB for initial routing checks.');
     browser = session.browser;
     chromeVersion = await browser.version();
     const optionsPage = await openExtensionPage(session);
     await configureExtension(optionsPage, infrastructure);
+    console.log('Chrome smoke: applied synthetic PAC configuration.');
     await assertRoute(session, infrastructure, {
       expectedReceiver: 'provider-proxy',
       host: TEST_HOSTS.auto,
@@ -601,6 +766,7 @@ async function runSmoke() {
     await browser.close();
     browser = null;
 
+    console.log('Chrome smoke: verifying applied PAC after browser restart.');
     session = await launchExtension(chromeExecutable, profilePath);
     browser = session.browser;
     Assert.strictEqual(
@@ -617,13 +783,75 @@ async function runSmoke() {
       name: 'restart recovery Proxy rule',
     });
     assertNoSeriousDiagnostics(session.diagnostics);
+
+    console.log('Chrome smoke: installing temporary proxy-owner extension.');
+    const helper = await openProxyOwnerHelper(browser, helperPath);
+    console.log('Chrome smoke: exercising proxy ownership takeover and release.');
+    await helper.page.evaluate(
+        (port) => window.proxyOwner.takeOver(port),
+        infrastructure.helperProxy.port,
+    );
+    await waitForExternalProxyControl(restartedOptionsPage);
+    await assertRoute(session, infrastructure, {
+      expectedReceiver: 'helper-proxy',
+      host: TEST_HOSTS.proxy,
+      marker: infrastructure.helperProxy.marker,
+      name: 'external owner takeover',
+    });
+
     const cleared = await callRpc(restartedOptionsPage, 'clearProxy');
-    Assert.strictEqual(cleared.ok, true);
+    Assert.deepStrictEqual(
+        {
+          cleanupStatus: cleared.cleanupStatus,
+          ok: cleared.ok,
+          status: cleared.status,
+        },
+        {cleanupStatus: 'deferred', ok: true, status: 'cleared'},
+    );
+    const helperControl = await helper.page.evaluate(() =>
+      window.proxyOwner.get(),
+    );
+    Assert.strictEqual(helperControl.levelOfControl, 'controlled_by_this_extension');
+    Assert.strictEqual(helperControl.value.mode, 'fixed_servers');
+    await assertRoute(session, infrastructure, {
+      expectedReceiver: 'helper-proxy',
+      host: TEST_HOSTS.proxy,
+      marker: infrastructure.helperProxy.marker,
+      name: 'deferred Clear preserves external owner',
+    });
+
+    await helper.page.evaluate(() => window.proxyOwner.release());
+    await helper.page.close();
+    await waitForProxyOff(restartedOptionsPage);
+    await assertRoute(session, infrastructure, {
+      expectedReceiver: 'origin',
+      host: TEST_HOSTS.proxy,
+      marker: infrastructure.origin.marker,
+      name: 'ownership release keeps RUCB off',
+    });
     await restartedOptionsPage.close();
+
+    await browser.close();
+    browser = null;
+    console.log('Chrome smoke: verifying deferred Clear after browser restart.');
+    session = await launchExtension(chromeExecutable, profilePath);
+    browser = session.browser;
+    Assert.strictEqual(session.extensionId, firstExtensionId);
+    const clearedRestartPage = await openExtensionPage(session);
+    await waitForProxyOff(clearedRestartPage);
+    await assertRoute(session, infrastructure, {
+      expectedReceiver: 'origin',
+      host: TEST_HOSTS.proxy,
+      marker: infrastructure.origin.marker,
+      name: 'deferred Clear survives restart',
+    });
+    assertNoSeriousDiagnostics(session.diagnostics);
+    await clearedRestartPage.close();
     console.log(`Chrome Stable MV3 smoke passed with ${chromeVersion}.`);
     console.log(
         'Verified Auto -> provider proxy, Proxy -> explicit proxy, ' +
-        'Direct -> origin, and restart recovery -> explicit proxy.',
+        'Direct -> origin, restart recovery -> explicit proxy, and ' +
+        'external takeover -> deferred Clear -> direct after release/restart.',
     );
   } finally {
     if (browser) {
@@ -632,7 +860,11 @@ async function runSmoke() {
     try {
       await closeInfrastructure(infrastructure);
     } finally {
-      removeProfile(profilePath);
+      try {
+        removeProfile(profilePath);
+      } finally {
+        removeProxyOwnerHelper(helperPath);
+      }
     }
   }
 

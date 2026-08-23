@@ -167,7 +167,9 @@ async function createRuntimeHarness(options = {}) {
   let ifProxySettingsReadHookCalled = false;
   let proxySettingsReadGate = null;
   let proxySettingsSetGate = null;
+  let nextProxySettingsReadError = null;
   let nextProxySettingsSetError = options.initialProxySettingsSetError || null;
+  let nextProxySettingsClearError = null;
   const proxySettingsSetValues = [];
   let proxyDetails = clone(options.initialProxyDetails || {
     levelOfControl: 'controlled_by_this_extension',
@@ -282,6 +284,8 @@ async function createRuntimeHarness(options = {}) {
         get(details, callback) {
 
           ++counts.proxySettingsReads;
+          const errorMessage = nextProxySettingsReadError;
+          nextProxySettingsReadError = null;
           if (
             !ifProxySettingsReadHookCalled &&
             typeof options.onProxySettingsRead === 'function'
@@ -289,17 +293,22 @@ async function createRuntimeHarness(options = {}) {
             ifProxySettingsReadHookCalled = true;
             options.onProxySettingsRead(context);
           }
+          const finish = () => {
+            chromeApi.runtime.lastError = errorMessage ?
+              {message: errorMessage} :
+              null;
+            callback(errorMessage ? undefined : clone(proxyDetails));
+            chromeApi.runtime.lastError = null;
+          };
           if (
             proxySettingsReadGate &&
             counts.proxySettingsReads === proxySettingsReadGate.target
           ) {
             proxySettingsReadGate.markStarted();
-            proxySettingsReadGate.promise.then(() => {
-              callback(clone(proxyDetails));
-            });
+            proxySettingsReadGate.promise.then(finish);
             return;
           }
-          callback(clone(proxyDetails));
+          finish();
 
         },
         set(details, callback) {
@@ -338,11 +347,19 @@ async function createRuntimeHarness(options = {}) {
         clear(details, callback) {
 
           ++counts.proxySettingsClears;
-          proxyDetails = {
-            levelOfControl: 'controllable_by_this_extension',
-            value: {mode: 'direct'},
-          };
+          const errorMessage = nextProxySettingsClearError;
+          nextProxySettingsClearError = null;
+          if (!errorMessage) {
+            proxyDetails = {
+              levelOfControl: 'controllable_by_this_extension',
+              value: {mode: 'direct'},
+            };
+          }
+          chromeApi.runtime.lastError = errorMessage ?
+            {message: errorMessage} :
+            null;
           callback();
+          chromeApi.runtime.lastError = null;
 
         },
       },
@@ -385,7 +402,17 @@ async function createRuntimeHarness(options = {}) {
         set(values, callback) {
 
           ++counts.storageSets;
-          Object.assign(storageData, clone(values));
+          const clonedValues = clone(values);
+          Object.assign(storageData, clonedValues);
+          if (typeof options.onLocalStorageSet === 'function') {
+            options.onLocalStorageSet(clonedValues, {
+              setProxyDetails(details) {
+
+                proxyDetails = clone(details);
+
+              },
+            });
+          }
           callback();
 
         },
@@ -996,6 +1023,16 @@ async function createRuntimeHarness(options = {}) {
     failNextProxySettingsSet(message) {
 
       nextProxySettingsSetError = message;
+
+    },
+    failNextProxySettingsRead(message) {
+
+      nextProxySettingsReadError = message;
+
+    },
+    failNextProxySettingsClear(message) {
+
+      nextProxySettingsClearError = message;
 
     },
     async installPacVersion(options = {}) {

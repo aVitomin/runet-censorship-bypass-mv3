@@ -597,7 +597,7 @@ describe('MV3 popup UI', () => {
 
       });
 
-  it('shows Apply for cleared state and blocks actions under external ownership',
+  it('shows Apply when cleared and allows deferred Turn off under external ownership',
       async () => {
 
         const cleared = createPopupHarness({
@@ -618,25 +618,54 @@ describe('MV3 popup UI', () => {
         expect(findButton(cleared.root, 'Apply')).to.exist;
         expect(findButton(cleared.root, 'Turn off extension proxy')).to.equal(null);
 
+        let externalState = createPopupState({
+          proxyApplied: false,
+          proxyApplyStatus: 'idle',
+          proxyControl: {
+            levelOfControl: 'controlled_by_other_extensions',
+            canControl: false,
+            controlledByThisExtension: false,
+            controlsPac: false,
+          },
+        });
         const external = createPopupHarness({
-          state: createPopupState({
-            proxyApplied: false,
-            proxyControl: {
-              levelOfControl: 'controlled_by_other_extensions',
-              canControl: false,
-              controlledByThisExtension: false,
-              controlsPac: false,
-            },
-          }),
+          rpcHandler: async (method) => {
+            if (method === 'getPopupState') {
+              return externalState;
+            }
+            if (method === 'clearProxy') {
+              externalState = createPopupState({
+                proxyApplied: false,
+                proxyApplyStatus: 'cleared',
+                proxyControl: externalState.proxyControl,
+              });
+              return {
+                ok: true,
+                status: 'cleared',
+                cleanupStatus: 'deferred',
+              };
+            }
+            return {ok: true};
+          },
         });
         external.start();
         await flushUi();
         expect(external.root.textContent)
             .to.include('Proxy settings are controlled elsewhere');
         expect(findButton(external.root, 'Apply')).to.equal(null);
-        expect(findButton(external.root, 'Turn off extension proxy')).to.equal(null);
+        const turnOff = findButton(external.root, 'Turn off extension proxy');
+        expect(turnOff).to.exist;
         expect(getRadios(external.root, 'site-mode').every((radio) => radio.disabled))
             .to.equal(true);
+
+        await turnOff.onclick();
+        await flushUi();
+
+        expect(external.calls.map((call) => call.method)).to.include('clearProxy');
+        expect(external.root.textContent).to.include('Extension proxy is off');
+        expect(external.root.textContent)
+            .to.include('The external controller remains active');
+        expect(findButton(external.root, 'Turn off extension proxy')).to.equal(null);
 
       });
 
@@ -824,7 +853,7 @@ describe('MV3 popup UI', () => {
             .to.include('Proxy settings are controlled elsewhere');
         expect(findButton(harness.root, 'Apply')).to.equal(null);
         expect(findButton(harness.root, 'Retry')).to.equal(null);
-        expect(findButton(harness.root, 'Turn off extension proxy')).to.equal(null);
+        expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
         expect(getRadios(harness.root, 'site-mode').every((radio) => radio.disabled))
             .to.equal(true);
         details = findAll(harness.root, (node) =>
