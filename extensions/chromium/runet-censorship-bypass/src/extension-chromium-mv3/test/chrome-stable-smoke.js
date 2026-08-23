@@ -503,14 +503,14 @@ async function configureExtension(page, infrastructure) {
 
 async function assertRoute(session, infrastructure, scenario) {
 
-  const token = `${scenario.name}-${Date.now()}-${Math.random()}`;
+  const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const trafficStart = infrastructure.traffic.length;
   const page = await session.browser.newPage();
   try {
     await page.setCacheEnabled(false);
     const response = await page.goto(
         `http://${scenario.host}:${infrastructure.origin.port}/` +
-          `chrome-smoke?token=${encodeURIComponent(token)}`,
+          `chrome-smoke?token=${token}`,
         {
           timeout: CHROME_TIMEOUT_MS,
           waitUntil: 'domcontentloaded',
