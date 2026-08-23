@@ -3,6 +3,45 @@
 Use an unpacked MV3 build and a dedicated test proxy account. Never record the
 test password in screenshots, logs, issue text, or this checklist.
 
+## Automated Chrome Stable 407 coverage
+
+After `build:mv3`, the repository browser smoke uses installed Google Chrome
+Stable and local dynamic loopback infrastructure only:
+
+```powershell
+$Project = '.\extensions\chromium\runet-censorship-bypass'
+$env:CHROME_BIN = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+npm --prefix $Project run test:browser:mv3
+```
+
+The smoke configures own-proxy credentials through production RPC and proves
+from the actual HTTP proxy receivers:
+
+- an unauthenticated request, real Basic `407` challenge, expected authenticated
+  retry, deterministic success, and no direct-origin hit;
+- a different, previously unused proxy and credential after a full Chrome
+  restart with the same disposable profile;
+- an origin `401` receives neither `Authorization` nor `Proxy-Authorization`,
+  while RUCB records the non-proxy challenge as ignored;
+- mismatched host/port and passwordless proxy challengers receive no credential
+  from another configured endpoint and do not fall back to the origin;
+- wrong credentials produce bounded retries, the current `retry_limit` status,
+  no successful response, and no direct-origin hit; and
+- canary passwords and reusable Basic tokens remain absent from applied PAC,
+  RPC responses, popup/options DOM and password inputs, auth diagnostics,
+  extension console output, receiver logs, and test-visible errors.
+
+Receiver evidence stores only safe classifications such as `none`, `expected`,
+`known-wrong`, or `unexpected`; it never records a raw password or authorization
+header. Usernames remain intentionally editable in the options/RPC model and
+are not treated as password leaks.
+
+This automated case covers plain HTTP requests through an HTTP proxy. HTTPS
+destination `CONNECT` and TLS-to-proxy (`HTTPS` PAC scheme) remain separate
+follow-up coverage. The retry counter is worker memory: a full browser restart
+before a new proxy request is covered, but forced worker termination in the
+middle of one active `407` sequence is not.
+
 ## Settings and persistence
 
 - Configure one authenticated own proxy, close the settings page, then reopen
@@ -37,12 +76,17 @@ test password in screenshots, logs, issue text, or this checklist.
 
 ## Authentication
 
-- Trigger a real `webRequest.onAuthRequired` proxy challenge and confirm the
-  configured credentials authenticate successfully.
-- Confirm non-proxy challenges, an unmatched host/port, and retry-limit cases do
-  not receive credentials.
+- The automated smoke covers a real plain-HTTP `webRequest.onAuthRequired`
+  proxy challenge, non-proxy `401`, unmatched host/port, passwordless and retry-
+  limit cases.
+- For a manual cross-check, trigger the same flow with an authorized test proxy
+  and confirm the configured credentials authenticate without appearing in
+  DevTools, screenshots, or exported diagnostics.
 - Restart or suspend the service worker, retry authentication, and confirm the
-  durable credential still works without first opening an extension page.
+  durable credential still works without first opening an extension page. A
+  full Chrome restart before a previously unused proxy is automated; natural
+  suspension and forced mid-challenge termination remain manual/follow-up
+  boundaries.
 
 ## DevTools inspection
 

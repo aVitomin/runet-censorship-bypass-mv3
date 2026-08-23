@@ -80,16 +80,30 @@ npm --prefix $Project run test:browser:mv3
 `CHROME_BIN` — явный авторитетный override. Без него скрипт проверяет только
 несколько стандартных путей установки и никогда не скачивает браузер. Тест
 запускает собранное unpacked MV3-расширение в одноразовом профиле и поднимает
-локальные PAC, origin и два proxy на динамических loopback-портах. Через
-production RPC он сохраняет provider и PAC modifiers, применяет реальный
+локальные PAC, origin и proxy на динамических loopback-портах. Через production
+RPC он сохраняет provider и PAC modifiers, применяет реальный
 `chrome.proxy.settings` и проверяет фактические HTTP receivers для Auto, Proxy
-и Direct. Затем Chrome перезапускается с тем же профилем и повторяется один
-Proxy route для проверки startup recovery. Внешняя сеть не нужна; PAC исполняет
+и Direct. Тест также выполняет настоящий HTTP proxy authentication flow:
+первый запрос без credentials, ответ `407 Proxy Authentication Required`,
+`webRequest.onAuthRequired`, повторный запрос с ожидаемыми credentials и
+детерминированный ответ proxy. Второй, ранее не использованный authenticated
+proxy проверяется только после полного перезапуска Chrome с тем же профилем.
+
+Негативные browser cases подтверждают отказ передавать proxy credentials на
+обычный origin `401`, несовпадающий host/port и passwordless proxy, а также
+ограничение повторов при неверном пароле. Receiver logs хранят только безопасные
+классы (`none`, `expected`, `known-wrong`, `unexpected`); password и reusable
+Basic token дополнительно ищутся в PAC, RPC responses, DOM, diagnostics и
+errors. Smoke сохраняет существующую проверку external-controller takeover,
+deferred Turn off и restart persistence. Внешняя сеть не нужна; PAC исполняет
 сам Chrome, а не Node.
 
-Smoke не заменяет ручные проверки Chrome Stable: external-controller takeover,
-остановка worker через DevTools, upgrade существующего профиля и UI остаются в
-browser QA. Authenticated HTTP 407 proxy проверяется отдельной будущей задачей.
+Smoke не заменяет ручные проверки upgrade существующего профиля и полного UI.
+HTTPS destination `CONNECT`, TLS-to-proxy (`HTTPS` PAC scheme) и искусственное
+прерывание service worker посреди активного `407` остаются отдельными задачами.
+Счётчик auth retries хранится в памяти worker; тест проверяет его в одной
+непрерывной challenge sequence, но не обещает durability при forced mid-request
+worker termination.
 
 ### Полная MV3 verification
 
