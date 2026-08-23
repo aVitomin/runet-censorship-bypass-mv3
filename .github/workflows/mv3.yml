@@ -17,6 +17,7 @@ concurrency:
 
 env:
   CI: 'true'
+  CHROME_BIN: /usr/bin/google-chrome
 
 jobs:
   verify:
@@ -54,6 +55,9 @@ jobs:
 
       - name: Build MV3
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run build:mv3
+
+      - name: Run Chrome Stable MV3 browser smoke
+        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:browser:mv3
 
       - name: Run aggregate verification
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run verify
