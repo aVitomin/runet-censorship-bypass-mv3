@@ -373,6 +373,217 @@ describe('PAC apply freshness', () => {
     expect(harness.counts.proxySettingsWrites).to.equal(2);
   });
 
+  it('persists deferred Clear without touching another extension', async () => {
+    const harness = await createRuntimeHarness();
+    harness.setProxyDetails({
+      levelOfControl: 'controlled_by_other_extensions',
+      value: {mode: 'fixed_servers'},
+    });
+    harness.resetCounts();
+
+    const result = await harness.callRpc('clearProxy');
+
+    expect(result).to.include({
+      ok: true,
+      status: 'cleared',
+      cleanupStatus: 'deferred',
+    });
+    expect(harness.getState().proxyApply).to.include({
+      status: 'cleared',
+      levelOfControl: 'controlled_by_other_extensions',
+    });
+    expect(harness.getState().proxyApply.clearedAt).to.be.a('number');
+    expect(harness.counts.proxySettingsWrites).to.equal(0);
+    expect(harness.counts.proxySettingsClears).to.equal(0);
+    expect(harness.getProxyDetails()).to.deep.equal({
+      levelOfControl: 'controlled_by_other_extensions',
+      value: {mode: 'fixed_servers'},
+    });
+  });
+
+  it('persists deferred Clear without touching policy control', async () => {
+    const harness = await createRuntimeHarness();
+    harness.setProxyDetails({
+      levelOfControl: 'not_controllable',
+      value: {mode: 'fixed_servers'},
+    });
+    harness.resetCounts();
+
+    const result = await harness.callRpc('clearProxy');
+
+    expect(result).to.include({
+      ok: true,
+      status: 'cleared',
+      cleanupStatus: 'deferred',
+    });
+    expect(harness.getState().proxyApply.status).to.equal('cleared');
+    expect(harness.counts.proxySettingsWrites).to.equal(0);
+    expect(harness.counts.proxySettingsClears).to.equal(0);
+    expect(harness.getProxyDetails().levelOfControl).to.equal('not_controllable');
+  });
+
+  it('clears a resurfaced PAC exactly once after ownership release', async () => {
+    const harness = await createRuntimeHarness();
+    harness.setProxyDetails({
+      levelOfControl: 'controlled_by_other_extensions',
+      value: {mode: 'fixed_servers'},
+    });
+    await harness.callRpc('clearProxy');
+    harness.resetCounts();
+
+    await harness.changeProxyDetails({
+      levelOfControl: 'controlled_by_this_extension',
+      value: {
+        mode: 'pac_script',
+        pacScript: {data: 'resurfaced PAC', mandatory: false},
+      },
+    });
+
+    expect(harness.counts.proxySettingsWrites).to.equal(0);
+    expect(harness.counts.proxySettingsClears).to.equal(1);
+    expect(harness.getProxyDetails().value.mode).to.equal('direct');
+    expect(harness.getState().proxyApply).to.include({
+      status: 'cleared',
+      error: null,
+    });
+  });
+
+  it('catches ownership release during the durable Clear commit', async () => {
+    let ifReleaseOnClear = false;
+    const harness = await createRuntimeHarness({
+      onLocalStorageSet(values, proxy) {
+        if (
+          ifReleaseOnClear &&
+          values.mv3State &&
+          values.mv3State.proxyApply.status === 'cleared'
+        ) {
+          ifReleaseOnClear = false;
+          proxy.setProxyDetails({
+            levelOfControl: 'controlled_by_this_extension',
+            value: {
+              mode: 'pac_script',
+              pacScript: {data: 'resurfaced PAC', mandatory: false},
+            },
+          });
+        }
+      },
+    });
+    harness.setProxyDetails({
+      levelOfControl: 'controlled_by_other_extensions',
+      value: {mode: 'fixed_servers'},
+    });
+    harness.resetCounts();
+    ifReleaseOnClear = true;
+
+    const result = await harness.callRpc('clearProxy');
+
+    expect(result).to.include({
+      ok: true,
+      status: 'cleared',
+      cleanupStatus: 'complete',
+    });
+    expect(harness.counts.proxySettingsClears).to.equal(1);
+    expect(harness.getProxyDetails().value.mode).to.equal('direct');
+  });
+
+  it('keeps durable Clear after proxy ownership reads fail', async () => {
+    const harness = await createRuntimeHarness();
+    harness.resetCounts();
+    harness.failNextProxySettingsRead('Synthetic proxy read rejection.');
+
+    const result = await harness.callRpc('clearProxy');
+
+    expect(result).to.include({
+      ok: false,
+      status: 'error',
+      cleanupStatus: 'pending',
+    });
+    expect(result.error.code).to.equal('PROXY_READ_FAILED');
+    expect(harness.getState().proxyApply.status).to.equal('cleared');
+    expect(harness.getState().proxyApply.error.code)
+        .to.equal(result.error.code);
+    expect(harness.counts.proxySettingsClears).to.equal(0);
+  });
+
+  it('keeps durable Clear after settings.clear rejects', async () => {
+    const harness = await createRuntimeHarness();
+    harness.resetCounts();
+    harness.failNextProxySettingsClear('Synthetic proxy clear rejection.');
+
+    const result = await harness.callRpc('clearProxy');
+
+    expect(result).to.include({
+      ok: false,
+      status: 'error',
+      cleanupStatus: 'pending',
+    });
+    expect(result.error.code).to.equal('PROXY_CLEAR_FAILED');
+    expect(harness.getState().proxyApply.status).to.equal('cleared');
+    expect(harness.getState().proxyApply.error.code)
+        .to.equal(result.error.code);
+    expect(harness.counts.proxySettingsClears).to.equal(1);
+    expect(harness.getProxyDetails().value.mode).to.equal('pac_script');
+  });
+
+  it('accepts deferred Clear when ownership changes before clear', async () => {
+    const harness = await createRuntimeHarness();
+    harness.resetCounts();
+    const ownershipCheck = harness.blockProxySettingsRead(2);
+
+    const clear = harness.callRpc('clearProxy');
+    await ownershipCheck.started;
+    harness.setProxyDetails({
+      levelOfControl: 'controlled_by_other_extensions',
+      value: {mode: 'fixed_servers'},
+    });
+    ownershipCheck.release();
+    const result = await clear;
+
+    expect(result).to.include({
+      ok: true,
+      status: 'cleared',
+      cleanupStatus: 'deferred',
+    });
+    expect(harness.getState().proxyApply.status).to.equal('cleared');
+    expect(harness.counts.proxySettingsWrites).to.equal(0);
+    expect(harness.counts.proxySettingsClears).to.equal(0);
+    expect(harness.getProxyDetails().levelOfControl)
+        .to.equal('controlled_by_other_extensions');
+  });
+
+  it('lets a newer Apply supersede stale passive Clear cleanup', async () => {
+    const harness = await createRuntimeHarness();
+    harness.setProxyDetails({
+      levelOfControl: 'controlled_by_other_extensions',
+      value: {mode: 'fixed_servers'},
+    });
+    await harness.callRpc('clearProxy');
+    harness.setProxyDetails({
+      levelOfControl: 'controlled_by_this_extension',
+      value: {
+        mode: 'pac_script',
+        pacScript: {data: 'resurfaced PAC', mandatory: false},
+      },
+    });
+    harness.resetCounts();
+    const proxyControlRead = harness.blockProxySettingsRead(2);
+
+    const passiveCleanup = harness.audit.handleProxySettingsChanged();
+    await proxyControlRead.started;
+    const apply = harness.audit.applyCookedPacAndPersist({});
+    proxyControlRead.release();
+    const [, applyResult] = await Promise.all([
+      passiveCleanup,
+      apply,
+    ]);
+
+    expect(applyResult).to.include({ok: true, status: 'applied'});
+    expect(harness.counts.proxySettingsClears).to.equal(0);
+    expect(harness.counts.proxySettingsWrites).to.equal(1);
+    expect(harness.getState().proxyApply.status).to.equal('applied');
+    expect(harness.getProxyDetails().value.mode).to.equal('pac_script');
+  });
+
   it('rejects apply when a newer raw artifact becomes current before set', async () => {
     const harness = await createRuntimeHarness();
     harness.resetCounts();

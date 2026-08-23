@@ -92,6 +92,90 @@ Mocha.describe('MV3 startup proxy-ownership recovery', function() {
 
   });
 
+  Mocha.it('clears a live RUCB PAC for persisted cleared intent on startup',
+      async function() {
+
+        const state = await createAppliedState();
+        state.proxyApply.status = 'cleared';
+        state.proxyApply.clearedAt = state.proxyApply.appliedAt + 1;
+        const harness = await createRuntimeHarness({
+          initialProxyDetails: {
+            levelOfControl: 'controlled_by_this_extension',
+            value: {
+              mode: 'pac_script',
+              pacScript: {data: 'resurfaced PAC', mandatory: false},
+            },
+          },
+          initialState: state,
+          pacMods: state.pacMods,
+        });
+
+        Chai.expect(harness.counts.proxySettingsWrites).to.equal(0);
+        Chai.expect(harness.counts.proxySettingsClears).to.equal(1);
+        Chai.expect(harness.getProxyDetails().value.mode).to.equal('direct');
+        Chai.expect(harness.getState().proxyApply.status).to.equal('cleared');
+
+      });
+
+  Mocha.it('defers startup Clear under external ownership and reconciles release',
+      async function() {
+
+        const state = await createAppliedState();
+        state.proxyApply.status = 'cleared';
+        state.proxyApply.clearedAt = state.proxyApply.appliedAt + 1;
+        const harness = await createRuntimeHarness({
+          initialProxyDetails: {
+            levelOfControl: 'controlled_by_other_extensions',
+            value: {mode: 'fixed_servers'},
+          },
+          initialState: state,
+          pacMods: state.pacMods,
+        });
+
+        Chai.expect(harness.counts.proxySettingsWrites).to.equal(0);
+        Chai.expect(harness.counts.proxySettingsClears).to.equal(0);
+
+        await harness.changeProxyDetails({
+          levelOfControl: 'controlled_by_this_extension',
+          value: {
+            mode: 'pac_script',
+            pacScript: {data: 'resurfaced PAC', mandatory: false},
+          },
+        });
+
+        Chai.expect(harness.counts.proxySettingsWrites).to.equal(0);
+        Chai.expect(harness.counts.proxySettingsClears).to.equal(1);
+        Chai.expect(harness.getProxyDetails().value.mode).to.equal('direct');
+        Chai.expect(harness.getState().proxyApply.status).to.equal('cleared');
+
+      });
+
+  Mocha.it('finishes interrupted legacy clearing intent on startup',
+      async function() {
+
+        const state = await createAppliedState();
+        state.proxyApply.status = 'clearing';
+        state.proxyApply.clearedAt = null;
+        const harness = await createRuntimeHarness({
+          initialProxyDetails: {
+            levelOfControl: 'controlled_by_this_extension',
+            value: {
+              mode: 'pac_script',
+              pacScript: {data: 'resurfaced PAC', mandatory: false},
+            },
+          },
+          initialState: state,
+          pacMods: state.pacMods,
+        });
+
+        Chai.expect(harness.counts.proxySettingsWrites).to.equal(0);
+        Chai.expect(harness.counts.proxySettingsClears).to.equal(1);
+        Chai.expect(harness.getProxyDetails().value.mode).to.equal('direct');
+        Chai.expect(harness.getState().proxyApply.status).to.equal('cleared');
+        Chai.expect(harness.getState().proxyApply.clearedAt).to.be.a('number');
+
+      });
+
   Mocha.it('does not restore without a previous successful Apply',
       async function() {
 
@@ -202,9 +286,9 @@ Mocha.describe('MV3 startup proxy-ownership recovery', function() {
 
     Chai.expect(result).to.include({ok: true, status: 'cleared'});
     Chai.expect(harness.getState().proxyApply.status).to.equal('cleared');
-    Chai.expect(harness.getProxyDetails().value.mode).to.equal('direct');
+    Chai.expect(harness.getProxyDetails().value.mode).to.equal('system');
     Chai.expect(harness.counts.proxySettingsWrites).to.equal(0);
-    Chai.expect(harness.counts.proxySettingsClears).to.equal(1);
+    Chai.expect(harness.counts.proxySettingsClears).to.equal(0);
 
   });
 

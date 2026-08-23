@@ -802,6 +802,7 @@ describe('MV3 options UI', function() {
         expect(cleared.root.textContent).to.include('Extension proxy is off');
         expect(findButton(cleared.root, 'Apply configuration')).to.exist;
         const externalSnapshot = createSnapshot();
+        externalSnapshot.state.proxyApply = {status: 'idle'};
         externalSnapshot.state.proxyControl = {
           levelOfControl: 'controlled_by_other_extensions',
           canControl: false,
@@ -809,11 +810,41 @@ describe('MV3 options UI', function() {
         };
         externalSnapshot.proxy.proxyControl =
           externalSnapshot.state.proxyControl;
-        const external = await createHarness({snapshot: externalSnapshot});
+        externalSnapshot.proxy.proxyApply = externalSnapshot.state.proxyApply;
+        const external = await createHarness({
+          snapshot: externalSnapshot,
+          rpcHandler: async (method) => {
+            if (method === 'getState') {
+              return externalSnapshot;
+            }
+            if (method === 'clearProxy') {
+              externalSnapshot.state.proxyApply = {status: 'cleared'};
+              externalSnapshot.proxy.proxyApply =
+                externalSnapshot.state.proxyApply;
+              return {
+                ok: true,
+                status: 'cleared',
+                cleanupStatus: 'deferred',
+              };
+            }
+            return {ok: true};
+          },
+        });
         expect(external.root.textContent).to.include(
             'Proxy settings are controlled elsewhere',
         );
         expect(findButton(external.root, 'Apply configuration')).not.to.exist;
+        const turnOff = findButton(external.root, 'Turn off extension proxy');
+        expect(turnOff).to.exist;
+
+        await turnOff.onclick();
+        await flush();
+
+        expect(external.calls.map((call) => call.method)).to.include('clearProxy');
+        expect(external.root.textContent).to.include('Extension proxy is off');
+        expect(external.root.textContent).to.include(
+            'The external proxy controller remains active',
+        );
         expect(findButton(external.root, 'Turn off extension proxy')).not.to.exist;
 
       });
@@ -837,7 +868,7 @@ describe('MV3 options UI', function() {
             'Proxy settings are controlled elsewhere',
         );
         expect(findButton(harness.root, 'Apply configuration')).not.to.exist;
-        expect(findButton(harness.root, 'Turn off extension proxy')).not.to.exist;
+        expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
         expect(harness.calls.filter((call) => call.method === 'getState'))
             .to.have.length(2);
 

@@ -403,6 +403,36 @@ Mocha.describe('MV3 runtime performance operation counts', function() {
 
       });
 
+  Mocha.it('keeps periodic refresh and health supervision off after Clear',
+      async function() {
+
+        const harness = await createRuntimeHarness();
+        harness.setProxyDetails({
+          levelOfControl: 'controlled_by_other_extensions',
+          value: {mode: 'fixed_servers'},
+        });
+        await harness.callRpc('clearProxy');
+        harness.resetCounts();
+        harness.setDownloadResult(harness.createDownloadResult(RAW_PAC));
+
+        const periodic = await harness.audit.executePeriodicUpdatePipeline({
+          trigger: 'audit',
+          applyIfSafe: true,
+        });
+        await harness.audit.reconcileProxyHealthSupervisor({
+          startupDelay: false,
+        });
+
+        Chai.expect(periodic.autoApply).to.include({
+          allowed: false,
+          status: 'skipped',
+        });
+        Chai.expect(harness.getState().proxyApply.status).to.equal('cleared');
+        Chai.expect(harness.counts.proxySettingsWrites).to.equal(0);
+        Chai.expect(harness.counts.proxySettingsClears).to.equal(0);
+
+      });
+
   Mocha.it('clears both PAC artifacts and refreshes status without proxy writes',
       async function() {
 

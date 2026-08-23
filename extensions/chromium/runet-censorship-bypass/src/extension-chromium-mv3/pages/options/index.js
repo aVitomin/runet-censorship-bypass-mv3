@@ -845,13 +845,18 @@
           .includes(control.levelOfControl);
     const busyStatus = String(apply.status || 'idle');
     if (external) {
+      const ifCleared = busyStatus === 'cleared';
       return {
         kind: 'external',
         tone: 'error',
-        title: t('popupControlExternal'),
-        help: t('popupControlExternalHelp'),
+        title: t(ifCleared ? 'popupControlOff' : 'popupControlExternal'),
+        help: t(ifCleared ?
+          'popupControlExternalClearedHelp' :
+          'popupControlExternalHelp'),
         controlsPac: false,
         external: true,
+        clearAvailable: busyStatus !== 'cleared',
+        clearDeferred: ifCleared,
         busy: false,
         stale: Boolean(stale.stale),
       };
@@ -3745,8 +3750,23 @@
       return;
     }
     if (view.external) {
-      appendText(copy, 'strong', t('popupControlExternal'));
-      appendText(copy, 'span', t('optionsExternalActionHelp'));
+      appendText(copy, 'strong', view.title);
+      appendText(
+          copy,
+          'span',
+          t(view.clearDeferred ?
+            'popupControlExternalClearedHelp' :
+            'optionsExternalActionHelp'),
+      );
+      if (view.clearAvailable) {
+        const clear = createButton(
+            buttons,
+            t('popupTurnOffProxy'),
+            '',
+            t('popupClearing'),
+        );
+        clear.onclick = () => clearConfiguration(clear);
+      }
       const refreshButton = createButton(
           buttons,
           t('optionsCheckAgain'),
@@ -3888,7 +3908,9 @@
     );
     if (result) {
       await refresh({
-        message: t('optionsConfigurationTurnedOff'),
+        message: t(result.cleanupStatus === 'deferred' ?
+          'popupProxyClearDeferred' :
+          'optionsConfigurationTurnedOff'),
         tone: 'success',
       });
     }

@@ -1412,7 +1412,10 @@ function initializeAutomaticPacUpdates(trigger) {
 async function recoverActionStatusOnWorkerStart() {
 
   const refreshed = await refreshProxyControlAndPersistWithState();
-  const ownership = await reconcileProxyOwnershipOnWorkerStart(refreshed.state);
+  const cleared = await reconcileDurableProxyClearIntent(refreshed.state);
+  const ownership = await reconcileProxyOwnershipOnWorkerStart(
+      cleared.state || refreshed.state,
+  );
   const state = await initializeProxyHealthSupervisor(
       'service-worker-startup',
       ownership.state,
@@ -3837,7 +3840,7 @@ async function handleProxySettingsChanged() {
 
   const previous = await mv3State.loadState();
   const refreshed = await refreshProxyControlAndPersistWithState();
-  const proxyControl = refreshed.proxyControl;
+  let proxyControl = refreshed.proxyControl;
   let state = refreshed.state;
   if (
     previous.proxyControl &&
@@ -3849,6 +3852,11 @@ async function handleProxySettingsChanged() {
         'Proxy control changed',
         'This extension cannot control Chromium proxy settings.',
     );
+  }
+  const cleared = await reconcileDurableProxyClearIntent(state);
+  if (cleared.state) {
+    state = cleared.state;
+    proxyControl = state.proxyControl;
   }
   if (
     proxyControl.controlledByThisExtension !== true ||
@@ -4247,82 +4255,299 @@ function clearProxyAndPersist(
 
 async function clearProxyAndPersistForOperation() {
 
-  const state = await mv3State.loadState();
-  const control = await refreshProxyControlAndPersist();
+  const committed = await persistAuthoritativeProxyClearIntent();
+  return reconcileDurableProxyClearIntentForOperation(committed.authorization);
+
+}
+
+function ifStateHasDurableProxyClearIntent(state) {
+
+  const status = state && state.proxyApply && state.proxyApply.status;
+  return status === 'cleared' || status === 'clearing';
+
+}
+
+function createProxyClearAuthorization(state) {
+
+  const proxyApply = state.proxyApply || {};
+  return Object.freeze({
+    clearedAt: proxyApply.clearedAt || null,
+    cookedPacSha256: proxyApply.cookedPacSha256 || null,
+    pacWorkflowGeneration: state.pacWorkflowGeneration,
+    providerKey: proxyApply.providerKey || null,
+  });
+
+}
+
+function ifProxyClearAuthorizationMatches(authorization, state) {
+
+  const proxyApply = state && state.proxyApply || {};
+  return Boolean(
+      authorization &&
+      proxyApply.status === 'cleared' &&
+      proxyApply.clearedAt === authorization.clearedAt &&
+      proxyApply.providerKey === authorization.providerKey &&
+      proxyApply.cookedPacSha256 === authorization.cookedPacSha256 &&
+      state.pacWorkflowGeneration === authorization.pacWorkflowGeneration,
+  );
+
+}
+
+async function persistAuthoritativeProxyClearIntent() {
+
+  const clearedAt = Date.now();
+  const state = await mv3State.updateStateAtomically((currentState) => ({
+    proxyApply: createProxyApplyState('cleared', {
+      providerKey: currentState.currentPacProviderKey,
+      cookedPacSha256: currentState.cookedPacCache.cookedPacSha256,
+      clearedAt,
+      levelOfControl: currentState.proxyControl.levelOfControl,
+    }),
+    proxyHealth: mv3State.createInvalidatedProxyHealth(currentState.proxyHealth),
+  }));
+  return {
+    authorization: createProxyClearAuthorization(state),
+    state,
+  };
+
+}
+
+async function normalizeInterruptedProxyClearIntent() {
+
+  let ifClearIntent = false;
+  const normalizedAt = Date.now();
+  const state = await mv3State.updateStateAtomically((currentState) => {
+    if (!ifStateHasDurableProxyClearIntent(currentState)) {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    ifClearIntent = true;
+    if (currentState.proxyApply.status === 'cleared') {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    const proxyApply = currentState.proxyApply;
+    return {
+      proxyApply: createProxyApplyState('cleared', {
+        providerKey: proxyApply.providerKey,
+        cookedPacSha256: proxyApply.cookedPacSha256,
+        clearedAt: proxyApply.clearedAt || normalizedAt,
+        levelOfControl: currentState.proxyControl.levelOfControl,
+        error: proxyApply.error,
+        warnings: proxyApply.warnings,
+      }),
+      proxyHealth: mv3State.createInvalidatedProxyHealth(currentState.proxyHealth),
+    };
+  });
+  return {
+    authorization: ifClearIntent ? createProxyClearAuthorization(state) : null,
+    state,
+  };
+
+}
+
+async function saveProxyClearOutcome(authorization, proxyControl, error = null) {
+
+  let ifSaved = false;
+  const state = await mv3State.updateStateAtomically((currentState) => {
+    if (!ifProxyClearAuthorizationMatches(authorization, currentState)) {
+      return mv3State.ATOMIC_NO_CHANGE;
+    }
+    ifSaved = true;
+    const proxyApply = currentState.proxyApply;
+    return {
+      proxyApply: createProxyApplyState('cleared', {
+        providerKey: proxyApply.providerKey,
+        cookedPacSha256: proxyApply.cookedPacSha256,
+        clearedAt: proxyApply.clearedAt,
+        levelOfControl: proxyControl.levelOfControl,
+        error,
+        warnings: proxyApply.warnings,
+      }),
+    };
+  });
+  return {ifSaved, state};
+
+}
+
+function createProxyClearStaleResult(state) {
+
+  return {
+    ok: false,
+    status: 'stale',
+    cleanupStatus: 'skipped',
+    proxyApply: state.proxyApply,
+    proxyControl: state.proxyControl,
+    error: PAC_APPLY_STALE_ERROR,
+  };
+
+}
+
+async function createProxyClearFailure(
+    authorization,
+    proxyControl,
+    error,
+) {
+
+  const saved = await saveProxyClearOutcome(
+      authorization,
+      proxyControl,
+      error,
+  );
+  if (!saved.ifSaved) {
+    return createProxyClearStaleResult(saved.state);
+  }
+  const proxyApply = saved.state.proxyApply;
+  return Object.assign(
+      createProxyFailure(error.code, error.message, {
+        providerKey: proxyApply.providerKey,
+        cookedPacSha256: proxyApply.cookedPacSha256,
+        details: error.details,
+      }),
+      {
+        cleanupStatus: 'pending',
+        proxyApply,
+        proxyControl,
+      },
+  );
+
+}
+
+async function createProxyClearSuccess(
+    authorization,
+    proxyControl,
+    cleanupStatus,
+) {
+
+  const saved = await saveProxyClearOutcome(authorization, proxyControl);
+  if (!saved.ifSaved) {
+    return createProxyClearStaleResult(saved.state);
+  }
+  return {
+    ok: true,
+    status: 'cleared',
+    cleanupStatus,
+    proxyApply: saved.state.proxyApply,
+    proxyControl,
+  };
+
+}
+
+async function reconcileDurableProxyClearIntentForOperation(authorization) {
+
+  const refreshed = await refreshProxyControlAndPersistWithState();
+  const control = refreshed.proxyControl;
+  if (!ifProxyClearAuthorizationMatches(authorization, refreshed.state)) {
+    return createProxyClearStaleResult(refreshed.state);
+  }
   if (control.error && !control.canControl) {
-    return persistProxyFailure(
-        control.error.code || 'PROXY_READ_FAILED',
-        control.error.message || 'Failed to read proxy settings.',
-        {
-          providerKey: state.currentPacProviderKey,
-          cookedPacSha256: state.cookedPacCache.cookedPacSha256,
-          details: control.error.details,
-        },
+    return createProxyClearFailure(
+        authorization,
+        control,
+        normalizeProxyError(
+            control.error,
+            'PROXY_READ_FAILED',
+            'Failed to read proxy settings.',
+        ),
     );
   }
   if (!control.canControl) {
-    return persistProxyFailure(
-        'PROXY_NOT_CONTROLLABLE',
-        'This extension cannot control Chromium proxy settings.',
-        {
-          providerKey: state.currentPacProviderKey,
-          cookedPacSha256: state.cookedPacCache.cookedPacSha256,
-          details: {
-            levelOfControl: control.levelOfControl,
-            error: control.error,
-          },
-        },
-    );
+    return createProxyClearSuccess(authorization, control, 'deferred');
   }
-
-  await mv3State.setProxyApplyState(createProxyApplyState('clearing', {
-    providerKey: state.currentPacProviderKey,
-    cookedPacSha256: state.cookedPacCache.cookedPacSha256,
-    levelOfControl: control.levelOfControl,
-  }));
+  if (
+    control.controlledByThisExtension !== true ||
+    !control.rawValue ||
+    control.rawValue.mode !== 'pac_script'
+  ) {
+    return createProxyClearSuccess(authorization, control, 'complete');
+  }
 
   try {
     await mv3ProxySettings.clearProxySettings();
-    const clearedAt = Date.now();
-    const proxyControl = await refreshProxyControlAndPersist();
-    const proxyApply = await mv3State.setProxyApplyState(
-        createProxyApplyState('cleared', {
-          providerKey: state.currentPacProviderKey,
-          cookedPacSha256: state.cookedPacCache.cookedPacSha256,
-          clearedAt,
-          levelOfControl: proxyControl.levelOfControl,
-        }),
+    const confirmed = await refreshProxyControlAndPersistWithState();
+    if (!ifProxyClearAuthorizationMatches(authorization, confirmed.state)) {
+      return createProxyClearStaleResult(confirmed.state);
+    }
+    if (confirmed.proxyControl.error && !confirmed.proxyControl.canControl) {
+      return createProxyClearFailure(
+          authorization,
+          confirmed.proxyControl,
+          normalizeProxyError(
+              confirmed.proxyControl.error,
+              'PROXY_READ_FAILED',
+              'Failed to confirm cleared proxy settings.',
+          ),
+      );
+    }
+    if (
+      confirmed.proxyControl.controlledByThisExtension === true &&
+      confirmed.proxyControl.rawValue &&
+      confirmed.proxyControl.rawValue.mode === 'pac_script'
+    ) {
+      throw createStructuredError(
+          'PROXY_CLEAR_UNCONFIRMED',
+          'Chromium still reports this extension controlling a PAC after Clear.',
+          {levelOfControl: confirmed.proxyControl.levelOfControl},
+      );
+    }
+    return createProxyClearSuccess(
+        authorization,
+        confirmed.proxyControl,
+        'complete',
     );
-    await mv3State.resetProxyHealth();
-    return {
-      ok: true,
-      status: 'cleared',
-      proxyApply,
-      proxyControl,
-    };
   } catch (err) {
     const error = normalizeProxyError(
         err,
         'PROXY_CLEAR_FAILED',
         'Failed to clear proxy settings.',
     );
-    const proxyApply = await mv3State.setProxyApplyState(
-        createProxyApplyState('error', {
-          providerKey: state.currentPacProviderKey,
-          cookedPacSha256: state.cookedPacCache.cookedPacSha256,
-          levelOfControl: control.levelOfControl,
-          error,
-        }),
-    );
-    return Object.assign(
-        createProxyFailure(error.code, error.message, {
-          providerKey: state.currentPacProviderKey,
-          cookedPacSha256: state.cookedPacCache.cookedPacSha256,
-          details: error.details,
-        }),
-        {proxyApply},
+    const latest = await refreshProxyControlAndPersistWithState();
+    if (!ifProxyClearAuthorizationMatches(authorization, latest.state)) {
+      return createProxyClearStaleResult(latest.state);
+    }
+    if (
+      error.code === 'PROXY_NOT_CONTROLLABLE' &&
+      !latest.proxyControl.error &&
+      latest.proxyControl.canControl === false
+    ) {
+      return createProxyClearSuccess(
+          authorization,
+          latest.proxyControl,
+          'deferred',
+      );
+    }
+    return createProxyClearFailure(
+        authorization,
+        latest.proxyControl,
+        error,
     );
   }
+
+}
+
+function reconcileDurableProxyClearIntent(candidateState = null) {
+
+  if (candidateState && !ifStateHasDurableProxyClearIntent(candidateState)) {
+    return Promise.resolve({
+      ok: true,
+      status: 'skipped',
+      state: candidateState,
+    });
+  }
+  return enqueuePacProxyOperation(async () => {
+    const normalized = await normalizeInterruptedProxyClearIntent();
+    if (!normalized.authorization) {
+      return {
+        ok: true,
+        status: 'skipped',
+        state: normalized.state,
+      };
+    }
+    const result = await reconcileDurableProxyClearIntentForOperation(
+        normalized.authorization,
+    );
+    return Object.assign({}, result, {
+      state: await mv3State.loadState(),
+    });
+  });
 
 }
 

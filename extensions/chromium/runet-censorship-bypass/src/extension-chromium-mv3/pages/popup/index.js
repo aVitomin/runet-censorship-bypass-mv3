@@ -404,7 +404,7 @@
       ifActionAdded = true;
     }
 
-    if (controlsPac(state)) {
+    if (canTurnOffProxy(state)) {
       const clearButton = appendButton(
           actions,
           t('popupTurnOffProxy'),
@@ -425,7 +425,6 @@
 
     return Boolean(
         busyOperation ||
-        presentation.kind === 'external' ||
         ['applying', 'clearing', 'updating', 'checking']
             .includes(presentation.kind),
     );
@@ -434,6 +433,9 @@
 
   function getPrimaryAction(state, operation) {
 
+    if (isExternallyControlled(state)) {
+      return '';
+    }
     if (canRetryOperation(operation)) {
       return 'retry';
     }
@@ -871,11 +873,14 @@
       return getBusyPresentation(activeBusy);
     }
     if (isExternallyControlled(state)) {
+      const ifCleared = state.proxyApplyStatus === 'cleared';
       return createPresentation(
           'external',
           'warning',
-          'popupControlExternal',
-          t('popupControlExternalHelp'),
+          ifCleared ? 'popupControlOff' : 'popupControlExternal',
+          t(ifCleared ?
+            'popupControlExternalClearedHelp' :
+            'popupControlExternalHelp'),
           'popupStatusExternalPill',
       );
     }
@@ -1014,6 +1019,16 @@
 
     const control = state.proxyControl || {};
     return state.proxyApplied === true || control.controlsPac === true;
+
+  }
+
+  function canTurnOffProxy(state) {
+
+    if (controlsPac(state)) {
+      return true;
+    }
+    return isExternallyControlled(state) &&
+      state.proxyApplyStatus !== 'cleared';
 
   }
 
@@ -1330,7 +1345,7 @@
 
   async function clearProxy() {
 
-    if (busyOperation || isExternallyControlled(latestState)) {
+    if (busyOperation) {
       return;
     }
     busyOperation = 'clear';
@@ -1345,7 +1360,9 @@
         kind: 'clear',
         message: result.ok === false ?
           t('popupClearProxyFailed') :
-          t('popupProxyCleared'),
+          t(result.cleanupStatus === 'deferred' ?
+            'popupProxyClearDeferred' :
+            'popupProxyCleared'),
       }, result);
       if (result.ok !== false) {
         draft = createDraft(latestState);

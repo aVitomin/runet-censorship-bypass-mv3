@@ -47,6 +47,9 @@
   "popupControlExternalHelp": {
     "message": "Another extension or browser policy controls proxy settings. This extension will not override that ownership."
   },
+  "popupControlExternalClearedHelp": {
+    "message": "This extension is turned off. The external controller remains active; any latent extension PAC will be removed when control returns."
+  },
   "popupControlApplying": {
     "message": "Applying changes…"
   },
@@ -448,6 +451,9 @@
   },
   "popupProxyCleared": {
     "message": "Proxy cleared. Browser proxy mode returned to system."
+  },
+  "popupProxyClearDeferred": {
+    "message": "Extension proxy turned off. The external proxy controller remains active."
   },
   "optionsLanguage": {
     "message": "Language"
@@ -1518,7 +1524,7 @@
     "message": "Unsaved edits discarded."
   },
   "optionsExternalActionHelp": {
-    "message": "Resolve the other extension or policy before applying this configuration."
+    "message": "You can turn off this extension without changing the other extension or policy. Resolve external control before applying."
   },
   "optionsCheckAgain": {
     "message": "Check again"
