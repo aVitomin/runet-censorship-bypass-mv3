@@ -6,12 +6,13 @@ This fork keeps the legacy Runet Censorship Bypass extension while developing a 
 
 - Extension tooling root: `extensions/chromium/runet-censorship-bypass`.
 - MV3 runtime: `src/extension-chromium-mv3`; `background/service-worker.js` is the entry point and `pages/` is the MV3 UI.
+- Instruction routing: before modifying files under `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3/background/`, read and follow its `AGENTS.md`; before modifying files under `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3/pages/`, read and follow its `AGENTS.md`. Do this even when Codex starts from the repository root.
 - Shared inputs: selected icons, locales, and page libraries under `src/extension-common`. Gulp deliberately excludes the legacy common background scripts and page implementations from MV3.
 - Legacy MV2: `src/extension-common` plus `src/extension-full` or `src/extension-mini`; beta also uses full sources with a separate template context.
 - Build/version authority: `src/templates-data.js`, `gulpfile.js`, and the manifest templates. The repository intentionally has no root npm package: never run `npm install`, `npm ci`, or npm scripts at the repository root; scope every package command to the authoritative `extensions/chromium/runet-censorship-bypass` package.
 - Generated/local-only context: any `node_modules`, `build`, `dist`, `coverage`, `.tmp`, browser profile, archive, log, or options-page `dist`. Do not broadly inspect vendored/minified Ace files.
 
-From the repository root in PowerShell:
+When required by the change rules below, run these commands from the repository root in PowerShell:
 
 ```powershell
 $Project = '.\extensions\chromium\runet-censorship-bypass'
@@ -22,6 +23,13 @@ npm --prefix $Project run verify:mv3
 ```
 
 Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only when extension dependencies are missing. A functional legacy options bundle additionally needs `npm ci --prefix "$Project\src\extension-common\pages\options"` followed by `npm --prefix "$Project\src\extension-common\pages\options" run build`. `build:mv2` deletes the complete `build` directory, so always build MV2 before the final MV3 build. Whole-tree `npm run lint` has pre-existing legacy failures; use the focused `lint:mv3` check for MV3 work and report the legacy baseline rather than reformatting it.
+
+## Coding approach
+
+- Resolve uncertainty from code, tests, and current documentation. Ask for clarification only when remaining ambiguity would materially affect behavior, security, stored data, release scope, or a destructive action; otherwise make a reasonable low-risk assumption and surface it only when it affects the approach or result.
+- For non-trivial work, use observable success criteria to guide implementation and verification. State them only when they help align scope or explain the evidence.
+- Prefer the simplest solution that fully meets the requirement and fits the existing architecture. Add features, configuration, flexibility, or abstractions only for a demonstrated requirement or design need.
+- Make focused changes and preserve unrelated behavior and user work. Do not reformat legacy files, regenerate lockfiles unnecessarily, or alter production behavior as cleanup.
 
 ## Documentation and release ownership
 
@@ -46,11 +54,10 @@ Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only 
 
 ## Change rules and required checks
 
-- Keep changes focused; do not reformat legacy files, regenerate lockfiles unnecessarily, or modify production behavior as cleanup.
 - PAC/routing/candidate changes: use `$pac-regression`, run `test:pac` and `test:mv3`, and add semantic cases when behavior changes.
 - MV3 permissions, service worker, downloads, storage, auth, migration, external requests, or proxy errors: use `$mv3-security-review`, run `lint:mv3`, `test:mv3`, and `build:mv3`; identify real-browser QA.
 - Shared/template/gulp/MV2 changes: run the full tests and `build:mv2`, then rebuild MV3. Report when the legacy options bundle could not be rebuilt.
 - MV3 UI/localization changes: update both `en` and `ru`, build MV3, and manually check affected controls. Never render stored values with HTML injection sinks.
 - Agent/docs-only changes: run `node ./scripts/verify-docs.mjs`, validate skill frontmatter/paths when relevant, and run `git diff --check`; do not claim product checks were necessary if no runtime file changed.
 
-Done means the relevant tests and builds actually ran, the complete diff was reviewed, generated/profile/secret material is neither staged nor packaged, unrelated changes remain intact, and browser-dependent gaps are named. Report files changed, commands with pass/fail, security/routing impact, remaining product issues, generated artifacts, and final `git status --short`. Never commit, push, publish, or upload unless separately authorized.
+Before calling work complete, review the complete relevant diff and run the checks required above. If a required check cannot run, report the work as incomplete and explain why. Confirm that generated/profile/secret material is neither staged nor packaged, preserve unrelated changes, and name browser-dependent gaps. Report changed files and checks with pass/fail results; mention security/routing impact, unresolved product issues, generated artifacts, and browser QA only when relevant. Include final `git status --short`. Never commit, push, publish, or upload unless separately authorized.

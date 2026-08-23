@@ -1,9 +1,11 @@
 ---
 name: release-candidate
-description: Prepare or audit a local Chromium MV3 release candidate for this repository, including version consistency, tests, MV3 and relevant MV2 builds, packaging, hashing, secret/private-URL checks, staged-output checks, and a release summary; do not trigger for ordinary development builds or when no release artifact is requested.
+description: Prepare or audit a local Chromium MV3 release preflight for this repository, including version consistency, tests, MV3 and relevant MV2 builds, local packaging, hashing, secret/private-URL checks, staged-output checks, and a release summary; do not trigger for ordinary development builds or when no release artifact is requested.
 ---
 
-# Release candidate
+# Local release preflight
+
+This workflow produces a local preflight artifact only. Its locally built and packaged archive is not the canonical public release artifact and must not be published as one. Every public beta or release must follow `docs/development/RELEASE_PROCESS.md` and use the exact artifact from successful trusted-main CI for the validated `main` commit.
 
 Work from the repository root, set `$Project = '.\extensions\chromium\runet-censorship-bypass'`, and read `AGENTS.md`. Do not commit, publish, upload, clean user changes, overwrite an existing archive, or reveal matched secret/private URL values.
 
@@ -17,7 +19,7 @@ Work from the repository root, set `$Project = '.\extensions\chromium\runet-cens
    npm --prefix $Project run build:mv3
    ```
 
-3. Validate `$Project\build\extension-chromium-mv3\manifest.json`, derive a new archive name from its version, and package the contents of that build directory at archive root with PowerShell `Compress-Archive`. Confirm `manifest.json` is at archive root and calculate SHA-256 with `Get-FileHash`.
+3. Validate `$Project\build\extension-chromium-mv3\manifest.json`, derive a new local archive name from its version, and package the contents of that build directory at archive root with PowerShell `Compress-Archive`. Confirm `manifest.json` is at archive root and calculate SHA-256 with `Get-FileHash`.
 4. If the ignored legacy options bundle is unavailable, report that the MV2 result was copy/template sanity only; do not call it a functional legacy UI build. Rebuild that bundle with its existing nested lockfile when legacy/shared changes require it.
 5. Scan staged paths, generated output, and the archive without printing matched values. Reject dependency, cache, profile, log, environment, key, coverage, nested build/dist, secret, credential, or private-URL material.
-6. Return version/version-name, archive path relative to the project, SHA-256, commands and results, dirty-tree state, legacy-build scope, a concise change/security summary, and remaining browser QA. Browser QA includes load-unpacked startup/restart, provider refresh without auto-enable, Proxy/Auto/Direct, real Tor and authenticated proxy behavior, proxy errors/takeover, IndexedDB persistence, and upgraded-profile migration.
+6. Return version/version-name, local preflight archive path relative to the project, SHA-256, commands and results, dirty-tree state, legacy-build scope, a concise change/security summary, and remaining browser QA. Label the archive as local preflight output, not a public release source. Browser QA includes load-unpacked startup/restart, provider refresh without auto-enable, Proxy/Auto/Direct, real Tor and authenticated proxy behavior, proxy errors/takeover, IndexedDB persistence, and upgraded-profile migration.
