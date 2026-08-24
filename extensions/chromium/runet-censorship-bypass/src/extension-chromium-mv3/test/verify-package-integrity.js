@@ -22,8 +22,8 @@ const COMMON_SOURCE_ROOT = Path.resolve(
     'extension-common',
 );
 const MV3_LOCALES = Object.freeze(['en', 'ru']);
-const EXPECTED_MV3_VERSION = '0.0.2.1';
-const EXPECTED_MV3_VERSION_NAME = '0.0.2.01';
+const EXPECTED_MV3_VERSION = '0.0.2.2';
+const EXPECTED_MV3_VERSION_NAME = '0.0.2.02';
 
 const ALLOWED_RUNTIME_DIRECTORIES = new Set([
   'background/vendor/tldts/dist',
