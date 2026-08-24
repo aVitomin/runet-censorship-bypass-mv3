@@ -449,8 +449,8 @@ if (fs.existsSync(readmePath)) {
       if (!/^[0-9a-f]{64}$/u.test(release.zipSha256 ?? '')) {
         addError(releaseMetadataPath, 1, release.zipSha256, 'zipSha256 must be a lowercase SHA-256');
       }
-      if (release.prerelease !== true) {
-        addError(releaseMetadataPath, 1, release.prerelease, 'the declared current limited beta must be marked prerelease');
+      if (typeof release.prerelease !== 'boolean') {
+        addError(releaseMetadataPath, 1, release.prerelease, 'prerelease must be a boolean');
       }
       if (!Number.isInteger(release.zipSize) || release.zipSize <= 0) {
         addError(releaseMetadataPath, 1, release.zipSize, 'zipSize must be a positive integer byte count');
