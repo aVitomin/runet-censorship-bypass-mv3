@@ -10,10 +10,25 @@
     ['routing-sources', 'optionsNavRoutingSources'],
     ['site-rules', 'optionsNavSiteRules'],
     ['proxy-methods', 'optionsNavProxyMethods'],
-    ['updates-health', 'optionsNavUpdatesHealth'],
-    ['diagnostics', 'optionsNavDiagnostics'],
+    ['maintenance', 'optionsNavMaintenance'],
     ['advanced', 'optionsNavAdvanced'],
+    ['about', 'optionsAbout'],
   ]);
+  const HASH_ALIASES = Object.freeze({
+    'updates-health': Object.freeze({
+      section: 'maintenance',
+      focusId: 'maintenance-updates-heading',
+    }),
+    'updates': Object.freeze({
+      section: 'maintenance',
+      focusId: 'maintenance-updates-heading',
+    }),
+    'diagnostics': Object.freeze({
+      section: 'maintenance',
+      focusId: 'maintenance-diagnostics-heading',
+      openDisclosure: 'diagnostics-expert',
+    }),
+  });
   const LEGACY_MIGRATION_FIELDS = Object.freeze([
     ['currentPacProviderKey', 'popupPacProvider'],
     ['pacUpdatePeriodInMinutes', 'optionsPacUpdatePeriod'],
@@ -532,7 +547,7 @@
     state.listenersInstalled = true;
     if (typeof window.addEventListener === 'function') {
       window.addEventListener('hashchange', () => {
-        activateSection(getSectionFromHash(), true);
+        activateHashTarget(true);
       });
       window.addEventListener('beforeunload', (event) => {
         if (!hasDirtyDrafts()) {
@@ -571,16 +586,24 @@
 
   }
 
-  function getSectionFromHash() {
+  function getHashTarget() {
 
     const section = String(window.location.hash || '').replace(/^#/, '');
-    return NAV_ITEMS.some((item) => item[0] === section) ?
-      section :
-      'overview';
+    if (NAV_ITEMS.some((item) => item[0] === section)) {
+      return {section};
+    }
+    return HASH_ALIASES[section] || {section: 'overview'};
 
   }
 
-  function activateSection(sectionId, moveFocus) {
+  function activateHashTarget(moveFocus) {
+
+    const target = getHashTarget();
+    activateSection(target.section, moveFocus, target);
+
+  }
+
+  function activateSection(sectionId, moveFocus, target = {}) {
 
     const next = NAV_ITEMS.some((item) => item[0] === sectionId) ?
       sectionId :
@@ -600,8 +623,19 @@
     if (select) {
       select.value = next;
     }
+    if (target.openDisclosure) {
+      state.openDisclosures.add(target.openDisclosure);
+      const details = root.querySelector(
+          `[data-disclosure-key="${target.openDisclosure}"]`,
+      );
+      if (details) {
+        details.open = true;
+      }
+    }
     if (moveFocus) {
-      const heading = root.querySelector(`#${next}-heading`);
+      const heading = root.querySelector(
+          `#${target.focusId || `${next}-heading`}`,
+      );
       if (heading) {
         heading.setAttribute('tabindex', '-1');
         heading.focus();
@@ -660,12 +694,12 @@
     renderRoutingSourcesSection(main);
     renderSiteRulesSection(main);
     renderProxyMethodsSection(main);
-    renderUpdatesHealthSection(main);
-    renderDiagnosticsSection(main);
+    renderMaintenanceSection(main);
     renderAdvancedSection(main);
+    renderAboutSection(main);
     renderGlobalActionBar(main);
     append(shell, 'div', 'ui-sr-only').setAttribute('aria-live', 'polite');
-    activateSection(getSectionFromHash(), false);
+    activateHashTarget(false);
     updateDraftPresentation();
 
   }
@@ -739,8 +773,7 @@
     });
     select.value = state.activeSection;
     select.onchange = () => {
-      window.location.hash = select.value;
-      activateSection(select.value, true);
+      navigateTo(select.value);
     };
 
   }
@@ -777,8 +810,9 @@
   function createDetails(parent, key, summary) {
 
     const details = append(parent, 'details', 'disclosure');
+    details.dataset.disclosureKey = key;
     details.open = state.openDisclosures.has(key);
-    appendText(details, 'summary', summary);
+    const summaryNode = appendText(details, 'summary', summary);
     details.addEventListener('toggle', () => {
       if (details.open) {
         state.openDisclosures.add(key);
@@ -787,7 +821,7 @@
       }
     });
     const content = append(details, 'div', 'disclosure-content');
-    return {details, content};
+    return {details, summary: summaryNode, content};
 
   }
 
@@ -2793,19 +2827,25 @@
 
   }
 
-  function renderUpdatesHealthSection(parent) {
+  function renderMaintenanceSection(parent) {
 
     const section = createPageSection(
         parent,
-        'updates-health',
-        'optionsNavUpdatesHealth',
-        'optionsUpdatesHealthDescription',
+        'maintenance',
+        'optionsNavMaintenance',
+        'optionsMaintenanceDescription',
     );
     const reliability = state.snapshot.reliability || {};
     const autoUpdate = reliability.autoUpdate || {};
     const health = reliability.proxyHealth || {};
     const settings = append(section, 'div', 'settings-card ui-card');
-    appendText(settings, 'h3', t('optionsAutomaticUpdates'));
+    settings.id = 'updates-health';
+    const updatesHeading = appendText(
+        settings,
+        'h3',
+        t('optionsAutomaticUpdates'),
+    );
+    updatesHeading.id = 'maintenance-updates-heading';
     const form = append(settings, 'form');
     form.onsubmit = (event) => event.preventDefault();
     const enabled = appendCheckbox(
@@ -2889,6 +2929,7 @@
         t('popupProxyHealthChecking'),
     );
     check.onclick = () => runHealthCheck(check);
+    renderMaintenanceDiagnostics(section);
 
   }
 
@@ -2991,18 +3032,20 @@
 
   }
 
-  function renderDiagnosticsSection(parent) {
+  function renderMaintenanceDiagnostics(parent) {
 
-    const section = createPageSection(
-        parent,
-        'diagnostics',
-        'optionsNavDiagnostics',
-        'optionsDiagnosticsDescriptionNew',
-    );
     const details = createDetails(
-        section,
+        parent,
         'diagnostics-expert',
-        t('optionsShowExpertDetails'),
+        t('optionsNavDiagnostics'),
+    );
+    details.details.id = 'diagnostics';
+    details.summary.id = 'maintenance-diagnostics-heading';
+    appendText(
+        details.content,
+        'p',
+        t('optionsDiagnosticsDescriptionNew'),
+        'section-description',
     );
     renderSafeExpertDetails(details.content);
 
@@ -3137,7 +3180,6 @@
     renderNotificationSettings(section);
     renderExpertOperations(section);
     renderMigration(section);
-    renderAbout(section);
 
   }
 
@@ -3640,15 +3682,17 @@
 
   }
 
-  function renderAbout(parent) {
+  function renderAboutSection(parent) {
 
-    const disclosure = createDetails(
+    const section = createPageSection(
         parent,
         'about',
-        t('optionsAbout'),
+        'optionsAbout',
+        'optionsAboutDescription',
     );
+    const card = append(section, 'div', 'settings-card ui-card compact');
     const manifest = chrome.runtime.getManifest();
-    const details = append(disclosure.content, 'dl', 'technical-list');
+    const details = append(card, 'dl', 'technical-list');
     appendDefinition(
         details,
         t('optionsVersion'),
@@ -3659,7 +3703,7 @@
         t('optionsReleaseChannel'),
         t('optionsLimitedBeta'),
     );
-    const links = append(disclosure.content, 'ul', 'about-links');
+    const links = append(card, 'ul', 'about-links');
     [
       [
         'optionsGitHubRepository',
@@ -3851,7 +3895,7 @@
       return 'proxy-methods';
     }
     if (key === 'updates') {
-      return 'updates-health';
+      return 'maintenance';
     }
     return 'advanced';
 

@@ -992,6 +992,9 @@
   "optionsNavDiagnostics": {
     "message": "Diagnostics"
   },
+  "optionsNavMaintenance": {
+    "message": "Maintenance"
+  },
   "optionsNavAdvanced": {
     "message": "Advanced"
   },
@@ -1013,8 +1016,14 @@
   "optionsDiagnosticsDescriptionNew": {
     "message": "Review technical status details useful for support and troubleshooting."
   },
+  "optionsMaintenanceDescription": {
+    "message": "Refresh automatic routing data, check a proxy connection, and review support diagnostics."
+  },
   "optionsAdvancedDescriptionNew": {
-    "message": "Manage uncommon routing policies, maintenance, and expert operations."
+    "message": "Manage uncommon routing policies, notifications, legacy migration, and expert operations."
+  },
+  "optionsAboutDescription": {
+    "message": "View version, release, project, license, and attribution information."
   },
   "optionsLoadingPage": {
     "message": "Loading saved configuration and current proxy status…"
