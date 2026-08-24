@@ -8,7 +8,7 @@ PAC-правилам. Текущий продукт использует Manifes
 Stable.
 
 > **Статус: стабильный выпуск MV3.** Текущий публичный выпуск —
-> [`v0.0.2.2`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.2).
+> [`v0.0.2.3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3).
 > Он устанавливается вручную из распакованного ZIP и не получает автоматические
 > обновления из магазина.
 
@@ -19,20 +19,20 @@ Stable.
 
 ## Текущий выпуск
 
-- Версия: [`v0.0.2.2`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.2)
-- Архив (354 490 байт):
-  [`runet-censorship-bypass-mv3-0.0.2.2-9f90e71.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.2/runet-censorship-bypass-mv3-0.0.2.2-9f90e71.zip)
+- Версия: [`v0.0.2.3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3)
+- Архив (355 601 байт):
+  [`runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.3/runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip)
 - SHA-256:
-  `f801c55595c34fddfcc8f1ff4d58068fd57d29cb11316237d1e866965cde042a`
+  `693d50f9ec9d1e4db54ca0760d6130532e2547bc174b1e233f101ee5fb8b1677`
 - Опубликованный файл контрольной суммы:
-  [`runet-censorship-bypass-mv3-0.0.2.2-9f90e71.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.2/runet-censorship-bypass-mv3-0.0.2.2-9f90e71.sha256.txt)
+  [`runet-censorship-bypass-mv3-0.0.2.3-cb53097.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.3/runet-censorship-bypass-mv3-0.0.2.3-cb53097.sha256.txt)
 - Установка: [пошаговая инструкция](docs/user/INSTALLATION.md)
 
 <details>
 <summary>English summary</summary>
 
 Runet Censorship Bypass is a stable Chromium Manifest V3 extension for
-selective PAC-based routing. The latest public release is `v0.0.2.2`. Its exact
+selective PAC-based routing. The latest public release is `v0.0.2.3`. Its exact
 payload was validated in Google Chrome Stable, including browser-level routing,
 restart and proxy-ownership recovery, and authenticated HTTP, CONNECT, and
 HTTPS-proxy paths. Other Chromium-compatible browsers are not independently
@@ -43,15 +43,17 @@ part of the current MV3 release. See the
 
 </details>
 
-## Что нового в v0.0.2.2
+## Что нового в v0.0.2.3
 
-- Завершена реальная Chrome Stable QA для Auto, Proxy и Direct, приоритета
-  Direct, перезапуска, восстановления service worker и ошибок PAC.
-- **Turn off** сохраняет долговечное намерение выключить прокси, даже пока
-  настройками владеет другое расширение; после возврата управления старый PAC
-  безопасно очищается и не включается снова.
-- В реальном Chrome проверена аутентификация прокси: HTTP 407, HTTPS-сайт через
-  CONNECT к HTTP-прокси и аутентифицируемый `HTTPS`-прокси.
+Это небольшой стабильный патч безопасности и надёжности поверх `v0.0.2.2`:
+
+- Учёт попыток proxy-auth теперь переживает перезапуск или приостановку MV3
+  service worker во время активной аутентификации 407.
+- Существующий предел в две передачи учётных данных остаётся общим для старого
+  и восстановленного worker.
+- В сессионном учёте сохраняются только несекретные ID запроса, нормализованный
+  адрес proxy, число попыток и время обновления. Сопоставление и маскирование
+  учётных данных, а также HTTP, CONNECT и HTTPS-proxy аутентификация не менялись.
 
 ## Интерфейс
 
@@ -98,7 +100,7 @@ part of the current MV3 release. See the
 
 ## Установка
 
-1. Откройте [страницу `v0.0.2.2`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.2)
+1. Откройте [страницу `v0.0.2.3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3)
    и скачайте указанный выше ZIP-архив текущего выпуска.
 2. При необходимости сверьте SHA-256 с приложенным файлом `*.sha256.txt`.
 3. Полностью распакуйте архив в постоянную папку.
@@ -139,7 +141,7 @@ part of the current MV3 release. See the
 
 | Браузер | Текущий статус |
 | --- | --- |
-| Google Chrome Stable | Точный payload `v0.0.2.2` прошёл trusted CI smoke; расширенная Windows QA дополнительно покрыла загрузку MV3, Auto/Proxy/Direct, перезапуск и восстановление, смену владельца proxy settings, ошибки PAC и аутентификацию HTTP/CONNECT/HTTPS-прокси. |
+| Google Chrome Stable | Точный payload `v0.0.2.3` прошёл trusted CI smoke; расширенная Windows QA дополнительно покрыла загрузку MV3, Auto/Proxy/Direct, перезапуск и восстановление, смену владельца proxy settings, ошибки PAC и аутентификацию HTTP/CONNECT/HTTPS-прокси. |
 | Brave | Точный архив beta3 ранее прошёл обновление профиля beta2, Apply/Clear/restart, popup и options smoke QA в Chromium 151.0.7922.169; текущий стабильный выпуск отдельно в Brave не перепроверялся. |
 | Другие Chromium-совместимые браузеры | Ожидается совместимость с необходимыми MV3 API; требуется проверка конкретного браузера и версии. |
 | Firefox | Не входит в текущий выпуск MV3. |
@@ -158,7 +160,7 @@ part of the current MV3 release. See the
 - Расширение проверяет владельца настройки прокси и не должно молча
   перезаписывать управление другого расширения или политики.
 
-Известные границы `v0.0.2.2`: установка и обновления остаются ручными; PAC
+Известные границы `v0.0.2.3`: установка и обновления остаются ручными; PAC
 применяется с `mandatory: false`, поэтому ошибки разбора или выполнения PAC
 могут привести к маршруту DIRECT; владение через машинную политику проверялось
 регрессионно без изменения реальной политики управляемого компьютера; между
