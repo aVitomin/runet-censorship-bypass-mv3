@@ -29,6 +29,7 @@ const TEST_HOSTS = Object.freeze({
   authHttpsProxy: 'auth-https-proxy.qa.test',
   authMismatch: 'auth-mismatch.qa.test',
   authPasswordless: 'auth-passwordless.qa.test',
+  authWorkerRestart: 'auth-worker-restart.qa.test',
   authWrong: 'auth-wrong.qa.test',
   direct: 'direct.qa.test',
   origin401: 'origin-401.qa.test',
@@ -110,6 +111,40 @@ function assertBuiltExtension() {
 function delay(milliseconds) {
 
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+}
+
+function createBarrier() {
+
+  let ifReleased = false;
+  let releasePromise;
+  const promise = new Promise((resolve) => {
+    releasePromise = resolve;
+  });
+  return {
+    promise,
+    release(value) {
+
+      if (ifReleased) {
+        return;
+      }
+      ifReleased = true;
+      releasePromise(value);
+
+    },
+  };
+
+}
+
+function waitForBarrier(promise, message, timeout = CHROME_TIMEOUT_MS) {
+
+  let timeoutId;
+  return Promise.race([
+    promise,
+    new Promise((resolve, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(message)), timeout);
+    }),
+  ]).finally(() => clearTimeout(timeoutId));
 
 }
 
@@ -276,6 +311,9 @@ function trackSocket(sockets, socket) {
 
 async function closeEndpoint(endpoint) {
 
+  if (typeof endpoint.releaseNextChallenge === 'function') {
+    endpoint.releaseNextChallenge();
+  }
   if (endpoint.sockets) {
     endpoint.sockets.forEach((socket) => socket.destroy());
   }
@@ -477,6 +515,63 @@ async function createAuthenticatedProxy(options) {
     marker,
     port: await listen(server),
     server,
+  };
+
+}
+
+async function createInterruptedAuthenticatedProxy(options) {
+
+  const marker = `${options.kind}-authenticated-receiver`;
+  const realm = `rucb-${options.kind}`;
+  const firstCredentialReceived = createBarrier();
+  const releaseNextChallenge = createBarrier();
+  const sockets = new Set();
+  let credentialedRequests = 0;
+  const sendChallenge = (response) => {
+    if (response.destroyed || response.headersSent) {
+      return;
+    }
+    response.writeHead(407, {
+      'Connection': 'close',
+      'Content-Length': '0',
+      'Proxy-Authenticate': `Basic realm="${realm}"`,
+    });
+    response.end();
+  };
+  const server = Http.createServer((request, response) => {
+    const auth = classifyAuthorization(
+        request.headers['proxy-authorization'],
+        options.expectedAuthorization,
+        options.knownAuthorizations,
+    );
+    options.traffic.push({
+      auth,
+      kind: options.kind,
+      method: request.method,
+      url: request.url,
+    });
+    request.resume();
+    if (auth !== 'known-wrong') {
+      sendChallenge(response);
+      return;
+    }
+    ++credentialedRequests;
+    if (credentialedRequests !== 1) {
+      sendChallenge(response);
+      return;
+    }
+    firstCredentialReceived.release();
+    releaseNextChallenge.promise.then(() => sendChallenge(response));
+  });
+  server.on('connection', (socket) => trackSocket(sockets, socket));
+  return {
+    firstCredentialReceived: firstCredentialReceived.promise,
+    kind: options.kind,
+    marker,
+    port: await listen(server),
+    releaseNextChallenge: () => releaseNextChallenge.release(),
+    server,
+    sockets,
   };
 
 }
@@ -700,6 +795,10 @@ async function createInfrastructure() {
     proxyB: createCredentialCanary('proxy-b'),
     proxyConnect: createCredentialCanary('proxy-connect'),
     proxyHttps: createCredentialCanary('proxy-https'),
+    workerRestartConfigured: createCredentialCanary(
+        'worker-restart-configured',
+    ),
+    workerRestartExpected: createCredentialCanary('worker-restart-expected'),
     wrongConfigured: createCredentialCanary('wrong-configured'),
     wrongExpected: createCredentialCanary('wrong-expected'),
   });
@@ -765,6 +864,12 @@ async function createInfrastructure() {
     knownAuthorizations,
     traffic,
   });
+  const authWorkerRestart = await createInterruptedAuthenticatedProxy({
+    expectedAuthorization: credentials.workerRestartExpected.authorization,
+    kind: 'auth-worker-restart',
+    knownAuthorizations: [credentials.workerRestartConfigured.authorization],
+    traffic,
+  });
   const authWrong = await createAuthenticatedProxy({
     acceptExpected: true,
     expectedAuthorization: credentials.wrongExpected.authorization,
@@ -795,6 +900,10 @@ async function createInfrastructure() {
       host: TEST_HOSTS.authPasswordless,
       result: `PROXY 127.0.0.1:${authPasswordless.port}`,
     },
+    {
+      host: TEST_HOSTS.authWorkerRestart,
+      result: `PROXY 127.0.0.1:${authWorkerRestart.port}`,
+    },
     {host: TEST_HOSTS.authWrong, result: `PROXY 127.0.0.1:${authWrong.port}`},
     {host: TEST_HOSTS.origin401, result: 'DIRECT'},
   ]);
@@ -805,6 +914,7 @@ async function createInfrastructure() {
     authPasswordless,
     authProxyA,
     authProxyB,
+    authWorkerRestart,
     authWrong,
     connectDirectTrap,
     connectTlsOrigin,
@@ -836,6 +946,7 @@ async function closeInfrastructure(infrastructure) {
       infrastructure.authPasswordless,
       infrastructure.authProxyA,
       infrastructure.authProxyB,
+      infrastructure.authWorkerRestart,
       infrastructure.authWrong,
       infrastructure.connectDirectTrap,
       infrastructure.connectTlsOrigin,
@@ -982,6 +1093,7 @@ async function launchExtension(
         `MAP ${TEST_HOSTS.authHttpsProxy} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authMismatch} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authPasswordless} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authWorkerRestart} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authWrong} 127.0.0.1`,
         `MAP ${TEST_HOSTS.proxy} 127.0.0.1`,
         `MAP ${TEST_HOSTS.direct} 127.0.0.1`,
@@ -1038,6 +1150,121 @@ async function launchExtension(
     diagnostics,
     extensionId,
   };
+
+}
+
+function waitForEmitterEvent(emitter, eventName, predicate, message) {
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      emitter.off(eventName, listener);
+    };
+    const listener = (value) => {
+      if (!predicate(value)) {
+        return;
+      }
+      cleanup();
+      resolve(value);
+    };
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error(message));
+    }, CHROME_TIMEOUT_MS);
+    emitter.on(eventName, listener);
+  });
+
+}
+
+async function stopExtensionWorkerWithCdp(session, observerPage) {
+
+  const scriptUrl =
+    `chrome-extension://${session.extensionId}${SERVICE_WORKER_PATH}`;
+  const workerTarget = session.browser.targets().find((target) =>
+    target.type() === 'service_worker' && target.url() === scriptUrl,
+  );
+  Assert.ok(workerTarget, 'RUCB worker-stop unsupported: target was not found.');
+
+  const protocol = await observerPage.createCDPSession();
+  const targetInfos = await protocol.send('Target.getTargets');
+  const workerTargetInfo = targetInfos.targetInfos.find((targetInfo) =>
+    targetInfo.type === 'service_worker' && targetInfo.url === scriptUrl,
+  );
+  Assert.ok(
+      workerTargetInfo,
+      'RUCB worker-stop unsupported: CDP target was not found.',
+  );
+  const runningVersion = createBarrier();
+  const stoppedVersion = createBarrier();
+  let versionId = null;
+  const observeVersions = (event) => {
+    (event.versions || []).forEach((version) => {
+      if (version.scriptURL !== scriptUrl) {
+        return;
+      }
+      if (
+        version.targetId === workerTargetInfo.targetId &&
+        version.runningStatus === 'running'
+      ) {
+        runningVersion.release(version);
+      }
+      if (
+        versionId &&
+        version.versionId === versionId &&
+        version.runningStatus === 'stopped'
+      ) {
+        stoppedVersion.release(version);
+      }
+    });
+  };
+  protocol.on('ServiceWorker.workerVersionUpdated', observeVersions);
+  try {
+    try {
+      await protocol.send('ServiceWorker.enable');
+    } catch (error) {
+      throw new Error('RUCB worker-stop unsupported: CDP ServiceWorker.enable failed.');
+    }
+    const running = await waitForBarrier(
+        runningVersion.promise,
+        'RUCB worker-stop unsupported: running version was not reported.',
+    );
+    versionId = running.versionId;
+    const destroyed = waitForEmitterEvent(
+        session.browser,
+        'targetdestroyed',
+        (target) => isExtensionWorkerTarget(target) &&
+          target.url() === scriptUrl,
+        'RUCB worker-stop unsupported: target was not destroyed.',
+    );
+    const attachedWorker = await workerTarget.worker();
+    Assert.ok(
+        attachedWorker && attachedWorker.client,
+        'RUCB worker-stop unsupported: diagnostics session was not found.',
+    );
+    try {
+      await attachedWorker.client.detach();
+    } catch (error) {
+      throw new Error(
+          'RUCB worker-stop unsupported: diagnostics detach failed.',
+      );
+    }
+    try {
+      await protocol.send('ServiceWorker.stopWorker', {versionId});
+    } catch (error) {
+      throw new Error('RUCB worker-stop unsupported: CDP stopWorker failed.');
+    }
+    await Promise.all([
+      destroyed,
+      waitForBarrier(
+          stoppedVersion.promise,
+          'RUCB worker-stop unsupported: stopped version was not reported.',
+      ),
+    ]);
+    return {scriptUrl, versionId};
+  } finally {
+    protocol.off('ServiceWorker.workerVersionUpdated', observeVersions);
+    await protocol.detach().catch(() => undefined);
+  }
 
 }
 
@@ -1404,6 +1631,11 @@ async function configureExtension(page, infrastructure) {
         'Chrome Stable passwordless proxy',
     ),
     createOwnProxy(
+        infrastructure.authWorkerRestart,
+        'Chrome Stable worker-restart wrong-credential proxy',
+        infrastructure.credentials.workerRestartConfigured,
+    ),
+    createOwnProxy(
         infrastructure.authWrong,
         'Chrome Stable wrong-credential proxy',
         infrastructure.credentials.wrongConfigured,
@@ -1508,6 +1740,27 @@ async function waitForProxyAuthEvent(page, type, port) {
     await delay(100);
   }
   Assert.fail(`Proxy auth event ${type} was not observed for the test endpoint.`);
+
+}
+
+async function waitForProxyAuthRetrySequence(page, port, requestId) {
+
+  const deadline = Date.now() + CHROME_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const status = await callRpc(page, 'getProxyAuthStatus');
+    const events = status.lastEvents.filter((event) =>
+      String(event.port) === String(port) && event.requestId === requestId,
+    );
+    const provided = events.filter((event) => event.type === 'provided');
+    const retryLimit = events.find((event) => event.type === 'retry_limit');
+    if (provided.length === 2 && retryLimit) {
+      return {events, provided, retryLimit, status};
+    }
+    await delay(100);
+  }
+  Assert.fail(
+      'Worker-restart proxy auth did not reach its original retry limit.',
+  );
 
 }
 
@@ -1984,6 +2237,148 @@ async function assertWrongCredentialsStop(
 
 }
 
+async function assertWorkerRestartRetryLimit(
+    session,
+    optionsPage,
+    infrastructure,
+) {
+
+  const scenarioName = 'wrong credentials across worker restart';
+  await clearProxyAuthEvents(optionsPage);
+  const endpoint = infrastructure.authWorkerRestart;
+  const token = `${Date.now()}-${Crypto.randomBytes(8).toString('hex')}`;
+  const trafficStart = infrastructure.traffic.length;
+  const page = await session.browser.newPage();
+  attachCredentialLeakGuard(
+      page,
+      session.diagnostics,
+      session.credentialCanaries,
+  );
+  await page.setCacheEnabled(false);
+  const navigationPromise = (async () => {
+    let errorMessage = null;
+    let responseBody = null;
+    let responseStatus = null;
+    try {
+      const response = await page.goto(
+          `http://${TEST_HOSTS.authWorkerRestart}:` +
+            `${infrastructure.origin.port}/chrome-auth-smoke?token=${token}`,
+          {
+            timeout: CHROME_TIMEOUT_MS,
+            waitUntil: 'domcontentloaded',
+          },
+      );
+      if (response) {
+        responseStatus = response.status();
+        responseBody = await response.text().catch(() => null);
+      }
+    } catch (error) {
+      assertNoCredentialCanary(
+          error && error.stack || error,
+          session.credentialCanaries,
+          `${scenarioName} thrown error`,
+      );
+      errorMessage = redactCredentialCanaries(
+          error && error.message || error,
+          session.credentialCanaries,
+      );
+    }
+    return {errorMessage, responseBody, responseStatus};
+  })();
+
+  let scenarioError = null;
+  let requestId = null;
+  let workerStop = null;
+  try {
+    await waitForBarrier(
+        endpoint.firstCredentialReceived,
+        'Worker-restart proxy never received the first credentialed retry.',
+    );
+    const beforeRestartHits = getTrafficForToken(
+        infrastructure,
+        trafficStart,
+        token,
+    );
+    Assert.deepStrictEqual(
+        beforeRestartHits.map((entry) => entry.auth),
+        ['none', 'known-wrong'],
+        'Worker-restart proxy reached an unexpected pre-stop auth sequence.',
+    );
+    const firstProvided = await waitForProxyAuthEvent(
+        optionsPage,
+        'provided',
+        endpoint.port,
+    );
+    assertExactProxyAuthEvent(firstProvided, endpoint, scenarioName);
+    requestId = firstProvided.event.requestId;
+    Assert.ok(requestId, 'Worker-restart auth event had no requestId.');
+
+    workerStop = await stopExtensionWorkerWithCdp(session, optionsPage);
+    const recreatedWorker = waitForEmitterEvent(
+        session.browser,
+        'targetcreated',
+        (target) => isExtensionWorkerTarget(target) &&
+          target.url() === workerStop.scriptUrl,
+        'Worker interruption-not-redispatched: RUCB worker was not recreated.',
+    );
+    endpoint.releaseNextChallenge();
+    await recreatedWorker;
+  } catch (error) {
+    scenarioError = error;
+  } finally {
+    endpoint.releaseNextChallenge();
+  }
+
+  const navigation = await navigationPromise;
+  await page.close();
+  if (scenarioError) {
+    throw scenarioError;
+  }
+  Assert.notStrictEqual(
+      navigation.responseStatus,
+      200,
+      'Worker-restart wrong credentials unexpectedly succeeded.',
+  );
+  const observed = await waitForProxyAuthRetrySequence(
+      optionsPage,
+      endpoint.port,
+      requestId,
+  );
+  const hits = getTrafficForToken(
+      infrastructure,
+      trafficStart,
+      token,
+  );
+  Assert.deepStrictEqual(
+      hits.map((entry) => entry.kind),
+      [endpoint.kind, endpoint.kind, endpoint.kind],
+      'Worker-restart auth reached an unintended receiver or DIRECT.',
+  );
+  Assert.deepStrictEqual(
+      hits.map((entry) => entry.auth),
+      ['none', 'known-wrong', 'known-wrong'],
+      'Worker restart bypassed the original credential retry budget.',
+  );
+  Assert.strictEqual(observed.provided.length, 2);
+  Assert.ok(
+      observed.events.every((event) => event.requestId === requestId),
+      'Chrome changed requestId during the restarted auth sequence.',
+  );
+  assertNoCredentialCanary(
+      [navigation, observed, hits, session.diagnostics],
+      session.credentialCanaries,
+      'worker-restart auth observations',
+  );
+  return {
+    credentialResponsesAfterRestart: hits.slice(1).length,
+    credentialResponsesBeforeRestart: 1,
+    errorMessage: navigation.errorMessage,
+    requestIdPreserved: true,
+    workerStopped: Boolean(workerStop && workerStop.versionId),
+  };
+
+}
+
 async function assertCredentialRedaction(
     session,
     optionsPage,
@@ -2249,11 +2644,17 @@ async function runSmoke() {
         restartedOptionsPage,
         infrastructure,
     );
+    const workerRestartEvidence = await assertWorkerRestartRetryLimit(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+    );
     observedErrors.push(
         origin401Evidence.errorMessage,
         mismatchEvidence.errorMessage,
         passwordlessEvidence.errorMessage,
         wrongEvidence.errorMessage,
+        workerRestartEvidence.errorMessage,
     );
     await assertCredentialRedaction(
         session,
@@ -2289,6 +2690,12 @@ async function runSmoke() {
     console.log(
         `Chrome smoke 407: wrong credentials ` +
           `${wrongEvidence.receiverEvidence.join(' -> ')} then retry limit.`,
+    );
+    console.log(
+        'Chrome smoke 407 worker restart: ' +
+          `${workerRestartEvidence.credentialResponsesBeforeRestart} before, ` +
+          `${workerRestartEvidence.credentialResponsesAfterRestart} total; ` +
+          'same requestId and retry limit preserved.',
     );
     assertNoSeriousDiagnostics(session.diagnostics);
 
@@ -2366,7 +2773,8 @@ async function runSmoke() {
         'Direct -> origin, restart recovery -> explicit proxy, and ' +
         'external takeover -> deferred Clear -> direct after release/restart. ' +
         'Verified real HTTP 407 auth, durable credentials, 401/mismatch/' +
-        'passwordless rejection, retry limiting, and credential redaction. ' +
+        'passwordless rejection, retry limiting across a forced worker stop, ' +
+        'and credential redaction. ' +
         'Verified authenticated CONNECT to an HTTPS origin and authenticated ' +
         'HTTP/1.1 traffic over an HTTPS proxy transport.',
     );

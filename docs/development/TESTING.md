@@ -114,7 +114,10 @@ Windows. Сертификат и ключ создаются только во �
 
 Негативные browser cases подтверждают отказ передавать proxy credentials на
 обычный origin `401`, несовпадающий host/port и passwordless proxy, а также
-ограничение повторов при неверном пароле. Receiver logs хранят только безопасные
+ограничение повторов при неверном пароле. Отдельный синхронизированный case
+останавливает точную версию MV3 service worker через CDP между двумя `407` и
+подтверждает, что `storage.session` сохраняет общий лимит из двух credential
+responses для прежнего `requestId`. Receiver logs хранят только безопасные
 классы (`none`, `expected`, `known-wrong`, `unexpected`); password и reusable
 Basic token дополнительно ищутся в PAC, RPC responses, DOM, diagnostics и
 errors. Smoke сохраняет существующую проверку external-controller takeover,
@@ -123,11 +126,12 @@ deferred Turn off и restart persistence. Внешняя сеть не нужн�
 
 Smoke не заменяет ручные проверки upgrade существующего профиля и полного UI.
 Plain HTTP `407`, HTTPS destination `CONNECT` и TLS-to-proxy (`HTTPS` PAC
-scheme) теперь покрыты отдельно. Искусственное прерывание service worker
-посреди активного `407` остаётся отложенной задачей: счётчик auth retries
-хранится в памяти worker и не обещает durability при forced mid-request worker
-termination. Тест не изменяет machine policy, а детерминированные loopback DNS
-и receiver checks не доказывают отсутствие утечек в произвольной реальной
+scheme) покрыты отдельно; forced mid-request worker termination также покрыт
+receiver barrier без timing sleeps. Retry metadata живёт только в
+`chrome.storage.session`, не содержит credentials и очищается на границе
+browser session/extension reload. Тест не изменяет machine policy, а
+детерминированные loopback DNS и receiver checks не доказывают отсутствие
+утечек в произвольной реальной
 сети.
 
 ### Полная MV3 verification
