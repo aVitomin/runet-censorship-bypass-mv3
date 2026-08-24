@@ -385,7 +385,7 @@
           t('popupChooseRoutingSource'),
           'ui-button primary',
       );
-      choose.onclick = () => openAdvanced('provider');
+      choose.onclick = openFullSettings;
       ifActionAdded = true;
     } else if (primaryAction === 'apply') {
       const applyButton = appendButton(

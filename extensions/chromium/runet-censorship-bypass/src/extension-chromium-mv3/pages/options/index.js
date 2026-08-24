@@ -46,6 +46,8 @@
     retry: null,
     latestMigrationPlan: null,
     listenersInstalled: false,
+    setupEligibilityInitialized: false,
+    setupEligible: false,
   };
   let fieldId = 0;
 
@@ -450,6 +452,7 @@
           snapshot,
       );
       state.snapshot = snapshot;
+      updateSetupEligibility();
       if (options.message) {
         state.message = {
           text: options.message,
@@ -622,6 +625,11 @@
     const select = root.querySelector('#options-section-select');
     if (select) {
       select.value = next;
+    }
+    const actionBar = root.querySelector('#global-action-bar');
+    if (actionBar && state.snapshot) {
+      actionBar.replaceChildren();
+      renderGlobalActionBarContents(actionBar);
     }
     if (target.openDisclosure) {
       state.openDisclosures.add(target.openDisclosure);
@@ -1012,6 +1020,49 @@
 
   }
 
+  function getDurableProxyApply() {
+
+    return state.snapshot && state.snapshot.state &&
+      state.snapshot.state.proxyApply || {};
+
+  }
+
+  function ifPristineInitialSetup() {
+
+    const apply = getDurableProxyApply();
+    return String(apply.status || 'idle') === 'idle' &&
+      !apply.providerKey &&
+      !apply.cookedPacSha256 &&
+      !apply.appliedAt &&
+      !apply.clearedAt &&
+      !apply.error;
+
+  }
+
+  function updateSetupEligibility() {
+
+    if (!state.setupEligibilityInitialized) {
+      state.setupEligible = ifPristineInitialSetup();
+      state.setupEligibilityInitialized = true;
+    }
+    const view = deriveControlView();
+    const apply = getDurableProxyApply();
+    if (
+      view.controlsPac ||
+      ['applied', 'cleared'].includes(String(apply.status || 'idle'))
+    ) {
+      state.setupEligible = false;
+    }
+
+  }
+
+  function ifShowInitialSetup() {
+
+    const view = deriveControlView();
+    return state.setupEligible && !view.external && !view.controlsPac;
+
+  }
+
   function getHealthView() {
 
     const health = state.snapshot.reliability &&
@@ -1049,6 +1100,7 @@
         'optionsNavOverview',
         'optionsOverviewDescription',
     );
+    renderInitialSetupCard(section);
     const view = deriveControlView();
     const card = append(section, 'div', `settings-card ui-card status-card ${
       view.tone
@@ -1093,7 +1145,7 @@
         view.stale ? t('optionsApplyRequired') : t('optionsConfigurationCurrent'),
         'freshness',
     );
-    if (!getSelectedProvider()) {
+    if (!getSelectedProvider() && !ifShowInitialSetup()) {
       const warning = append(card, 'div', 'status-banner warning');
       warning.setAttribute('role', 'status');
       appendText(warning, 'strong', t('optionsChooseSourceTitle'));
@@ -1105,6 +1157,147 @@
       );
       button.onclick = () => navigateTo('routing-sources');
     }
+
+  }
+
+  function renderInitialSetupCard(parent) {
+
+    if (!ifShowInitialSetup()) {
+      return;
+    }
+    const provider = getSelectedProvider();
+    const view = deriveControlView();
+    const card = append(parent, 'section', 'settings-card ui-card setup-card');
+    card.id = 'initial-setup-card';
+    card.setAttribute('aria-labelledby', 'initial-setup-heading');
+    const header = append(card, 'div', 'setup-header');
+    const copy = append(header, 'div');
+    const heading = appendText(copy, 'h3', t('optionsSetupTitle'));
+    heading.id = 'initial-setup-heading';
+    appendText(copy, 'p', t('optionsSetupIntro'), 'section-description');
+    appendText(header, 'span', t('optionsSetupStatus'), 'ui-pill');
+    const steps = append(card, 'ol', 'setup-steps');
+    renderSetupSourceStep(steps, provider);
+    renderSetupProxyStep(steps);
+    renderSetupApplyStep(steps, provider, view);
+
+  }
+
+  function createSetupStep(parent, number, title, description, status, tone) {
+
+    const item = append(parent, 'li', `setup-step ${tone || ''}`.trim());
+    const marker = appendText(item, 'span', String(number), 'setup-step-marker');
+    marker.setAttribute('aria-hidden', 'true');
+    const body = append(item, 'div', 'setup-step-body');
+    const header = append(body, 'div', 'setup-step-header');
+    appendText(header, 'h4', title);
+    appendText(
+        header,
+        'span',
+        status,
+        `setup-step-status ${tone || ''}`.trim(),
+    );
+    appendText(body, 'p', description, 'section-description');
+    return body;
+
+  }
+
+  function renderSetupSourceStep(parent, provider) {
+
+    const selected = Boolean(provider);
+    const body = createSetupStep(
+        parent,
+        1,
+        t('optionsSetupSourceTitle'),
+        t('optionsSetupSourceHelp'),
+        selected ?
+          t('optionsSetupSourceSelected', [getProviderLabel(provider)]) :
+          t('optionsSetupSourceNotSelected'),
+        selected ? 'complete' : 'current',
+    );
+    const action = createButton(
+        body,
+        t(selected ? 'optionsSetupChangeSource' : 'optionsGoToRoutingSources'),
+        'quiet setup-step-action',
+    );
+    action.onclick = () => navigateTo('routing-sources');
+
+  }
+
+  function renderSetupProxyStep(parent) {
+
+    const count = getProxyCandidateCount();
+    const status = count ?
+      formatCount(
+          count,
+          'optionsSetupOneProxyConnection',
+          'optionsSetupManyProxyConnections',
+      ) :
+      t('optionsSetupNoProxyConnections');
+    const body = createSetupStep(
+        parent,
+        2,
+        t('optionsSetupProxyTitle'),
+        t('optionsSetupProxyHelp'),
+        status,
+        'optional',
+    );
+    const action = createButton(
+        body,
+        t('optionsSetupConfigureProxies'),
+        'quiet setup-step-action',
+    );
+    action.onclick = () => navigateTo('proxy-methods');
+
+  }
+
+  function getSetupApplyStatus(provider, view) {
+
+    if (!provider) {
+      return t('optionsSetupWaitingForSource');
+    }
+    if (state.pending.has('configuration:apply') || view.kind === 'applying') {
+      return t('optionsSetupApplying');
+    }
+    if (
+      view.kind === 'error' ||
+      state.message && state.message.tone === 'error'
+    ) {
+      return t('optionsSetupApplyError');
+    }
+    if (hasDirtyDrafts()) {
+      return t('optionsSetupSaveChangesFirst');
+    }
+    return t('optionsSetupReadyToApply');
+
+  }
+
+  function renderSetupApplyStep(parent, provider, view) {
+
+    const ifApplying = state.pending.has('configuration:apply') ||
+      view.kind === 'applying';
+    const body = createSetupStep(
+        parent,
+        3,
+        t('optionsSetupApplyTitle'),
+        t('optionsSetupApplyHelp'),
+        getSetupApplyStatus(provider, view),
+        provider ? 'current' : '',
+    );
+    const status = body.querySelector('.setup-step-status');
+    status.dataset.setupApplyStatus = 'true';
+    if (!provider) {
+      return;
+    }
+    const apply = createButton(
+        body,
+        t('optionsApplyConfiguration'),
+        'primary setup-step-action',
+        t('optionsApplyingConfiguration'),
+    );
+    apply.dataset.setupApplyAction = 'true';
+    apply.disabled = ifApplying || hasDirtyDrafts();
+    apply.onclick = () => applyConfiguration(apply);
 
   }
 
@@ -1188,8 +1381,9 @@
         t('optionsBuiltInProvidersHelp'),
         'section-description',
     );
-    const list = append(builtInCard, 'div', 'settings-list');
-    builtIn.forEach((provider) => renderProviderRow(list, provider));
+    const list = append(builtInCard, 'fieldset', 'source-choice-group');
+    appendText(list, 'legend', t('optionsChooseAutomaticSource'));
+    builtIn.forEach((provider) => renderProviderChoice(list, provider));
     const customCard = append(section, 'div', 'settings-card ui-card');
     const customHeader = append(customCard, 'div', 'card-header');
     appendText(customHeader, 'h3', t('optionsCustomProviders'));
@@ -1207,29 +1401,38 @@
 
   }
 
-  function renderProviderRow(parent, provider) {
+  function renderProviderChoice(parent, provider) {
 
     const selected = state.snapshot.state.currentPacProviderKey === provider.key;
-    const row = append(parent, 'article', 'item-row');
-    const header = append(row, 'div', 'item-header');
+    const choice = append(
+        parent,
+        'label',
+        `source-choice${selected ? ' selected' : ''}`,
+    );
+    const input = append(choice, 'input', 'source-choice-input');
+    input.type = 'radio';
+    input.name = 'automatic-routing-source';
+    input.value = provider.key;
+    input.checked = selected;
+    input.disabled = provider.enabled === false;
+    const content = append(choice, 'div', 'source-choice-content');
+    const header = append(content, 'div', 'source-choice-header');
     const copy = append(header, 'div');
     appendText(copy, 'div', getProviderLabel(provider), 'item-title');
     appendText(copy, 'p', getProviderDescription(provider), 'item-meta');
-    appendText(
+    const status = appendText(
         header,
         'span',
-        selected ? t('optionsSelected') : t('optionsBuiltIn'),
+        selected ? t('optionsSelected') : t('optionsAvailable'),
         selected ? 'ui-pill success' : 'scope-badge',
     );
-    const actions = append(row, 'div', 'provider-actions');
-    const useButton = createButton(
-        actions,
-        selected ? t('optionsSelected') : t('optionsUseSource'),
-        selected ? '' : 'primary',
-        t('optionsSaving'),
-    );
-    useButton.disabled = selected || provider.enabled === false;
-    useButton.onclick = () => selectProvider(provider.key, useButton);
+    status.dataset.sourceChoiceStatus = provider.key;
+    input.onchange = () => {
+      if (!input.checked) {
+        return;
+      }
+      selectProvider(provider.key, input);
+    };
 
   }
 
@@ -1246,7 +1449,13 @@
         message: t('optionsRoutingSourceSaved'),
         tone: 'success',
       });
+      return;
     }
+    root.querySelectorAll('input[name="automatic-routing-source"]')
+        .forEach((input) => {
+          input.checked = input.value ===
+            state.snapshot.state.currentPacProviderKey;
+        });
 
   }
 
@@ -3746,6 +3955,7 @@
 
   function renderGlobalActionBarContents(bar) {
 
+    bar.hidden = false;
     const dirty = getDirtyDrafts();
     const conflicts = dirty.filter((entry) => entry[1].conflict);
     const view = deriveControlView();
@@ -3791,6 +4001,10 @@
           'danger quiet',
       );
       discard.onclick = () => confirmDiscardAll();
+      return;
+    }
+    if (ifShowInitialSetup() && state.activeSection === 'overview') {
+      bar.hidden = true;
       return;
     }
     if (view.external) {
@@ -3973,6 +4187,18 @@
     if (bar && state.snapshot) {
       bar.replaceChildren();
       renderGlobalActionBarContents(bar);
+    }
+    const setupStatus = root.querySelector('[data-setup-apply-status]');
+    if (setupStatus && state.snapshot) {
+      setupStatus.textContent = getSetupApplyStatus(
+          getSelectedProvider(),
+          deriveControlView(),
+      );
+    }
+    const setupApply = root.querySelector('[data-setup-apply-action]');
+    if (setupApply) {
+      setupApply.disabled = hasDirtyDrafts() ||
+        state.pending.has('configuration:apply');
     }
     const live = root.querySelector('[aria-live="polite"]');
     if (live) {

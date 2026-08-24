@@ -99,7 +99,7 @@
     "message": "Настройка не завершена"
   },
   "popupControlSetupHelp": {
-    "message": "Перед включением прокси расширения выберите источник автоматической маршрутизации."
+    "message": "Откройте настройку, выберите источник автоматической маршрутизации и примените его."
   },
   "popupControlActiveShort": {
     "message": "Управляет это расширение"
@@ -138,7 +138,7 @@
     "message": "Проблема с прокси"
   },
   "popupChooseRoutingSource": {
-    "message": "Выбрать источник"
+    "message": "Настроить расширение"
   },
   "popupTurnOffProxy": {
     "message": "Выключить прокси расширения"
@@ -314,16 +314,16 @@
     "message": "Прокси расширения включён — Маршрут для текущей страницы недоступен"
   },
   "providerAntizapretDescription": {
-    "message": "Основной PAC-скрипт проекта Антизапрет."
+    "message": "Автоматически направляет сайты по правилам встроенного источника Antizapret."
   },
   "providerAnticensorityDescription": {
-    "message": "Альтернативный встроенный PAC-источник."
+    "message": "Использует альтернативный встроенный источник автоматической маршрутизации."
   },
   "providerOnlyOwnSitesLabel": {
-    "message": "Только мои правила сайтов"
+    "message": "Только ручные правила"
   },
   "providerOnlyOwnSitesDescription": {
-    "message": "Использовать только вручную настроенные правила сайтов и пользовательские прокси-серверы."
+    "message": "Изменяет маршрут только для сайтов, которым вы явно назначили Proxy или Direct."
   },
   "popupPacProvider": {
     "message": "Источник автоматической маршрутизации"
@@ -1078,6 +1078,90 @@
   },
   "optionsGoToRoutingSources": {
     "message": "Выбрать источник"
+  },
+  "optionsSetupTitle": {
+    "message": "Настройте маршрутизацию"
+  },
+  "optionsSetupIntro": {
+    "message": "Для начала достаточно трёх коротких шагов. Маршрутизация Chrome изменится только после применения."
+  },
+  "optionsSetupStatus": {
+    "message": "Настройка"
+  },
+  "optionsSetupSourceTitle": {
+    "message": "Выберите источник маршрутизации"
+  },
+  "optionsSetupSourceHelp": {
+    "message": "Выберите, как маршрутизировать сайты в режиме Auto."
+  },
+  "optionsSetupSourceNotSelected": {
+    "message": "Не выбрано"
+  },
+  "optionsSetupSourceSelected": {
+    "message": "Выбран источник: $SOURCE$",
+    "placeholders": {
+      "source": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSetupChangeSource": {
+    "message": "Сменить источник"
+  },
+  "optionsSetupProxyTitle": {
+    "message": "Прокси-подключения — необязательно"
+  },
+  "optionsSetupProxyHelp": {
+    "message": "Добавьте прокси-подключение, только если хотите использовать Proxy для отдельных сайтов."
+  },
+  "optionsSetupNoProxyConnections": {
+    "message": "Необязательно — ничего не настроено"
+  },
+  "optionsSetupOneProxyConnection": {
+    "message": "Доступно подключение: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSetupManyProxyConnections": {
+    "message": "Доступно подключений: $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSetupConfigureProxies": {
+    "message": "Настроить прокси-подключения"
+  },
+  "optionsSetupApplyTitle": {
+    "message": "Примените маршрутизацию"
+  },
+  "optionsSetupApplyHelp": {
+    "message": "Сохранённая конфигурация влияет на Chrome только после применения."
+  },
+  "optionsSetupWaitingForSource": {
+    "message": "Ожидание выбора источника"
+  },
+  "optionsSetupApplying": {
+    "message": "Применение…"
+  },
+  "optionsSetupApplyError": {
+    "message": "Ошибка применения"
+  },
+  "optionsSetupSaveChangesFirst": {
+    "message": "Сначала сохраните изменения"
+  },
+  "optionsSetupReadyToApply": {
+    "message": "Можно применять"
+  },
+  "optionsChooseAutomaticSource": {
+    "message": "Выберите источник"
+  },
+  "optionsAvailable": {
+    "message": "Доступен"
   },
   "optionsBuiltInProvidersHelp": {
     "message": "Встроенные источники поддерживаются расширением и недоступны для редактирования."

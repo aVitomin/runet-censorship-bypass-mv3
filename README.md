@@ -116,7 +116,7 @@ Firefox is not part of the current Chromium release. See the
 ## Быстрый старт
 
 1. В разделе **Automatic routing** выберите источник. Для собственных правил без
-   внешнего списка доступен вариант **Only my site rules**.
+   внешнего списка доступен вариант **Manual rules only**.
 2. При необходимости настройте Tor, WARP или пользовательский прокси-сервер в
    разделе **Proxy connections**.
 3. Нажмите **Apply configuration**. Это единый защищённый процесс обновления,
