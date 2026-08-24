@@ -42,13 +42,13 @@
     "message": "Chromium is using its system proxy settings. Your saved routing rules and downloaded data are kept."
   },
   "popupControlExternal": {
-    "message": "Proxy settings are controlled elsewhere"
+    "message": "Another extension or policy controls proxy settings"
   },
   "popupControlExternalHelp": {
     "message": "Another extension or browser policy controls proxy settings. This extension will not override that ownership."
   },
   "popupControlExternalClearedHelp": {
-    "message": "This extension is turned off. The external controller remains active; any latent extension PAC will be removed when control returns."
+    "message": "This extension is off. The other extension or policy remains in control. Any saved proxy setting from this extension will be removed when control returns."
   },
   "popupControlApplying": {
     "message": "Applying changes…"
@@ -99,7 +99,7 @@
     "message": "Setup is not complete"
   },
   "popupControlSetupHelp": {
-    "message": "Choose a routing source before turning on the extension proxy."
+    "message": "Choose an automatic routing source before turning on the extension proxy."
   },
   "popupControlActiveShort": {
     "message": "Controlled by this extension"
@@ -108,7 +108,7 @@
     "message": "System proxy settings"
   },
   "popupControlExternalShort": {
-    "message": "Controlled elsewhere"
+    "message": "Another extension or policy"
   },
   "popupStatusActivePill": {
     "message": "Active"
@@ -138,7 +138,7 @@
     "message": "Proxy problem"
   },
   "popupChooseRoutingSource": {
-    "message": "Choose routing source"
+    "message": "Choose source"
   },
   "popupTurnOffProxy": {
     "message": "Turn off extension proxy"
@@ -164,19 +164,19 @@
     }
   },
   "popupAutoModeDescription": {
-    "message": "No site override. The selected routing source decides."
+    "message": "No site override. The selected source decides."
   },
   "popupProxyModeDescription": {
-    "message": "Always use an enabled proxy method for this site."
+    "message": "Always use an enabled proxy connection for this site."
   },
   "popupDirectModeDescription": {
     "message": "Always bypass the extension proxy for this site."
   },
   "popupProxyRouteNeedsMethod": {
-    "message": "Proxy routing needs at least one enabled Tor, WARP, or own-proxy method."
+    "message": "Proxy routing needs at least one enabled connection: Tor, WARP, or a custom proxy server."
   },
   "popupConfigureProxyMethods": {
-    "message": "Configure proxy methods"
+    "message": "Configure proxy connections"
   },
   "popupHostScopeOnly": {
     "message": "Only this hostname can be used for localhost and IP addresses."
@@ -188,10 +188,10 @@
     "message": "Connection summary"
   },
   "popupRoutingSource": {
-    "message": "Routing source"
+    "message": "Automatic routing"
   },
   "popupProxyMethods": {
-    "message": "Proxy methods"
+    "message": "Proxy connections"
   },
   "popupProxyMethodsCount": {
     "message": "$COUNT$ enabled",
@@ -208,7 +208,7 @@
     "message": "None enabled; optional for Auto"
   },
   "popupLastHealthCheck": {
-    "message": "Last proxy check"
+    "message": "Last connection check"
   },
   "popupLastRoutingUpdate": {
     "message": "Routing data"
@@ -239,7 +239,7 @@
     "message": "Advanced routing settings"
   },
   "popupAdvancedSettingsHelp": {
-    "message": "Change the routing source or optional proxy methods. Opening this section does not save anything."
+    "message": "Change the automatic routing source or optional proxy connections. Opening this section does not save anything."
   },
   "popupRefreshRoutingData": {
     "message": "Refresh data"
@@ -299,7 +299,7 @@
     "message": "Extension proxy state could not be confirmed. Open the extension to check again."
   },
   "actionTitleHealthWarning": {
-    "message": "Extension proxy is on — The last proxy check failed. Open the extension to test again."
+    "message": "Extension proxy is on — The last connection check failed. Open the extension to test again."
   },
   "actionTitleActiveAuto": {
     "message": "Extension proxy is on — Current site: Auto"
@@ -317,22 +317,22 @@
     "message": "Main PAC script from the Antizapret project."
   },
   "providerAnticensorityDescription": {
-    "message": "Alternative PAC script from the extension authors."
+    "message": "Alternative built-in PAC source."
   },
   "providerOnlyOwnSitesLabel": {
     "message": "Only my site rules"
   },
   "providerOnlyOwnSitesDescription": {
-    "message": "Use only manually configured site rules and proxy candidates."
+    "message": "Use only manually configured site rules and custom proxy servers."
   },
   "popupPacProvider": {
-    "message": "PAC provider"
+    "message": "Automatic routing source"
   },
   "popupNotSelected": {
     "message": "not selected"
   },
   "popupSelectProvider": {
-    "message": "Select provider"
+    "message": "Select source"
   },
   "popupPageCannotBeControlled": {
     "message": "This page cannot be controlled."
@@ -367,13 +367,13 @@
     "message": "Use PAC script proxies"
   },
   "popupUsePacScriptProxiesHelp": {
-    "message": "Use proxies from selected PAC provider."
+    "message": "Use proxies supplied by the selected source."
   },
   "popupOwnProxiesOnlyForOwnSites": {
-    "message": "Own proxies only for own site rules"
+    "message": "Custom proxy servers only for my site rules"
   },
   "popupOwnProxiesOnlyForOwnSitesHelp": {
-    "message": "Use own proxies only for your site rules."
+    "message": "Use custom proxy servers only for your explicit site rules."
   },
   "popupLocalTor": {
     "message": "Tor service"
@@ -391,7 +391,7 @@
     "message": "Use one Tor mode at a time."
   },
   "popupTorAvailabilityNote": {
-    "message": "Enabling Tor only makes it available for your Proxy rules. Auto mode still follows the PAC provider."
+    "message": "Enabling Tor only makes it available for your Proxy rules. Auto mode still follows the selected source."
   },
   "popupWarpCustomProxy": {
     "message": "WARP/custom proxy"
@@ -400,10 +400,10 @@
     "message": "Use a configured WARP or custom local proxy as a proxy candidate."
   },
   "popupOwnProxies": {
-    "message": "Own proxies"
+    "message": "Custom proxy servers"
   },
   "popupOwnProxiesCount": {
-    "message": "Own proxies ($COUNT$)",
+    "message": "Custom proxy servers ($COUNT$)",
     "placeholders": {
       "count": {
         "content": "$1"
@@ -411,10 +411,10 @@
     }
   },
   "popupOwnProxiesHelp": {
-    "message": "Use proxies configured in Full settings. Passwords are hidden and used only for proxy authentication."
+    "message": "Use custom proxy servers configured in Full settings. Passwords are hidden and used only for proxy authentication."
   },
   "popupOwnProxiesConfigure": {
-    "message": "Own proxies: configure in full settings."
+    "message": "Custom proxy servers: configure in full settings."
   },
   "popupPac": {
     "message": "PAC"
@@ -453,7 +453,7 @@
     "message": "Proxy cleared. Browser proxy mode returned to system."
   },
   "popupProxyClearDeferred": {
-    "message": "Extension proxy turned off. The external proxy controller remains active."
+    "message": "Extension proxy turned off. The other extension or policy remains in control."
   },
   "optionsLanguage": {
     "message": "Language"
@@ -537,7 +537,7 @@
     "message": "Adding..."
   },
   "optionsProxyRuleNoCandidate": {
-    "message": "No proxy is enabled. Enable Tor, WARP, or an own proxy."
+    "message": "No proxy connection is enabled. Enable Tor, WARP, or a custom proxy server."
   },
   "optionsNoSiteRules": {
     "message": "No site rules yet."
@@ -633,10 +633,10 @@
     "message": "Settings applied."
   },
   "popupNoProxyCandidate": {
-    "message": "No proxy is enabled. Enable Tor, WARP, or an own proxy."
+    "message": "No proxy connection is enabled. Enable Tor, WARP, or a custom proxy server."
   },
   "popupSelectPacProviderFirst": {
-    "message": "Select a PAC provider first."
+    "message": "Select a source first."
   },
   "popupPeriodicUpdateRunning": {
     "message": "Periodic PAC update is already running."
@@ -660,7 +660,7 @@
     "message": "DIRECT replacement needs an enabled proxy candidate."
   },
   "popupNoPacOrOwnProxyWarning": {
-    "message": "PAC provider proxies are disabled and no own proxy is enabled."
+    "message": "Proxies supplied by the selected source are disabled and no custom proxy server is enabled."
   },
   "optionsNone": {
     "message": "none"
@@ -675,7 +675,7 @@
     "message": "Release channel"
   },
   "optionsLimitedBeta": {
-    "message": "Limited MV3 beta"
+    "message": "Stable release"
   },
   "optionsGitHubRepository": {
     "message": "GitHub repository"
@@ -690,7 +690,7 @@
     "message": "GNU GPL v3 license"
   },
   "optionsUpstreamProject": {
-    "message": "Upstream project"
+    "message": "Original project"
   },
   "optionsWarpLocalProxyWarning": {
     "message": "WARP is treated as a local proxy."
@@ -791,16 +791,16 @@
     }
   },
   "optionsBuiltInProviders": {
-    "message": "Built-in providers"
+    "message": "Built-in sources"
   },
   "optionsCustomProviders": {
-    "message": "Custom providers"
+    "message": "Custom sources"
   },
   "optionsNoCustomProviders": {
-    "message": "No custom PAC providers configured."
+    "message": "No custom sources configured."
   },
   "optionsProviderName": {
-    "message": "Provider name"
+    "message": "Source name"
   },
   "optionsProviderDescription": {
     "message": "Description"
@@ -812,7 +812,7 @@
     "message": "Remove duplicate addresses. Each trusted PAC address should appear once."
   },
   "optionsAddCustomProvider": {
-    "message": "Add custom provider"
+    "message": "Add custom source"
   },
   "optionsSelected": {
     "message": "Selected"
@@ -824,22 +824,22 @@
     "message": "Enabled"
   },
   "optionsCustomProviderAdded": {
-    "message": "Custom routing source saved. Select it when you are ready to use it."
+    "message": "Custom source saved. Select it when you are ready to use it."
   },
   "optionsCustomProviderUpdated": {
-    "message": "Custom routing source saved. Apply the configuration to activate changes."
+    "message": "Custom source saved. Apply the configuration to activate changes."
   },
   "optionsCustomProviderDeleted": {
-    "message": "Custom routing source deleted. The active proxy configuration is unchanged until you apply or turn it off."
+    "message": "Custom source deleted. The active proxy configuration is unchanged until you apply or turn it off."
   },
   "optionsSelectedProviderCleared": {
-    "message": "The selected custom provider was disabled. Select another provider. An already applied proxy remains active until you clear or replace it."
+    "message": "The selected custom source was disabled. Select another source. An already applied proxy remains active until you clear or replace it."
   },
   "optionsSelectedProviderDeleted": {
-    "message": "The selected custom routing source was deleted. Choose another source. An already active proxy remains active until you apply or turn it off."
+    "message": "The selected custom source was deleted. Choose another source. An already active proxy remains active until you apply or turn it off."
   },
   "optionsConfirmDeleteCustomProvider": {
-    "message": "Delete custom provider $PROVIDER$?",
+    "message": "Delete custom source $PROVIDER$?",
     "placeholders": {
       "provider": {
         "content": "$1"
@@ -856,13 +856,13 @@
     "message": "PAC URLs must not contain a username or password."
   },
   "optionsProviderTooManyUrls": {
-    "message": "A custom provider may contain at most 10 PAC URLs."
+    "message": "A custom source may contain at most 10 PAC URLs."
   },
   "optionsProviderNotFound": {
-    "message": "Custom PAC provider was not found."
+    "message": "Custom source was not found."
   },
   "optionsProviderBuiltInReadOnly": {
-    "message": "Built-in PAC providers cannot be edited or deleted."
+    "message": "Built-in sources cannot be edited or deleted."
   },
   "popupAutoUpdate": {
     "message": "Auto-update"
@@ -876,7 +876,7 @@
     }
   },
   "popupProxyHealth": {
-    "message": "Proxy health"
+    "message": "Connection check"
   },
   "popupProxyHealthUnknown": {
     "message": "Not checked"
@@ -978,16 +978,16 @@
     "message": "Overview"
   },
   "optionsNavRoutingSources": {
-    "message": "Routing sources"
+    "message": "Automatic routing"
   },
   "optionsNavSiteRules": {
     "message": "Site rules"
   },
   "optionsNavProxyMethods": {
-    "message": "Proxy methods"
+    "message": "Proxy connections"
   },
   "optionsNavUpdatesHealth": {
-    "message": "Updates and health"
+    "message": "Updates and connection check"
   },
   "optionsNavDiagnostics": {
     "message": "Diagnostics"
@@ -999,7 +999,7 @@
     "message": "See whether the extension proxy is active and what needs attention."
   },
   "optionsRoutingSourcesDescription": {
-    "message": "Choose where automatic routing decisions come from and manage trusted custom sources."
+    "message": "Choose a source for automatic routing and manage trusted custom sources."
   },
   "optionsSiteRulesDescription": {
     "message": "Override automatic routing for exact hosts or a domain and its subdomains."
@@ -1029,7 +1029,7 @@
     "message": "Changing the language reloads this page and discards unsaved edits. Continue?"
   },
   "optionsActiveRoutingSource": {
-    "message": "Active routing source"
+    "message": "Automatic routing source"
   },
   "optionsSavedConfiguration": {
     "message": "Saved configuration"
@@ -1047,7 +1047,7 @@
     "message": "Off"
   },
   "optionsStateExternal": {
-    "message": "Controlled elsewhere"
+    "message": "Another extension or policy is in control"
   },
   "optionsStateApplying": {
     "message": "In progress"
@@ -1062,10 +1062,10 @@
     "message": "The last proxy operation failed. Review the configuration and try again."
   },
   "optionsChooseSourceTitle": {
-    "message": "Choose a routing source"
+    "message": "Choose an automatic routing source"
   },
   "optionsChooseSourceHelp": {
-    "message": "A routing source is required before the extension proxy can be turned on."
+    "message": "An automatic routing source is required before the extension proxy can be turned on."
   },
   "optionsGoToRoutingSources": {
     "message": "Choose source"
@@ -1080,7 +1080,7 @@
     "message": "Use source"
   },
   "optionsRoutingSourceSaved": {
-    "message": "Routing source saved. Apply the configuration to activate it."
+    "message": "Source saved. Apply the configuration to activate it."
   },
   "optionsNoDescription": {
     "message": "No description provided."
@@ -1138,13 +1138,13 @@
     "message": "Use HTTPS. HTTP is allowed only for a loopback address."
   },
   "optionsProviderSaveFailed": {
-    "message": "Could not save this routing source. Check the fields and try again."
+    "message": "Could not save this source. Check the fields and try again."
   },
   "optionsSourceSavedAndSelected": {
-    "message": "Routing source saved and selected. Apply the configuration to activate it."
+    "message": "Source saved and selected. Apply the configuration to activate it."
   },
   "optionsSourceSavedNotSelected": {
-    "message": "Routing source saved, but it could not be selected. Review the source list and try selecting it again."
+    "message": "Source saved, but it could not be selected. Review the source list and try selecting it again."
   },
   "optionsProviderCopyName": {
     "message": "$NAME$ copy",
@@ -1211,7 +1211,7 @@
     }
   },
   "optionsNoSiteRulesHelp": {
-    "message": "Auto routing follows the selected routing source. Add a rule only for an exception."
+    "message": "Auto follows the selected source. Add a rule only for an exception."
   },
   "optionsFilterSiteRules": {
     "message": "Filter rules"
@@ -1220,7 +1220,7 @@
     "message": "Search by scope, route, or note"
   },
   "optionsGoToProxyMethods": {
-    "message": "Configure proxy methods"
+    "message": "Configure proxy connections"
   },
   "optionsDomainScope": {
     "message": "Domain and subdomains"
@@ -1232,7 +1232,7 @@
     "message": "Normalized scope"
   },
   "optionsAutoRemovesRuleHelp": {
-    "message": "Choosing Auto removes this saved exception so the routing source decides."
+    "message": "Choosing Auto removes this saved exception so the selected source decides."
   },
   "optionsDisabledRuleHelp": {
     "message": "A disabled rule remains saved but does not affect routing."
@@ -1258,10 +1258,10 @@
     "message": "Site rule removed. Apply the configuration to activate the change."
   },
   "optionsProxyMethodAvailability": {
-    "message": "Proxy-method availability"
+    "message": "Proxy connection availability"
   },
   "optionsOneProxyMethod": {
-    "message": "$COUNT$ enabled method",
+    "message": "$COUNT$ enabled connection",
     "placeholders": {
       "count": {
         "content": "$1"
@@ -1269,7 +1269,7 @@
     }
   },
   "optionsManyProxyMethods": {
-    "message": "$COUNT$ enabled methods",
+    "message": "$COUNT$ enabled connections",
     "placeholders": {
       "count": {
         "content": "$1"
@@ -1280,7 +1280,7 @@
     "message": "Connection availability and successful proxy authentication are separate checks."
   },
   "optionsProxyMethodPolicy": {
-    "message": "Routing-source and own-proxy scope"
+    "message": "Proxy connection scope"
   },
   "optionsDirectReplacementHelp": {
     "message": "Advanced: allow this method to replace a Direct result only when that policy is enabled."
@@ -1289,13 +1289,13 @@
     "message": "Use the existing PAC proxy-string format. Candidate order is not changed here."
   },
   "optionsOwnProxyEditorHelp": {
-    "message": "Own proxies are optional. Passwords are stored locally for authentication and are never shown after saving."
+    "message": "Custom proxy servers are optional. Passwords are stored locally for authentication and are never shown after saving."
   },
   "optionsNoOwnProxies": {
-    "message": "No own proxies"
+    "message": "No custom proxy servers"
   },
   "optionsNoOwnProxiesHelp": {
-    "message": "Add one only when you need an explicit Proxy route or an advanced replacement method."
+    "message": "Add one only when you need an explicit Proxy route or advanced Direct replacement."
   },
   "optionsPasswordAction": {
     "message": "Password"
@@ -1337,7 +1337,7 @@
     "message": "Choose Replace or Remove password when changing the proxy type, host, or port."
   },
   "optionsProxyMethodsSavedApplyRequired": {
-    "message": "Proxy methods saved. Apply the configuration to activate routing changes."
+    "message": "Proxy connections saved. Apply the configuration to activate routing changes."
   },
   "optionsAutomaticUpdates": {
     "message": "Automatic routing-data updates"
@@ -1361,13 +1361,13 @@
     "message": "Routing rules updated. Existing proxy ownership was preserved."
   },
   "optionsConnectionHealth": {
-    "message": "Connection health"
+    "message": "Connection check"
   },
   "optionsLastProxyCheck": {
-    "message": "Last proxy check"
+    "message": "Last connection check"
   },
   "optionsCheckedMethod": {
-    "message": "Checked method"
+    "message": "Checked connection"
   },
   "optionsHealthCheckNeedsProxyRuleHelp": {
     "message": "A meaningful check requires an applied Proxy rule and a previously known target site."
@@ -1388,7 +1388,7 @@
     "message": "Routing-rule preparation"
   },
   "optionsHealthCode": {
-    "message": "Health issue"
+    "message": "Connection issue"
   },
   "optionsUpdateStatus": {
     "message": "Automatic update status"
@@ -1430,7 +1430,7 @@
     "message": "Broadens proxy use by replacing eligible Direct results with enabled replacement methods."
   },
   "optionsNoDirectWarningNew": {
-    "message": "Removes Direct fallbacks from provider results. This does not change Chromium's mandatory:false behavior."
+    "message": "Removes Direct fallbacks from source results. This does not change Chromium's mandatory:false behavior."
   },
   "optionsPatternRequired": {
     "message": "Enter a host pattern."
@@ -1533,7 +1533,7 @@
     "message": "Wait for the current operation to finish before starting another one."
   },
   "optionsChooseSourceBeforeApply": {
-    "message": "Select a trusted routing source before applying the configuration."
+    "message": "Select a trusted source before applying the configuration."
   },
   "optionsSavedAndActive": {
     "message": "Saved settings are active"

@@ -489,7 +489,7 @@ describe('MV3 popup UI', () => {
         expect(harness.root.textContent).to.include('Extension proxy is on');
         expect(harness.root.textContent).to.include('Routing for this site');
         expect(harness.root.textContent)
-            .to.include('No site override. The selected routing source decides.');
+            .to.include('No site override. The selected source decides.');
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
         expect(findButton(harness.root, 'Apply')).to.equal(null);
 
@@ -590,7 +590,7 @@ describe('MV3 popup UI', () => {
 
         expect(stateReads).to.equal(2);
         expect(harness.root.textContent)
-            .to.include('Proxy settings are controlled elsewhere');
+            .to.include('Another extension or policy controls proxy settings');
         expect(findButton(harness.root, 'Apply')).to.equal(null);
         expect(getRadios(harness.root, 'site-mode').every((radio) => radio.disabled))
             .to.equal(true);
@@ -651,7 +651,7 @@ describe('MV3 popup UI', () => {
         external.start();
         await flushUi();
         expect(external.root.textContent)
-            .to.include('Proxy settings are controlled elsewhere');
+            .to.include('Another extension or policy controls proxy settings');
         expect(findButton(external.root, 'Apply')).to.equal(null);
         const turnOff = findButton(external.root, 'Turn off extension proxy');
         expect(turnOff).to.exist;
@@ -664,7 +664,7 @@ describe('MV3 popup UI', () => {
         expect(external.calls.map((call) => call.method)).to.include('clearProxy');
         expect(external.root.textContent).to.include('Extension proxy is off');
         expect(external.root.textContent)
-            .to.include('The external controller remains active');
+            .to.include('The other extension or policy remains in control');
         expect(findButton(external.root, 'Turn off extension proxy')).to.equal(null);
 
       });
@@ -756,7 +756,7 @@ describe('MV3 popup UI', () => {
         setup.start();
         await flushUi();
         expect(setup.root.textContent).to.include('Setup is not complete');
-        expect(findButton(setup.root, 'Choose routing source')).to.exist;
+        expect(findButton(setup.root, 'Choose source')).to.exist;
         expect(findButton(setup.root, 'Apply')).to.equal(null);
 
         const noCandidateState = createPopupState({
@@ -792,7 +792,7 @@ describe('MV3 popup UI', () => {
         expect(noCandidate.root.textContent)
             .to.include('Proxy routing needs at least one enabled');
         expect(noCandidate.root.textContent).to.include('Pending');
-        expect(findButton(noCandidate.root, 'Configure proxy methods')).to.exist;
+        expect(findButton(noCandidate.root, 'Configure proxy connections')).to.exist;
         expect(findButton(noCandidate.root, 'Apply').disabled).to.equal(true);
         expect(noCandidate.calls.map((call) => call.method))
             .to.deep.equal(['getPopupState']);
@@ -850,7 +850,7 @@ describe('MV3 popup UI', () => {
         await flushUi();
 
         expect(harness.root.textContent)
-            .to.include('Proxy settings are controlled elsewhere');
+            .to.include('Another extension or policy controls proxy settings');
         expect(findButton(harness.root, 'Apply')).to.equal(null);
         expect(findButton(harness.root, 'Retry')).to.equal(null);
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
