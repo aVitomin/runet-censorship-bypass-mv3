@@ -33,7 +33,11 @@ from the actual HTTP proxy receivers:
 - mismatched host/port and passwordless proxy challengers receive no credential
   from another configured endpoint and do not fall back to the origin;
 - wrong credentials produce bounded retries, the current `retry_limit` status,
-  no successful response, and no direct-origin hit; and
+  no successful response, and no direct-origin hit;
+- a receiver barrier holds the first credentialed wrong-password retry while
+  CDP stops the exact RUCB worker version; Chrome recreates the worker for the
+  next `407`, preserves the same request ID, and RUCB still supplies no more
+  than two credential responses in total; and
 - canary passwords and reusable Basic tokens remain absent from applied PAC,
   RPC responses, popup/options DOM and password inputs, auth diagnostics,
   extension console output, receiver logs, and test-visible errors.
@@ -52,9 +56,11 @@ certificate's base64 SHA-256 SPKI through
 override; global certificate-error suppression and trust-store changes are not
 used.
 
-The retry counter is worker memory: a full browser restart before a new proxy
-request is covered, but forced worker termination in the middle of one active
-`407` sequence is not. The automated run does not manipulate machine policy,
+Retry counters use `chrome.storage.session`: each entry contains only request
+ID, normalized challenger host/port identity, count, and update time. It
+survives MV3 worker termination but clears at browser-session or extension
+reload boundaries; no username, password, authorization value, URL, realm, or
+headers enter this store. The automated run does not manipulate machine policy,
 and its fake hostnames, loopback receivers, and direct traps do not claim
 arbitrary real-world DNS-leak coverage.
 
@@ -101,9 +107,9 @@ arbitrary real-world DNS-leak coverage.
   DevTools, screenshots, or exported diagnostics.
 - Restart or suspend the service worker, retry authentication, and confirm the
   durable credential still works without first opening an extension page. A
-  full Chrome restart before a previously unused proxy is automated; natural
-  suspension and forced mid-challenge termination remain manual/follow-up
-  boundaries.
+  full Chrome restart before a previously unused proxy and forced
+  mid-challenge worker termination are automated. Natural idle suspension timing
+  remains a browser-managed boundary rather than a timing-based test.
 
 ## DevTools inspection
 

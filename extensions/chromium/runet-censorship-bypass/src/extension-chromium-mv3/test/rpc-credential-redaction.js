@@ -82,14 +82,14 @@ function setExplicitPassword(proxy, password) {
 
 }
 
-function lookupProxyAuth(harness, state, requestId, host, port) {
+async function lookupProxyAuth(harness, state, requestId, host, port) {
 
-  harness.context.mv3ProxyAuth.clearProxyAuthAttempts();
-  return harness.context.mv3ProxyAuth.handleProxyAuthRequired({
+  await harness.context.mv3ProxyAuth.clearProxyAuthAttempts();
+  return (await harness.context.mv3ProxyAuth.handleProxyAuthRequired({
     isProxy: true,
     requestId,
     challenger: {host, port},
-  }, state).response;
+  }, state)).response;
 
 }
 
@@ -405,7 +405,7 @@ Mocha.describe('MV3 RPC credential redaction', function() {
         });
         const afterUnrelatedState = harness.getState();
         const afterUnrelated = afterUnrelatedState.pacMods.ownProxies[0];
-        const authAfterUnrelated = lookupProxyAuth(
+        const authAfterUnrelated = await lookupProxyAuth(
             harness,
             afterUnrelatedState,
             'preserved-unrelated',
@@ -422,7 +422,7 @@ Mocha.describe('MV3 RPC credential redaction', function() {
         });
         const afterUsernameState = harness.getState();
         const afterUsername = afterUsernameState.pacMods.ownProxies[0];
-        const authAfterUsername = lookupProxyAuth(
+        const authAfterUsername = await lookupProxyAuth(
             harness,
             afterUsernameState,
             'preserved-username',
@@ -437,7 +437,7 @@ Mocha.describe('MV3 RPC credential redaction', function() {
         });
         const afterReplacementState = harness.getState();
         const afterReplacement = afterReplacementState.pacMods.ownProxies[0];
-        const authAfterReplacement = lookupProxyAuth(
+        const authAfterReplacement = await lookupProxyAuth(
             harness,
             afterReplacementState,
             'replaced-password',
@@ -455,7 +455,7 @@ Mocha.describe('MV3 RPC credential redaction', function() {
         const afterRemoval = afterRemovalState.pacMods.ownProxies[0];
         const authAfterRemoval = harness.context.mv3ProxyAuth
             .buildProxyAuthConfig(afterRemovalState);
-        const authLookupAfterRemoval = lookupProxyAuth(
+        const authLookupAfterRemoval = await lookupProxyAuth(
             harness,
             afterRemovalState,
             'removed-password',
@@ -536,8 +536,8 @@ Mocha.describe('MV3 RPC credential redaction', function() {
           tabUrl: 'https://audit.example/',
         });
 
-        harness.context.mv3ProxyAuth.clearProxyAuthAttempts();
-        const result = harness.context.mv3ProxyAuth.handleProxyAuthRequired({
+        await harness.context.mv3ProxyAuth.clearProxyAuthAttempts();
+        const result = await harness.context.mv3ProxyAuth.handleProxyAuthRequired({
           isProxy: true,
           requestId: 'rpc-credential-test',
           challenger: {host: 'proxy.example', port: 8443},
@@ -795,14 +795,14 @@ Mocha.describe('MV3 RPC credential redaction', function() {
           pacMods: explicit,
         });
         const replacedState = harness.getState();
-        const oldEndpointAuth = lookupProxyAuth(
+        const oldEndpointAuth = await lookupProxyAuth(
             harness,
             replacedState,
             'old-endpoint',
             'proxy.example',
             8443,
         );
-        const newEndpointAuth = lookupProxyAuth(
+        const newEndpointAuth = await lookupProxyAuth(
             harness,
             replacedState,
             'new-endpoint',
@@ -871,7 +871,7 @@ Mocha.describe('MV3 RPC credential redaction', function() {
           pacMods: clearedUsername,
         });
         const preservedState = harness.getState();
-        const preservedAuth = lookupProxyAuth(
+        const preservedAuth = await lookupProxyAuth(
             harness,
             preservedState,
             'blank-username',

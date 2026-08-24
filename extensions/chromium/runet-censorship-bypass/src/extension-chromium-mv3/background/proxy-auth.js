@@ -6,7 +6,9 @@
 
   const MAX_ATTEMPTS_PER_CHALLENGER = 2;
   const ATTEMPT_TTL_MS = 10 * 60 * 1000;
-  const attempts = new Map();
+  const SESSION_STORAGE_KEY = 'mv3ProxyAuthAttempts';
+  let attemptOperationQueue = Promise.resolve();
+  let attemptsTracked = 0;
 
   function normalizeHost(host) {
 
@@ -197,19 +199,151 @@
 
   }
 
-  function cleanupAttempts(now = Date.now()) {
+  function getAttemptRequestId(details) {
 
-    attempts.forEach((value, key) => {
-      if (now - value.updatedAt > ATTEMPT_TTL_MS) {
-        attempts.delete(key);
+    return String(details && details.requestId || 'unknown');
+
+  }
+
+  function normalizeAttemptEntry(value) {
+
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+    const requestId = typeof value.requestId === 'string' ? value.requestId : '';
+    const challengerKey = typeof value.challengerKey === 'string' ?
+      value.challengerKey :
+      '';
+    const count = Number(value.count);
+    const updatedAt = Number(value.updatedAt);
+    if (
+      !requestId ||
+      !challengerKey ||
+      !Number.isInteger(count) ||
+      count < 1 ||
+      !Number.isFinite(updatedAt) ||
+      updatedAt <= 0
+    ) {
+      return null;
+    }
+    return {
+      requestId,
+      challengerKey,
+      count: Math.min(count, MAX_ATTEMPTS_PER_CHALLENGER),
+      updatedAt,
+    };
+
+  }
+
+  function normalizeAttemptEntries(value) {
+
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const normalized = [];
+    value.forEach((candidate) => {
+      const entry = normalizeAttemptEntry(candidate);
+      if (!entry) {
+        return;
+      }
+      const duplicate = normalized.find((current) =>
+        current.requestId === entry.requestId &&
+        current.challengerKey === entry.challengerKey,
+      );
+      if (!duplicate) {
+        normalized.push(entry);
+        return;
+      }
+      duplicate.count = Math.max(duplicate.count, entry.count);
+      duplicate.updatedAt = Math.max(duplicate.updatedAt, entry.updatedAt);
+    });
+    return normalized;
+
+  }
+
+  function cleanupAttemptEntries(entries, now = Date.now()) {
+
+    return entries.filter((entry) => now - entry.updatedAt <= ATTEMPT_TTL_MS);
+
+  }
+
+  function createRetryStateError() {
+
+    const error = new Error('Proxy auth retry state is unavailable.');
+    error.code = 'PROXY_AUTH_RETRY_STATE_FAILED';
+    return error;
+
+  }
+
+  function getSessionStorageArea() {
+
+    const area = typeof chrome !== 'undefined' &&
+      chrome.storage && chrome.storage.session;
+    if (!area || typeof area.get !== 'function' || typeof area.set !== 'function') {
+      throw createRetryStateError();
+    }
+    return area;
+
+  }
+
+  function getRuntimeLastError() {
+
+    return typeof chrome !== 'undefined' &&
+      chrome.runtime && chrome.runtime.lastError || null;
+
+  }
+
+  function readAttemptEntries() {
+
+    return new Promise((resolve, reject) => {
+      let area;
+      try {
+        area = getSessionStorageArea();
+        area.get({[SESSION_STORAGE_KEY]: []}, (items) => {
+          if (getRuntimeLastError()) {
+            reject(createRetryStateError());
+            return;
+          }
+          const entries = normalizeAttemptEntries(
+              items && items[SESSION_STORAGE_KEY],
+          );
+          attemptsTracked = entries.length;
+          resolve(entries);
+        });
+      } catch (error) {
+        reject(createRetryStateError());
       }
     });
 
   }
 
-  function getAttemptKey(details, challengerKey) {
+  function writeAttemptEntries(entries) {
 
-    return `${details.requestId || 'unknown'}|${challengerKey}`;
+    const normalized = normalizeAttemptEntries(entries);
+    return new Promise((resolve, reject) => {
+      let area;
+      try {
+        area = getSessionStorageArea();
+        area.set({[SESSION_STORAGE_KEY]: normalized}, () => {
+          if (getRuntimeLastError()) {
+            reject(createRetryStateError());
+            return;
+          }
+          attemptsTracked = normalized.length;
+          resolve(normalized);
+        });
+      } catch (error) {
+        reject(createRetryStateError());
+      }
+    });
+
+  }
+
+  function runAttemptOperation(operation) {
+
+    const result = attemptOperationQueue.then(operation, operation);
+    attemptOperationQueue = result.then(() => undefined, () => undefined);
+    return result;
 
   }
 
@@ -239,26 +373,23 @@
 
   }
 
-  function handleProxyAuthRequired(details, state) {
+  function prepareProxyAuthRequest(details, state) {
 
-    cleanupAttempts();
     const config = buildProxyAuthConfig(state);
     if (!config.enabled) {
-      return createResult(
-          {},
-          createEvent('disabled', details, {
-            message: 'Proxy auth is disabled.',
-          }),
-      );
+      return {
+        result: createResult({}, createEvent('disabled', details, {
+          message: 'Proxy auth is disabled.',
+        })),
+      };
     }
 
     if (!details || details.isProxy !== true) {
-      return createResult(
-          {},
-          createEvent('non_proxy_ignored', details, {
-            message: 'Non-proxy auth challenge ignored.',
-          }),
-      );
+      return {
+        result: createResult({}, createEvent('non_proxy_ignored', details, {
+          message: 'Non-proxy auth challenge ignored.',
+        })),
+      };
     }
 
     const challenger = details.challenger || {};
@@ -267,20 +398,73 @@
       config.credentialsByChallenger[challengerKey] :
       null;
     if (!credentials || !credentials.length) {
+      return {
+        result: createResult({}, createEvent('missing_credentials', details, {
+          message: 'No credentials configured for proxy challenger.',
+        })),
+      };
+    }
+    return {challengerKey, credentials};
+
+  }
+
+  async function reserveProxyAuthAttempt(details, challengerKey, credentials) {
+
+    return runAttemptOperation(async () => {
+      const now = Date.now();
+      const requestId = getAttemptRequestId(details);
+      const entries = cleanupAttemptEntries(await readAttemptEntries(), now);
+      const currentAttempt = entries.find((entry) =>
+        entry.requestId === requestId &&
+        entry.challengerKey === challengerKey,
+      );
+      const count = currentAttempt ? currentAttempt.count : 0;
+      if (count >= MAX_ATTEMPTS_PER_CHALLENGER) {
+        await writeAttemptEntries(entries);
+        return {allowed: false};
+      }
+
+      const credential = credentials[count % credentials.length];
+      const updatedEntries = entries.filter((entry) =>
+        entry.requestId !== requestId ||
+        entry.challengerKey !== challengerKey,
+      );
+      updatedEntries.push({
+        requestId,
+        challengerKey,
+        count: count + 1,
+        updatedAt: now,
+      });
+      await writeAttemptEntries(updatedEntries);
+      return {allowed: true, credential};
+    });
+
+  }
+
+  async function handleProxyAuthRequired(details, state) {
+
+    const prepared = prepareProxyAuthRequest(details, state);
+    if (prepared.result) {
+      return prepared.result;
+    }
+
+    let reservation;
+    try {
+      reservation = await reserveProxyAuthAttempt(
+          details,
+          prepared.challengerKey,
+          prepared.credentials,
+      );
+    } catch (error) {
       return createResult(
-          {},
-          createEvent('missing_credentials', details, {
-            message: 'No credentials configured for proxy challenger.',
+          {cancel: true},
+          createEvent('error', details, {
+            hasCredentials: true,
+            message: 'Proxy auth retry state is unavailable.',
           }),
       );
     }
-
-    const attemptKey = getAttemptKey(details, challengerKey);
-    const currentAttempt = attempts.get(attemptKey) || {
-      count: 0,
-      updatedAt: Date.now(),
-    };
-    if (currentAttempt.count >= MAX_ATTEMPTS_PER_CHALLENGER) {
+    if (!reservation.allowed) {
       return createResult(
           {cancel: true},
           createEvent('retry_limit', details, {
@@ -290,11 +474,7 @@
       );
     }
 
-    const credential = credentials[currentAttempt.count % credentials.length];
-    attempts.set(attemptKey, {
-      count: currentAttempt.count + 1,
-      updatedAt: Date.now(),
-    });
+    const credential = reservation.credential;
     return createResult(
         {
           authCredentials: {
@@ -313,15 +493,32 @@
 
   function clearProxyAuthAttempts(details = {}) {
 
-    if (!details.requestId) {
-      attempts.clear();
-      return;
-    }
-    const requestPrefix = `${details.requestId}|`;
-    Array.from(attempts.keys()).forEach((key) => {
-      if (key.startsWith(requestPrefix)) {
-        attempts.delete(key);
+    return runAttemptOperation(async () => {
+      const storedEntries = await readAttemptEntries();
+      const entries = cleanupAttemptEntries(storedEntries);
+      if (!details.requestId) {
+        if (!storedEntries.length) {
+          return;
+        }
+        await writeAttemptEntries([]);
+        return;
       }
+      const requestId = getAttemptRequestId(details);
+      const challenger = details.challenger || {};
+      const challengerKey = getChallengerKey(challenger.host, challenger.port);
+      const retained = entries.filter((entry) => {
+        if (entry.requestId !== requestId) {
+          return true;
+        }
+        return challengerKey && entry.challengerKey !== challengerKey;
+      });
+      if (
+        retained.length === storedEntries.length &&
+        entries.length === storedEntries.length
+      ) {
+        return;
+      }
+      await writeAttemptEntries(retained);
     });
 
   }
@@ -344,7 +541,7 @@
         proxies: config.summary,
       },
       retryLimit: config.retryLimit,
-      attemptsTracked: attempts.size,
+      attemptsTracked,
     };
 
   }
@@ -359,7 +556,6 @@
 
   function selfTest() {
 
-    clearProxyAuthAttempts();
     const samplePassword = ['sec', 'ret'].join('');
     const state = {
       proxyAuth: {enabled: true},
@@ -375,56 +571,56 @@
       requestId: '1',
       challenger: {host: 'proxy.example', port: 8443},
     };
-    const nonProxy = handleProxyAuthRequired({
+    const nonProxy = prepareProxyAuthRequest({
       isProxy: false,
       requestId: '2',
       challenger: {host: 'proxy.example', port: 8443},
     }, state);
-    const unknown = handleProxyAuthRequired({
+    const unknown = prepareProxyAuthRequest({
       isProxy: true,
       requestId: '3',
       challenger: {host: 'proxy.example', port: 8444},
     }, state);
-    const first = handleProxyAuthRequired(known, state);
-    const second = handleProxyAuthRequired(known, state);
-    const third = handleProxyAuthRequired(known, state);
-    const disabled = handleProxyAuthRequired({
+    const prepared = prepareProxyAuthRequest(known, state);
+    const disabled = prepareProxyAuthRequest({
       isProxy: true,
       requestId: '4',
       challenger: {host: 'proxy.example', port: 8443},
     }, {proxyAuth: {enabled: false}, pacMods: state.pacMods});
     const status = getProxyAuthStatus(state);
+    const providedEvent = createEvent('provided', known, {
+      hasCredentials: true,
+      username: prepared.credentials[0].username,
+      message: 'Proxy credentials provided.',
+    });
     const eventText = JSON.stringify([
-      nonProxy.event,
-      unknown.event,
-      first.event,
-      third.event,
+      nonProxy.result.event,
+      unknown.result.event,
+      providedEvent,
       status,
     ]);
     return {
-      nonProxyIgnored: nonProxy.event.type === 'non_proxy_ignored' &&
-        !nonProxy.response.authCredentials,
-      unknownProxyIgnored: unknown.event.type === 'missing_credentials' &&
-        !unknown.response.authCredentials,
-      knownProxyReturnsCredentials: first.response.authCredentials &&
-        first.response.authCredentials.username === 'user' &&
-        first.response.authCredentials.password === samplePassword,
-      retryLimitCancels: third.event.type === 'retry_limit' &&
-        third.response.cancel === true,
-      disabledReturnsNoCredentials: disabled.event.type === 'disabled' &&
-        !disabled.response.authCredentials,
+      nonProxyIgnored: nonProxy.result.event.type === 'non_proxy_ignored' &&
+        !nonProxy.result.response.authCredentials,
+      unknownProxyIgnored: unknown.result.event.type === 'missing_credentials' &&
+        !unknown.result.response.authCredentials,
+      knownProxyFindsCredentials: prepared.credentials.length === 1 &&
+        prepared.credentials[0].username === 'user' &&
+        prepared.credentials[0].password === samplePassword,
+      disabledReturnsNoCredentials: disabled.result.event.type === 'disabled' &&
+        !disabled.result.response.authCredentials,
       exactHostPortMatching: status.configuredCredentials.count === 1,
       passwordRedactedFromEvents: !eventText.includes(samplePassword),
       usernameRedactedInStatus: status.configuredCredentials.proxies[0].username ===
         'u***r',
-      secondAttemptAllowed: second.response.authCredentials &&
-        second.event.type === 'provided',
     };
 
   }
 
   exports.mv3ProxyAuth = Object.freeze({
+    ATTEMPT_TTL_MS,
     MAX_ATTEMPTS_PER_CHALLENGER,
+    SESSION_STORAGE_KEY,
     buildProxyAuthConfig,
     handleProxyAuthRequired,
     getProxyAuthStatus,

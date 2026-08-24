@@ -1140,8 +1140,8 @@ const RPC_METHODS = Object.freeze({
 
   async clearProxyAuthEvents() {
 
+    await mv3ProxyAuth.clearProxyAuthAttempts();
     await mv3State.resetProxyAuthState();
-    mv3ProxyAuth.clearProxyAuthAttempts();
     const state = await mv3State.loadState();
     return getProxyAuthStatusFromState(state);
 
@@ -1366,8 +1366,8 @@ function handleWebRequestAuthRequired(details, asyncCallback) {
         respond(result.response);
         return mv3State.recordProxyAuthEvent(result.event);
       })
-      .catch((err) => {
-        respond({});
+      .catch(() => {
+        respond(details && details.isProxy === true ? {cancel: true} : {});
         return mv3State.recordProxyAuthEvent({
           type: 'error',
           at: Date.now(),
@@ -1375,7 +1375,7 @@ function handleWebRequestAuthRequired(details, asyncCallback) {
           isProxy: details && details.isProxy === true,
           host: details && details.challenger && details.challenger.host || null,
           port: details && details.challenger && details.challenger.port || null,
-          message: err && err.message || 'Proxy auth handler failed.',
+          message: 'Proxy auth handler failed safely.',
         });
       })
       .catch(() => {});
@@ -1384,7 +1384,8 @@ function handleWebRequestAuthRequired(details, asyncCallback) {
 
 function clearWebRequestAuthAttempt(details) {
 
-  mv3ProxyAuth.clearProxyAuthAttempts(details);
+  mv3ProxyAuth.clearProxyAuthAttempts(details)
+      .catch(() => console.warn('Failed to clear proxy-auth retry state.'));
 
 }
 

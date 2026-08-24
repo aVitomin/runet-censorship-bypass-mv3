@@ -170,6 +170,8 @@ async function createRuntimeHarness(options = {}) {
   let nextProxySettingsReadError = null;
   let nextProxySettingsSetError = options.initialProxySettingsSetError || null;
   let nextProxySettingsClearError = null;
+  let nextSessionStorageGetError = null;
+  let nextSessionStorageSetError = null;
   const proxySettingsSetValues = [];
   let proxyDetails = clone(options.initialProxyDetails || {
     levelOfControl: 'controlled_by_this_extension',
@@ -436,6 +438,15 @@ async function createRuntimeHarness(options = {}) {
         get(keysOrDefaults, callback) {
 
           ++counts.storageGets;
+          if (nextSessionStorageGetError) {
+            chromeApi.runtime.lastError = {
+              message: nextSessionStorageGetError,
+            };
+            nextSessionStorageGetError = null;
+            callback({});
+            chromeApi.runtime.lastError = null;
+            return;
+          }
           const result = {};
           Object.keys(keysOrDefaults || {}).forEach((key) => {
             result[key] = Object.prototype.hasOwnProperty.call(
@@ -449,6 +460,15 @@ async function createRuntimeHarness(options = {}) {
         set(values, callback) {
 
           ++counts.storageSets;
+          if (nextSessionStorageSetError) {
+            chromeApi.runtime.lastError = {
+              message: nextSessionStorageSetError,
+            };
+            nextSessionStorageSetError = null;
+            callback();
+            chromeApi.runtime.lastError = null;
+            return;
+          }
           Object.assign(sessionStorageData, clone(values));
           callback();
 
@@ -998,6 +1018,16 @@ async function createRuntimeHarness(options = {}) {
     getSessionStorage() {
 
       return clone(sessionStorageData);
+
+    },
+    failNextSessionStorageGet(message) {
+
+      nextSessionStorageGetError = message;
+
+    },
+    failNextSessionStorageSet(message) {
+
+      nextSessionStorageSetError = message;
 
     },
     getActionState() {
