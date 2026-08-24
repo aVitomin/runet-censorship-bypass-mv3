@@ -41,8 +41,8 @@ exports.contexts.mini = Object.assign({}, commonContext, {
 });
 
 exports.contexts.chromiumMv3 = Object.assign({}, commonContext, {
-  version: '2.02',
-  storeVersion: '2.2',
+  version: '2.03',
+  storeVersion: '2.3',
   versionSuffix: '-mv3',
   nameSuffixEn: '',
   nameSuffixRu: '',
