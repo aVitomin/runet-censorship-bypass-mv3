@@ -8,6 +8,7 @@
     "gulp": "gulp",
     "build:mv2": "node ./node_modules/gulp/bin/gulp.js buildAll",
     "build:mv3": "node ./node_modules/gulp/bin/gulp.js buildChromiumMv3 && node ./src/extension-chromium-mv3/test/verify-runtime-icons.js && node ./src/extension-chromium-mv3/test/verify-package-integrity.js",
+    "audit:prod": "npm audit --omit=dev",
     "test": "mocha --recursive ./src/**/test/*",
     "test:legacy": "mocha --recursive ./src/extension-common/test/*",
     "test:mv3": "mocha --recursive ./src/extension-chromium-mv3/test/*",
