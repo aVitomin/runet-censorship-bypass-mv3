@@ -88,6 +88,18 @@ RPC он сохраняет provider и PAC modifiers, применяет реа
 `webRequest.onAuthRequired`, повторный запрос с ожидаемыми credentials и
 детерминированный ответ proxy. Второй, ранее не использованный authenticated
 proxy проверяется только после полного перезапуска Chrome с тем же профилем.
+Отдельные transport cases подтверждают обе HTTPS-границы: HTTPS destination
+через обычный HTTP proxy проходит настоящий `CONNECT -> 407 -> authenticated
+CONNECT -> TLS tunnel`, а PAC-кандидат `HTTPS host:port` устанавливает TLS до
+самого proxy и выполняет `407` внутри этого соединения. В обоих случаях
+отдельный direct trap остаётся пустым.
+
+Для локальных TLS fixtures нужен установленный OpenSSL. `OPENSSL_BIN` задаёт
+явный override; на Windows smoke также проверяет обычные пути OpenSSL из Git for
+Windows. Сертификат и ключ создаются только во временном каталоге. Chrome
+получает только SHA-256 SPKI этого сертификата через
+`--ignore-certificate-errors-spki-list`; глобальное отключение проверки
+сертификатов и изменение machine trust store не используются.
 
 Негативные browser cases подтверждают отказ передавать proxy credentials на
 обычный origin `401`, несовпадающий host/port и passwordless proxy, а также
@@ -99,11 +111,13 @@ deferred Turn off и restart persistence. Внешняя сеть не нужн�
 сам Chrome, а не Node.
 
 Smoke не заменяет ручные проверки upgrade существующего профиля и полного UI.
-HTTPS destination `CONNECT`, TLS-to-proxy (`HTTPS` PAC scheme) и искусственное
-прерывание service worker посреди активного `407` остаются отдельными задачами.
-Счётчик auth retries хранится в памяти worker; тест проверяет его в одной
-непрерывной challenge sequence, но не обещает durability при forced mid-request
-worker termination.
+Plain HTTP `407`, HTTPS destination `CONNECT` и TLS-to-proxy (`HTTPS` PAC
+scheme) теперь покрыты отдельно. Искусственное прерывание service worker
+посреди активного `407` остаётся отложенной задачей: счётчик auth retries
+хранится в памяти worker и не обещает durability при forced mid-request worker
+termination. Тест не изменяет machine policy, а детерминированные loopback DNS
+и receiver checks не доказывают отсутствие утечек в произвольной реальной
+сети.
 
 ### Полная MV3 verification
 

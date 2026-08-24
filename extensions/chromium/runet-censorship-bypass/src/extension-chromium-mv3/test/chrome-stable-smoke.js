@@ -2,9 +2,12 @@
 
 
 const Assert = require('assert');
+const ChildProcess = require('child_process');
 const Crypto = require('crypto');
 const Fs = require('fs');
 const Http = require('http');
+const Https = require('https');
+const Net = require('net');
 const Os = require('os');
 const Path = require('path');
 const Puppeteer = require('puppeteer-core');
@@ -22,6 +25,8 @@ const TEST_HOSTS = Object.freeze({
   auto: 'auto.qa.test',
   authA: 'auth-a.qa.test',
   authB: 'auth-b.qa.test',
+  authConnect: 'auth-connect.qa.test',
+  authHttpsProxy: 'auth-https-proxy.qa.test',
   authMismatch: 'auth-mismatch.qa.test',
   authPasswordless: 'auth-passwordless.qa.test',
   authWrong: 'auth-wrong.qa.test',
@@ -134,6 +139,147 @@ function closeServer(server) {
       server.closeIdleConnections();
     }
   });
+
+}
+
+function resolveOpenSslExecutable() {
+
+  const override = String(process.env.OPENSSL_BIN || '').trim();
+  const candidates = override ? [override] : process.platform === 'win32' ? [
+    process.env.PROGRAMFILES && Path.join(
+        process.env.PROGRAMFILES,
+        'Git',
+        'usr',
+        'bin',
+        'openssl.exe',
+    ),
+    process.env.PROGRAMFILES && Path.join(
+        process.env.PROGRAMFILES,
+        'Git',
+        'mingw64',
+        'bin',
+        'openssl.exe',
+    ),
+    'openssl',
+  ] : ['openssl'];
+  const executable = candidates.filter(Boolean).find((candidate) => {
+    if (Path.isAbsolute(candidate)) {
+      if (!Fs.existsSync(candidate) || !Fs.statSync(candidate).isFile()) {
+        return false;
+      }
+    }
+    const result = ChildProcess.spawnSync(candidate, ['version'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    return result.status === 0;
+  });
+  Assert.ok(
+      executable,
+      'OpenSSL was not found. Set OPENSSL_BIN to a trusted installed ' +
+        'executable; certificate validation will not be disabled globally.',
+  );
+  return executable;
+
+}
+
+function runOpenSsl(executable, args) {
+
+  const result = ChildProcess.spawnSync(executable, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'ignore', 'pipe'],
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+        `OpenSSL certificate generation failed with exit code ${result.status}.`,
+    );
+  }
+
+}
+
+function createTlsMaterial() {
+
+  const temporaryPath = Fs.mkdtempSync(
+      Path.join(Os.tmpdir(), 'rucb-mv3-smoke-tls-'),
+  );
+  const certificatePath = Path.join(temporaryPath, 'certificate.pem');
+  const privateKeyPath = Path.join(temporaryPath, 'private-key.pem');
+  try {
+    const executable = resolveOpenSslExecutable();
+    runOpenSsl(executable, [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-sha256',
+      '-nodes',
+      '-days',
+      '2',
+      '-keyout',
+      privateKeyPath,
+      '-out',
+      certificatePath,
+      '-subj',
+      `/CN=${TEST_HOSTS.authConnect}`,
+      '-addext',
+      'subjectAltName=' + [
+        `DNS:${TEST_HOSTS.authConnect}`,
+        `DNS:${TEST_HOSTS.authHttpsProxy}`,
+        'IP:127.0.0.1',
+      ].join(','),
+    ]);
+    const certificate = Fs.readFileSync(certificatePath);
+    const privateKey = Fs.readFileSync(privateKeyPath);
+    const publicKey = new Crypto.X509Certificate(certificate)
+        .publicKey
+        .export({format: 'der', type: 'spki'});
+    return {
+      certificate,
+      privateKey,
+      spkiSha256: Crypto.createHash('sha256')
+          .update(publicKey)
+          .digest('base64'),
+      temporaryPath,
+    };
+  } catch (error) {
+    removeTlsMaterial({temporaryPath});
+    throw error;
+  }
+
+}
+
+function removeTlsMaterial(material) {
+
+  if (!material || !material.temporaryPath) {
+    return;
+  }
+  const temporaryRoot = Path.resolve(Os.tmpdir());
+  const resolved = Path.resolve(material.temporaryPath);
+  Assert.strictEqual(Path.dirname(resolved), temporaryRoot);
+  Assert.ok(Path.basename(resolved).startsWith('rucb-mv3-smoke-tls-'));
+  Fs.rmSync(resolved, {
+    force: true,
+    maxRetries: 3,
+    recursive: true,
+    retryDelay: 100,
+  });
+
+}
+
+function trackSocket(sockets, socket) {
+
+  sockets.add(socket);
+  socket.once('close', () => sockets.delete(socket));
+
+}
+
+async function closeEndpoint(endpoint) {
+
+  if (endpoint.sockets) {
+    endpoint.sockets.forEach((socket) => socket.destroy());
+  }
+  await closeServer(endpoint.server);
 
 }
 
@@ -335,6 +481,154 @@ async function createAuthenticatedProxy(options) {
 
 }
 
+async function createTlsReceiver(kind, traffic, tlsMaterial) {
+
+  const marker = `${kind}-receiver`;
+  const server = Https.createServer({
+    ALPNProtocols: ['http/1.1'],
+    cert: tlsMaterial.certificate,
+    key: tlsMaterial.privateKey,
+    minVersion: 'TLSv1.2',
+  }, (request, response) => {
+    traffic.push({
+      kind,
+      method: request.method,
+      url: request.url,
+    });
+    request.resume();
+    sendText(response, marker);
+  });
+  return {
+    kind,
+    marker,
+    port: await listen(server),
+    server,
+  };
+
+}
+
+async function createAuthenticatedConnectProxy(options) {
+
+  const realm = `rucb-${options.kind}`;
+  const sockets = new Set();
+  const server = Http.createServer((request, response) => {
+    request.resume();
+    response.writeHead(400, {
+      'Connection': 'close',
+      'Content-Length': '0',
+    });
+    response.end();
+  });
+  server.on('connection', (socket) => trackSocket(sockets, socket));
+  server.on('connect', (request, clientSocket, head) => {
+    const auth = classifyAuthorization(
+        request.headers['proxy-authorization'],
+        options.expectedAuthorization,
+        options.knownAuthorizations,
+    );
+    const ifExpected = auth === 'expected';
+    options.traffic.push({
+      auth,
+      kind: options.kind,
+      method: 'CONNECT',
+      tunneled: ifExpected,
+      url: request.url,
+    });
+    clientSocket.on('error', () => {});
+    if (!ifExpected) {
+      clientSocket.end([
+        'HTTP/1.1 407 Proxy Authentication Required',
+        `Proxy-Authenticate: Basic realm="${realm}"`,
+        'Content-Length: 0',
+        'Connection: close',
+        '',
+        '',
+      ].join('\r\n'));
+      return;
+    }
+    const upstream = Net.connect({
+      host: '127.0.0.1',
+      port: options.tlsOriginPort,
+    });
+    trackSocket(sockets, upstream);
+    upstream.once('connect', () => {
+      clientSocket.write([
+        'HTTP/1.1 200 Connection Established',
+        'Connection: keep-alive',
+        '',
+        '',
+      ].join('\r\n'));
+      if (head.length) {
+        upstream.write(head);
+      }
+      clientSocket.pipe(upstream);
+      upstream.pipe(clientSocket);
+    });
+    upstream.once('error', () => clientSocket.destroy());
+  });
+  return {
+    kind: options.kind,
+    port: await listen(server),
+    server,
+    sockets,
+  };
+
+}
+
+async function createAuthenticatedHttpsProxy(options, tlsMaterial) {
+
+  const marker = `${options.kind}-authenticated-receiver`;
+  const realm = `rucb-${options.kind}`;
+  const sockets = new Set();
+  let tlsConnections = 0;
+  const server = Https.createServer({
+    ALPNProtocols: ['http/1.1'],
+    cert: tlsMaterial.certificate,
+    key: tlsMaterial.privateKey,
+    minVersion: 'TLSv1.2',
+  }, (request, response) => {
+    const auth = classifyAuthorization(
+        request.headers['proxy-authorization'],
+        options.expectedAuthorization,
+        options.knownAuthorizations,
+    );
+    options.traffic.push({
+      alpn: request.socket.alpnProtocol || null,
+      auth,
+      encrypted: request.socket.encrypted === true,
+      kind: options.kind,
+      method: request.method,
+      url: request.url,
+    });
+    request.resume();
+    if (auth === 'expected') {
+      sendText(response, marker);
+      return;
+    }
+    response.writeHead(407, {
+      'Connection': 'close',
+      'Content-Length': '0',
+      'Proxy-Authenticate': `Basic realm="${realm}"`,
+    });
+    response.end();
+  });
+  server.on('connection', (socket) => trackSocket(sockets, socket));
+  server.on('secureConnection', () => {
+    tlsConnections += 1;
+  });
+  return {
+    get tlsConnections() {
+      return tlsConnections;
+    },
+    kind: options.kind,
+    marker,
+    port: await listen(server),
+    server,
+    sockets,
+  };
+
+}
+
 async function createUnauthorizedOrigin(traffic, knownAuthorizations) {
 
   const kind = 'origin-401';
@@ -400,9 +694,12 @@ async function createPacServer(providerProxyPort, authRoutes) {
 async function createInfrastructure() {
 
   const traffic = [];
+  const tlsMaterial = createTlsMaterial();
   const credentials = Object.freeze({
     proxyA: createCredentialCanary('proxy-a'),
     proxyB: createCredentialCanary('proxy-b'),
+    proxyConnect: createCredentialCanary('proxy-connect'),
+    proxyHttps: createCredentialCanary('proxy-https'),
     wrongConfigured: createCredentialCanary('wrong-configured'),
     wrongExpected: createCredentialCanary('wrong-expected'),
   });
@@ -427,6 +724,33 @@ async function createInfrastructure() {
     knownAuthorizations,
     traffic,
   });
+  const connectTlsOrigin = await createTlsReceiver(
+      'connect-tls-origin',
+      traffic,
+      tlsMaterial,
+  );
+  const connectDirectTrap = await createTlsReceiver(
+      'connect-direct-trap',
+      traffic,
+      tlsMaterial,
+  );
+  const authConnectProxy = await createAuthenticatedConnectProxy({
+    expectedAuthorization: credentials.proxyConnect.authorization,
+    kind: 'auth-connect-proxy',
+    knownAuthorizations,
+    tlsOriginPort: connectTlsOrigin.port,
+    traffic,
+  });
+  const httpsProxyDirectTrap = await createReceiver(
+      'https-proxy-direct-trap',
+      traffic,
+  );
+  const authHttpsProxy = await createAuthenticatedHttpsProxy({
+    expectedAuthorization: credentials.proxyHttps.authorization,
+    kind: 'auth-https-proxy',
+    knownAuthorizations,
+    traffic,
+  }, tlsMaterial);
   const authMismatch = await createAuthenticatedProxy({
     acceptExpected: false,
     expectedAuthorization: null,
@@ -456,6 +780,14 @@ async function createInfrastructure() {
     {host: TEST_HOSTS.authA, result: `PROXY 127.0.0.1:${authProxyA.port}`},
     {host: TEST_HOSTS.authB, result: `PROXY 127.0.0.1:${authProxyB.port}`},
     {
+      host: TEST_HOSTS.authConnect,
+      result: `PROXY 127.0.0.1:${authConnectProxy.port}`,
+    },
+    {
+      host: TEST_HOSTS.authHttpsProxy,
+      result: `HTTPS 127.0.0.1:${authHttpsProxy.port}`,
+    },
+    {
       host: TEST_HOSTS.authMismatch,
       result: `PROXY 127.0.0.1:${authMismatch.port}`,
     },
@@ -467,19 +799,25 @@ async function createInfrastructure() {
     {host: TEST_HOSTS.origin401, result: 'DIRECT'},
   ]);
   return {
+    authConnectProxy,
+    authHttpsProxy,
     authMismatch,
     authPasswordless,
     authProxyA,
     authProxyB,
     authWrong,
+    connectDirectTrap,
+    connectTlsOrigin,
     credentialCanaries,
     credentials,
     explicitProxy,
     helperProxy,
+    httpsProxyDirectTrap,
     origin,
     pac,
     providerProxy,
     traffic,
+    tlsMaterial,
     unauthorizedOrigin,
   };
 
@@ -490,19 +828,28 @@ async function closeInfrastructure(infrastructure) {
   if (!infrastructure) {
     return;
   }
-  await Promise.all([
-    infrastructure.authMismatch,
-    infrastructure.authPasswordless,
-    infrastructure.authProxyA,
-    infrastructure.authProxyB,
-    infrastructure.authWrong,
-    infrastructure.pac,
-    infrastructure.explicitProxy,
-    infrastructure.helperProxy,
-    infrastructure.providerProxy,
-    infrastructure.origin,
-    infrastructure.unauthorizedOrigin,
-  ].map((endpoint) => closeServer(endpoint.server)));
+  try {
+    await Promise.all([
+      infrastructure.authConnectProxy,
+      infrastructure.authHttpsProxy,
+      infrastructure.authMismatch,
+      infrastructure.authPasswordless,
+      infrastructure.authProxyA,
+      infrastructure.authProxyB,
+      infrastructure.authWrong,
+      infrastructure.connectDirectTrap,
+      infrastructure.connectTlsOrigin,
+      infrastructure.pac,
+      infrastructure.explicitProxy,
+      infrastructure.helperProxy,
+      infrastructure.httpsProxyDirectTrap,
+      infrastructure.providerProxy,
+      infrastructure.origin,
+      infrastructure.unauthorizedOrigin,
+    ].map(closeEndpoint));
+  } finally {
+    removeTlsMaterial(infrastructure.tlsMaterial);
+  }
 
 }
 
@@ -604,8 +951,14 @@ async function launchExtension(
     chromeExecutable,
     profilePath,
     credentialCanaries,
+    tlsSpkiSha256,
 ) {
 
+  Assert.match(
+      tlsSpkiSha256,
+      /^[A-Za-z0-9+/]{43}=$/,
+      'Temporary certificate SPKI must be a base64 SHA-256 value.',
+  );
   const diagnostics = [];
   const monitoredWorkers = new WeakSet();
   console.log('Chrome smoke: launching Chrome Stable.');
@@ -620,10 +973,13 @@ async function launchExtension(
       '--metrics-recording-only',
       '--no-default-browser-check',
       '--no-first-run',
+      `--ignore-certificate-errors-spki-list=${tlsSpkiSha256}`,
       '--host-resolver-rules=' + [
         `MAP ${TEST_HOSTS.auto} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authA} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authB} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authConnect} 127.0.0.1`,
+        `MAP ${TEST_HOSTS.authHttpsProxy} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authMismatch} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authPasswordless} 127.0.0.1`,
         `MAP ${TEST_HOSTS.authWrong} 127.0.0.1`,
@@ -1002,13 +1358,18 @@ async function configureExtension(page, infrastructure) {
   Assert.strictEqual(selected.currentPacProviderKey, providerKey);
 
   const pacMods = await callRpc(page, 'getPacMods');
-  const createOwnProxy = (endpoint, note, credentials = null) => ({
+  const createOwnProxy = (
+      endpoint,
+      note,
+      credentials = null,
+      type = 'PROXY',
+  ) => ({
     enabled: true,
     host: '127.0.0.1',
     note,
     password: credentials ? credentials.password : '',
     port: endpoint.port,
-    type: 'PROXY',
+    type,
     username: credentials ? credentials.username : '',
     useAsDirectReplacement: false,
   });
@@ -1026,6 +1387,17 @@ async function configureExtension(page, infrastructure) {
         infrastructure.authProxyB,
         'Chrome Stable authenticated proxy B',
         infrastructure.credentials.proxyB,
+    ),
+    createOwnProxy(
+        infrastructure.authConnectProxy,
+        'Chrome Stable authenticated CONNECT proxy',
+        infrastructure.credentials.proxyConnect,
+    ),
+    createOwnProxy(
+        infrastructure.authHttpsProxy,
+        'Chrome Stable authenticated HTTPS proxy',
+        infrastructure.credentials.proxyHttps,
+        'HTTPS',
     ),
     createOwnProxy(
         infrastructure.authPasswordless,
@@ -1166,8 +1538,9 @@ async function navigateForAuthScenario(
   let responseStatus = null;
   try {
     await page.setCacheEnabled(false);
+    const protocol = options.protocol || 'http';
     const response = await page.goto(
-        `http://${host}:${originPort}/chrome-auth-smoke?token=${token}`,
+        `${protocol}://${host}:${originPort}/chrome-auth-smoke?token=${token}`,
         {
           timeout: options.timeout || CHROME_TIMEOUT_MS,
           waitUntil: 'domcontentloaded',
@@ -1244,6 +1617,201 @@ async function assertAuthenticatedProxyRoute(
       `${scenario.name} auth status`,
   );
   return hits.map((entry) => entry.auth);
+
+}
+
+function assertExactProxyAuthEvent(observed, endpoint, scenarioName) {
+
+  Assert.strictEqual(
+      observed.event.isProxy,
+      true,
+      `${scenarioName}: RUCB did not classify the challenge as proxy auth.`,
+  );
+  Assert.strictEqual(
+      observed.event.host,
+      '127.0.0.1',
+      `${scenarioName}: unexpected auth challenger host.`,
+  );
+  Assert.strictEqual(
+      String(observed.event.port),
+      String(endpoint.port),
+      `${scenarioName}: unexpected auth challenger port.`,
+  );
+
+}
+
+async function assertAuthenticatedConnectRoute(
+    session,
+    optionsPage,
+    infrastructure,
+) {
+
+  const scenarioName = 'authenticated HTTP proxy CONNECT';
+  await clearProxyAuthEvents(optionsPage);
+  const trafficStart = infrastructure.traffic.length;
+  const target = `${TEST_HOSTS.authConnect}:` +
+    infrastructure.connectDirectTrap.port;
+  const result = await navigateForAuthScenario(
+      session,
+      TEST_HOSTS.authConnect,
+      infrastructure.connectDirectTrap.port,
+      {name: scenarioName, protocol: 'https'},
+  );
+  Assert.strictEqual(
+      result.errorMessage,
+      null,
+      `${scenarioName}: HTTPS request failed.`,
+  );
+  Assert.strictEqual(result.responseStatus, 200);
+
+  const traffic = infrastructure.traffic.slice(trafficStart);
+  const connectHits = traffic.filter((entry) =>
+    entry.kind === infrastructure.authConnectProxy.kind &&
+      entry.method === 'CONNECT' && entry.url === target,
+  );
+  const connectAuth = connectHits.map((entry) => entry.auth);
+  Assert.ok(
+      connectAuth.length >= 2 && connectAuth.length <= 6,
+      `${scenarioName}: CONNECT traffic was missing or unexpectedly unbounded.`,
+  );
+  Assert.strictEqual(
+      connectAuth[0],
+      'none',
+      `${scenarioName}: first CONNECT unexpectedly carried credentials.`,
+  );
+  Assert.ok(
+      connectAuth.includes('expected'),
+      `${scenarioName}: Chrome made no authenticated CONNECT retry.`,
+  );
+  Assert.ok(
+      connectAuth.every((auth) => ['none', 'expected'].includes(auth)),
+      `${scenarioName}: CONNECT received an unintended credential.`,
+  );
+  Assert.ok(
+      connectHits.every((entry) => entry.tunneled === (entry.auth === 'expected')),
+      `${scenarioName}: only an authenticated CONNECT may open a tunnel.`,
+  );
+  const tokenHits = getTrafficForToken(
+      infrastructure,
+      trafficStart,
+      result.token,
+  );
+  Assert.deepStrictEqual(
+      tokenHits.map((entry) => entry.kind),
+      [infrastructure.connectTlsOrigin.kind],
+      `${scenarioName}: HTTPS request reached an unintended receiver or DIRECT.`,
+  );
+  Assert.strictEqual(
+      traffic.filter((entry) =>
+        entry.kind === infrastructure.connectDirectTrap.kind,
+      ).length,
+      0,
+      `${scenarioName}: direct-fallback trap received a request.`,
+  );
+  Assert.strictEqual(
+      result.responseBody,
+      infrastructure.connectTlsOrigin.marker,
+  );
+  const observed = await waitForProxyAuthEvent(
+      optionsPage,
+      'provided',
+      infrastructure.authConnectProxy.port,
+  );
+  assertExactProxyAuthEvent(
+      observed,
+      infrastructure.authConnectProxy,
+      scenarioName,
+  );
+  assertNoCredentialCanary(
+      [result.errorMessage, observed, traffic],
+      session.credentialCanaries,
+      `${scenarioName} observations`,
+  );
+  return {
+    connectAuth,
+    directTrapHits: 0,
+    tlsOrigin: tokenHits[0].kind,
+  };
+
+}
+
+async function assertAuthenticatedHttpsProxyRoute(
+    session,
+    optionsPage,
+    infrastructure,
+) {
+
+  const scenarioName = 'authenticated HTTPS proxy transport';
+  await clearProxyAuthEvents(optionsPage);
+  const trafficStart = infrastructure.traffic.length;
+  const tlsConnectionsStart = infrastructure.authHttpsProxy.tlsConnections;
+  const result = await navigateForAuthScenario(
+      session,
+      TEST_HOSTS.authHttpsProxy,
+      infrastructure.httpsProxyDirectTrap.port,
+      {name: scenarioName},
+  );
+  Assert.strictEqual(
+      result.errorMessage,
+      null,
+      `${scenarioName}: HTTP request failed.`,
+  );
+  Assert.strictEqual(result.responseStatus, 200);
+  const hits = getTrafficForToken(
+      infrastructure,
+      trafficStart,
+      result.token,
+  );
+  Assert.deepStrictEqual(
+      hits.map((entry) => entry.kind),
+      [infrastructure.authHttpsProxy.kind, infrastructure.authHttpsProxy.kind],
+      `${scenarioName}: request reached an unintended receiver or DIRECT.`,
+  );
+  Assert.deepStrictEqual(
+      hits.map((entry) => entry.auth),
+      ['none', 'expected'],
+      `${scenarioName}: expected unauthenticated 407 then authenticated retry.`,
+  );
+  Assert.ok(
+      hits.every((entry) =>
+        entry.encrypted === true && entry.alpn === 'http/1.1',
+      ),
+      `${scenarioName}: proxy request did not use TLS with HTTP/1.1.`,
+  );
+  Assert.strictEqual(
+      hits.filter((entry) =>
+        entry.kind === infrastructure.httpsProxyDirectTrap.kind,
+      ).length,
+      0,
+      `${scenarioName}: direct-fallback trap received a request.`,
+  );
+  Assert.strictEqual(result.responseBody, infrastructure.authHttpsProxy.marker);
+  const tlsConnections = infrastructure.authHttpsProxy.tlsConnections -
+    tlsConnectionsStart;
+  Assert.ok(
+      tlsConnections >= 1,
+      `${scenarioName}: Chrome established no TLS connection to the proxy.`,
+  );
+  const observed = await waitForProxyAuthEvent(
+      optionsPage,
+      'provided',
+      infrastructure.authHttpsProxy.port,
+  );
+  assertExactProxyAuthEvent(
+      observed,
+      infrastructure.authHttpsProxy,
+      scenarioName,
+  );
+  assertNoCredentialCanary(
+      [result.errorMessage, observed, hits],
+      session.credentialCanaries,
+      `${scenarioName} observations`,
+  );
+  return {
+    auth: hits.map((entry) => entry.auth),
+    directTrapHits: 0,
+    tlsConnections,
+  };
 
 }
 
@@ -1454,7 +2022,7 @@ async function assertCredentialRedaction(
     window.location.hash = 'proxy-methods';
   });
   await optionsPage.waitForFunction(
-      () => document.querySelectorAll('[name="proxy.password"]').length >= 5,
+      () => document.querySelectorAll('[name="proxy.password"]').length >= 7,
       {timeout: CHROME_TIMEOUT_MS},
   );
   const optionsDom = await optionsPage.evaluate(() => ({
@@ -1559,6 +2127,7 @@ async function runSmoke() {
         chromeExecutable,
         profilePath,
         infrastructure.credentialCanaries,
+        infrastructure.tlsMaterial.spkiSha256,
     );
     console.log('Chrome smoke: loaded RUCB for initial routing checks.');
     browser = session.browser;
@@ -1614,6 +2183,7 @@ async function runSmoke() {
         chromeExecutable,
         profilePath,
         infrastructure.credentialCanaries,
+        infrastructure.tlsMaterial.spkiSha256,
     );
     browser = session.browser;
     Assert.strictEqual(
@@ -1638,6 +2208,16 @@ async function runSmoke() {
           host: TEST_HOSTS.authB,
           name: 'authenticated HTTP proxy B after restart',
         },
+    );
+    const connectEvidence = await assertAuthenticatedConnectRoute(
+        session,
+        restartedOptionsPage,
+        infrastructure,
+    );
+    const httpsProxyEvidence = await assertAuthenticatedHttpsProxyRoute(
+        session,
+        restartedOptionsPage,
+        infrastructure,
     );
     const origin401Evidence = await assertOrigin401Ignored(
         session,
@@ -1683,6 +2263,18 @@ async function runSmoke() {
     );
     console.log(
         `Chrome smoke 407: proxy B after restart ${authBEvidence.join(' -> ')}.`,
+    );
+    console.log(
+        'Chrome smoke 407 CONNECT: ' +
+          `${connectEvidence.connectAuth.join(' -> ')} -> ` +
+          `${connectEvidence.tlsOrigin}; direct trap ` +
+          `${connectEvidence.directTrapHits}.`,
+    );
+    console.log(
+        'Chrome smoke 407 HTTPS proxy: ' +
+          `${httpsProxyEvidence.auth.join(' -> ')} over ` +
+          `${httpsProxyEvidence.tlsConnections} TLS connection(s); ` +
+          `direct trap ${httpsProxyEvidence.directTrapHits}.`,
     );
     console.log(
         'Chrome smoke 407: origin 401 credentials ' +
@@ -1754,6 +2346,7 @@ async function runSmoke() {
         chromeExecutable,
         profilePath,
         infrastructure.credentialCanaries,
+        infrastructure.tlsMaterial.spkiSha256,
     );
     browser = session.browser;
     Assert.strictEqual(session.extensionId, firstExtensionId);
@@ -1773,7 +2366,9 @@ async function runSmoke() {
         'Direct -> origin, restart recovery -> explicit proxy, and ' +
         'external takeover -> deferred Clear -> direct after release/restart. ' +
         'Verified real HTTP 407 auth, durable credentials, 401/mismatch/' +
-        'passwordless rejection, retry limiting, and credential redaction.',
+        'passwordless rejection, retry limiting, and credential redaction. ' +
+        'Verified authenticated CONNECT to an HTTPS origin and authenticated ' +
+        'HTTP/1.1 traffic over an HTTPS proxy transport.',
     );
   } catch (error) {
     throw createSafeError(
