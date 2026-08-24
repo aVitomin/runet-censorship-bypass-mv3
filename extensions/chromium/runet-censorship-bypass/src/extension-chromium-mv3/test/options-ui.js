@@ -710,6 +710,25 @@ describe('MV3 options UI', function() {
         expect(harness.root.textContent).to.include('0.0.2.03');
         expect(harness.root.textContent).to.include('Stable release');
         expect(harness.root.textContent).not.to.include('MV3 migration:');
+        const navigation = harness.root.querySelectorAll('.options-nav a');
+        expect(navigation.map((link) => link.textContent)).to.deep.equal([
+          'Overview',
+          'Automatic routing',
+          'Site rules',
+          'Proxy connections',
+          'Maintenance',
+          'Advanced',
+          'About',
+        ]);
+        expect(navigation.map((link) => link.dataset.section)).to.deep.equal([
+          'overview',
+          'routing-sources',
+          'site-rules',
+          'proxy-methods',
+          'maintenance',
+          'advanced',
+          'about',
+        ]);
         const aboutLinks = harness.root.querySelectorAll('.about-links a');
         expect(aboutLinks.map((link) => link.textContent)).to.deep.equal([
           'GitHub repository',
@@ -730,6 +749,12 @@ describe('MV3 options UI', function() {
         )).to.equal(true);
         expect(getSection(harness.root, 'overview').hidden).to.equal(false);
         expect(getSection(harness.root, 'site-rules').hidden).to.equal(true);
+        expect(getSection(harness.root, 'about').querySelectorAll(
+            '.about-links a',
+        )).to.have.length(5);
+        expect(getSection(harness.root, 'advanced').querySelectorAll(
+            '.about-links a',
+        )).to.have.length(0);
         const current = harness.root.querySelector(
             '.options-nav a[aria-current="page"]',
         );
@@ -739,22 +764,20 @@ describe('MV3 options UI', function() {
 
       });
 
-  it('uses hash navigation without replacing drafts or reloading',
+  it('loads and activates every primary section hash without reloading',
       async function() {
 
-        const harness = await createHarness();
         const sections = [
           'overview',
           'routing-sources',
           'site-rules',
           'proxy-methods',
-          'updates-health',
-          'diagnostics',
+          'maintenance',
           'advanced',
+          'about',
         ];
         for (const sectionId of sections) {
-          harness.location.hash = `#${sectionId}`;
-          harness.context.window.dispatch('hashchange');
+          const harness = await createHarness({hash: `#${sectionId}`});
           expect(getSection(harness.root, sectionId).hidden).to.equal(false);
           expect(harness.root.querySelectorAll(
               '[data-options-section]',
@@ -762,6 +785,20 @@ describe('MV3 options UI', function() {
           expect(harness.root.querySelector(
               '.options-nav a[aria-current="page"]',
           ).dataset.section).to.equal(sectionId);
+          expect(harness.root.querySelector(
+              '#options-section-select',
+          ).value).to.equal(sectionId);
+          expect(harness.location.reloadCalls).to.equal(0);
+        }
+
+        const harness = await createHarness();
+        for (const sectionId of sections) {
+          const link = harness.root.querySelector(
+              `.options-nav a[data-section="${sectionId}"]`,
+          );
+          link.dispatch('click');
+          expect(harness.location.hash).to.equal(sectionId);
+          expect(getSection(harness.root, sectionId).hidden).to.equal(false);
           expect(harness.document.activeElement.id)
               .to.equal(`${sectionId}-heading`);
         }
@@ -779,6 +816,78 @@ describe('MV3 options UI', function() {
         harness.context.window.dispatch('hashchange');
         expect(getSection(harness.root, 'site-rules').hidden).to.equal(false);
         expect(harness.location.reloadCalls).to.equal(0);
+
+      });
+
+  it('keeps legacy maintenance hashes compatible and history-safe',
+      async function() {
+
+        const harness = await createHarness({hash: '#diagnostics'});
+        const maintenance = getSection(harness.root, 'maintenance');
+        const diagnostics = maintenance.querySelector('#diagnostics');
+        expect(maintenance.hidden).to.equal(false);
+        expect(diagnostics.open).to.equal(true);
+        expect(harness.location.hash).to.equal('#diagnostics');
+        expect(harness.root.querySelector(
+            '.options-nav a[aria-current="page"]',
+        ).dataset.section).to.equal('maintenance');
+        expect(harness.root.querySelector('#options-section-select').value)
+            .to.equal('maintenance');
+
+        for (const legacyHash of ['#updates-health', '#updates']) {
+          harness.location.hash = legacyHash;
+          harness.context.window.dispatch('hashchange');
+          expect(maintenance.hidden).to.equal(false);
+          expect(harness.location.hash).to.equal(legacyHash);
+          expect(harness.document.activeElement.id)
+              .to.equal('maintenance-updates-heading');
+        }
+        harness.location.hash = '#about';
+        harness.context.window.dispatch('hashchange');
+        expect(getSection(harness.root, 'about').hidden).to.equal(false);
+        harness.location.hash = '#diagnostics';
+        harness.context.window.dispatch('hashchange');
+        expect(maintenance.hidden).to.equal(false);
+        expect(diagnostics.open).to.equal(true);
+        expect(harness.document.activeElement.id)
+            .to.equal('maintenance-diagnostics-heading');
+        expect(harness.location.reloadCalls).to.equal(0);
+
+      });
+
+  it('groups each existing task once under its intended primary section',
+      async function() {
+
+        const harness = await createHarness();
+        const routing = getSection(harness.root, 'routing-sources');
+        const rules = getSection(harness.root, 'site-rules');
+        const proxies = getSection(harness.root, 'proxy-methods');
+        const maintenance = getSection(harness.root, 'maintenance');
+        const advanced = getSection(harness.root, 'advanced');
+        const about = getSection(harness.root, 'about');
+
+        expect(routing.textContent).to.include('Built-in sources');
+        expect(getInput(rules, 'siteRule.pattern')).to.exist;
+        expect(getInput(proxies, 'localTor.host')).to.exist;
+        expect(getInput(maintenance, 'updates.enabled')).to.exist;
+        expect(findButton(maintenance, 'Update routing rules')).to.exist;
+        expect(findButton(maintenance, 'Check proxy')).to.exist;
+        expect(maintenance.querySelector('#diagnostics')).to.exist;
+        expect(advanced.querySelector(
+            '[data-disclosure-key="legacy-migration"]',
+        )).to.exist;
+        expect(about.querySelectorAll('.about-links a')).to.have.length(5);
+
+        [
+          'siteRule.pattern',
+          'localTor.host',
+          'updates.enabled',
+        ].forEach((name) => {
+          expect(harness.root.querySelectorAll(`[name="${name}"]`))
+              .to.have.length(1);
+        });
+        expect(harness.root.querySelectorAll('#diagnostics')).to.have.length(1);
+        expect(harness.root.querySelectorAll('.about-links')).to.have.length(1);
 
       });
 
@@ -1666,7 +1775,10 @@ describe('MV3 options UI', function() {
             .to.equal('<svg/onload=host()>');
         expect(getInput(harness.root, 'proxy.username').value)
             .to.equal('"><img src=x onerror=user()>');
-        const diagnostics = getSection(harness.root, 'diagnostics');
+        const diagnostics = getSection(
+            harness.root,
+            'maintenance',
+        ).querySelector('#diagnostics');
         expect(harness.root.textContent).to.include(
             '<img src=x onerror=alert(1)>',
         );
@@ -1839,10 +1951,18 @@ describe('MV3 options UI', function() {
         const snapshot = createSnapshot();
         snapshot.state.uiLanguage = 'ru';
         const harness = await createHarness({language: 'ru', snapshot});
-        expect(harness.root.textContent).to.include('Автоматическая маршрутизация');
-        expect(harness.root.textContent).to.include(
-            'Обновления и проверка подключения',
-        );
+        expect(harness.root.querySelectorAll(
+            '.options-nav a',
+        ).map((link) => link.textContent)).to.deep.equal([
+          'Обзор',
+          'Автоматическая маршрутизация',
+          'Правила сайтов',
+          'Прокси-подключения',
+          'Обслуживание',
+          'Дополнительно',
+          'О расширении',
+        ]);
+        expect(harness.root.textContent).to.include('Диагностика');
         expect(harness.root.textContent).to.include(
             'Стабильный выпуск',
         );
@@ -1882,6 +2002,23 @@ describe('MV3 options UI', function() {
         expect(details.querySelector('summary')).to.exist;
         const mobile = harness.root.querySelector('#options-section-select');
         expect(mobile.parentNode.tagName).to.equal('LABEL');
+        expect(mobile.querySelectorAll('option').map((option) => option.value))
+            .to.deep.equal([
+              'overview',
+              'routing-sources',
+              'site-rules',
+              'proxy-methods',
+              'maintenance',
+              'advanced',
+              'about',
+            ]);
+        for (const option of mobile.querySelectorAll('option')) {
+          mobile.value = option.value;
+          mobile.dispatch('change');
+          expect(getSection(harness.root, option.value).hidden).to.equal(false);
+          expect(harness.document.activeElement.id)
+              .to.equal(`${option.value}-heading`);
+        }
 
       });
 
