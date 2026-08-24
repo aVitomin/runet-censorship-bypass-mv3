@@ -577,7 +577,7 @@ async function createHarness(options = {}) {
       runtime: {
         getManifest() {
 
-          return {version: '0.0.2.1', version_name: '0.0.2.01'};
+          return {version: '0.0.2.2', version_name: '0.0.2.02'};
 
         },
       },
@@ -707,7 +707,7 @@ describe('MV3 options UI', function() {
         ]);
         expect(harness.root.textContent).to.include('Overview');
         expect(harness.root.textContent).to.include('Routing sources');
-        expect(harness.root.textContent).to.include('0.0.2.01');
+        expect(harness.root.textContent).to.include('0.0.2.02');
         expect(harness.root.textContent).to.include('Limited MV3 beta');
         expect(harness.root.textContent).not.to.include('MV3 migration:');
         const aboutLinks = harness.root.querySelectorAll('.about-links a');
