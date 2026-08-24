@@ -756,8 +756,15 @@ describe('MV3 popup UI', () => {
         setup.start();
         await flushUi();
         expect(setup.root.textContent).to.include('Setup is not complete');
-        expect(findButton(setup.root, 'Choose source')).to.exist;
+        const openSetup = findButton(setup.root, 'Set up extension');
+        expect(openSetup).to.exist;
         expect(findButton(setup.root, 'Apply')).to.equal(null);
+
+        await openSetup.onclick();
+        await flushUi();
+        expect(setup.calls.filter((call) =>
+          call.method === 'openOptionsPage',
+        )).to.have.length(1);
 
         const noCandidateState = createPopupState({
           mode: 'auto',
@@ -1241,6 +1248,28 @@ describe('MV3 popup UI', () => {
         expect(harness.root.textContent).to.include('Маршрут для этого сайта');
         expect(harness.root.textContent).to.include('Проверка пройдена');
         expect(harness.root.textContent).to.not.include('Extension proxy is on');
+
+        const setup = createPopupHarness({
+          language: 'ru',
+          state: createPopupState({
+            uiLanguage: 'ru',
+            selectedProvider: '',
+            selectedProviderLabel: '',
+            proxyApplied: false,
+            proxyApplyStatus: 'idle',
+            proxyControl: {
+              levelOfControl: 'controllable_by_this_extension',
+              canControl: true,
+              controlledByThisExtension: false,
+              controlsPac: false,
+            },
+          }),
+        });
+        setup.start();
+        await flushUi();
+        expect(setup.root.textContent).to.include('Настройка не завершена');
+        expect(findButton(setup.root, 'Настроить расширение')).to.exist;
+        expect(setup.root.textContent).not.to.include('Set up extension');
 
       });
 

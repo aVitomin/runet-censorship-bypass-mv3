@@ -99,7 +99,7 @@
     "message": "Setup is not complete"
   },
   "popupControlSetupHelp": {
-    "message": "Choose an automatic routing source before turning on the extension proxy."
+    "message": "Open setup to choose an automatic routing source and apply it."
   },
   "popupControlActiveShort": {
     "message": "Controlled by this extension"
@@ -138,7 +138,7 @@
     "message": "Proxy problem"
   },
   "popupChooseRoutingSource": {
-    "message": "Choose source"
+    "message": "Set up extension"
   },
   "popupTurnOffProxy": {
     "message": "Turn off extension proxy"
@@ -314,16 +314,16 @@
     "message": "Extension proxy is on — Current page routing is unavailable"
   },
   "providerAntizapretDescription": {
-    "message": "Main PAC script from the Antizapret project."
+    "message": "Automatically routes sites using the built-in Antizapret source."
   },
   "providerAnticensorityDescription": {
-    "message": "Alternative built-in PAC source."
+    "message": "Uses the alternative built-in source for automatic routing."
   },
   "providerOnlyOwnSitesLabel": {
-    "message": "Only my site rules"
+    "message": "Manual rules only"
   },
   "providerOnlyOwnSitesDescription": {
-    "message": "Use only manually configured site rules and custom proxy servers."
+    "message": "Only sites you explicitly mark Proxy or Direct are overridden."
   },
   "popupPacProvider": {
     "message": "Automatic routing source"
@@ -1078,6 +1078,90 @@
   },
   "optionsGoToRoutingSources": {
     "message": "Choose source"
+  },
+  "optionsSetupTitle": {
+    "message": "Set up routing"
+  },
+  "optionsSetupIntro": {
+    "message": "Three short steps are enough to start. Nothing changes in Chrome until you apply routing."
+  },
+  "optionsSetupStatus": {
+    "message": "Setup"
+  },
+  "optionsSetupSourceTitle": {
+    "message": "Choose automatic routing"
+  },
+  "optionsSetupSourceHelp": {
+    "message": "Choose how sites in Auto mode are routed."
+  },
+  "optionsSetupSourceNotSelected": {
+    "message": "Not selected"
+  },
+  "optionsSetupSourceSelected": {
+    "message": "Selected: $SOURCE$",
+    "placeholders": {
+      "source": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSetupChangeSource": {
+    "message": "Change source"
+  },
+  "optionsSetupProxyTitle": {
+    "message": "Proxy connections — optional"
+  },
+  "optionsSetupProxyHelp": {
+    "message": "Add a proxy connection only if you want to use Proxy for specific sites."
+  },
+  "optionsSetupNoProxyConnections": {
+    "message": "Optional — none configured"
+  },
+  "optionsSetupOneProxyConnection": {
+    "message": "$COUNT$ connection available",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSetupManyProxyConnections": {
+    "message": "$COUNT$ connections available",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsSetupConfigureProxies": {
+    "message": "Configure proxy connections"
+  },
+  "optionsSetupApplyTitle": {
+    "message": "Apply routing"
+  },
+  "optionsSetupApplyHelp": {
+    "message": "Saved configuration affects Chrome only after you apply it."
+  },
+  "optionsSetupWaitingForSource": {
+    "message": "Waiting for a source"
+  },
+  "optionsSetupApplying": {
+    "message": "Applying…"
+  },
+  "optionsSetupApplyError": {
+    "message": "Apply needs attention"
+  },
+  "optionsSetupSaveChangesFirst": {
+    "message": "Save pending changes first"
+  },
+  "optionsSetupReadyToApply": {
+    "message": "Ready to apply"
+  },
+  "optionsChooseAutomaticSource": {
+    "message": "Choose a source"
+  },
+  "optionsAvailable": {
+    "message": "Available"
   },
   "optionsBuiltInProvidersHelp": {
     "message": "Built-in sources are maintained by the extension and cannot be edited."

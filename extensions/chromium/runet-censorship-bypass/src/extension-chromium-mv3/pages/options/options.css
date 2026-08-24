@@ -290,6 +290,145 @@ ul:last-child {
   gap: var(--ui-space-1);
 }
 
+.setup-card {
+  display: grid;
+  gap: var(--ui-space-2);
+  border-left: 4px solid var(--ui-color-accent);
+}
+
+.setup-header,
+.setup-step-header,
+.source-choice-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.setup-header > :first-child,
+.setup-step-header > :first-child,
+.source-choice-header > :first-child {
+  min-width: 0;
+}
+
+.setup-steps {
+  display: grid;
+  gap: var(--ui-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--ui-space-1-5);
+  padding: var(--ui-space-1-5);
+  border: 1px solid var(--ui-color-divider);
+  border-radius: var(--ui-radius-medium);
+  background: var(--ui-color-surface);
+}
+
+.setup-step-marker {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-pill);
+  place-items: center;
+  color: var(--ui-color-text-secondary);
+  font-weight: var(--ui-font-weight-bold);
+}
+
+.setup-step.complete .setup-step-marker {
+  border-color: var(--ui-color-success);
+  color: var(--ui-color-success);
+  background: var(--ui-color-success-surface);
+}
+
+.setup-step.current .setup-step-marker {
+  border-color: var(--ui-color-accent);
+  color: var(--ui-color-accent);
+  background: var(--ui-color-accent-surface);
+}
+
+.setup-step-body {
+  min-width: 0;
+}
+
+.setup-step-header h4 {
+  margin: 0;
+  font-size: var(--ui-font-size-body);
+}
+
+.setup-step-status {
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-caption);
+  font-weight: var(--ui-font-weight-medium);
+}
+
+.setup-step-status.complete {
+  color: var(--ui-color-success);
+}
+
+.setup-step-action {
+  margin-top: var(--ui-space-1);
+}
+
+.source-choice-group {
+  display: grid;
+  gap: var(--ui-space-1);
+  min-width: 0;
+  margin: var(--ui-space-2) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.source-choice-group legend {
+  margin-bottom: var(--ui-space-1);
+  padding: 0;
+  font-weight: var(--ui-font-weight-bold);
+}
+
+.source-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--ui-space-1-5);
+  align-items: start;
+  padding: var(--ui-space-2);
+  border: 1px solid var(--ui-color-divider);
+  border-radius: var(--ui-radius-medium);
+  background: var(--ui-color-surface);
+  cursor: pointer;
+}
+
+.source-choice.selected {
+  border-color: var(--ui-color-accent);
+  background: var(--ui-color-accent-surface);
+}
+
+.source-choice-input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--ui-color-accent);
+}
+
+.source-choice-input:focus-visible + .source-choice-content {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 4px;
+}
+
+.source-choice-input:disabled + .source-choice-content {
+  color: var(--ui-color-disabled);
+  cursor: default;
+}
+
+.source-choice-content {
+  min-width: 0;
+}
+
 .item-row,
 .editor-panel,
 .method-card {
@@ -665,6 +804,9 @@ details.disclosure[open] > summary {
 @media (forced-colors: active) {
 
   .options-nav a[aria-current="page"],
+  .setup-card,
+  .setup-step,
+  .source-choice,
   .status-banner,
   .status-card,
   .global-action-bar,

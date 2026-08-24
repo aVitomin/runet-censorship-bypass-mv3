@@ -528,6 +528,56 @@ function createSnapshot(patch = {}) {
 
 }
 
+function createInitialSetupSnapshot() {
+
+  const snapshot = createSnapshot();
+  snapshot.providers = [{
+    key: 'Антизапрет',
+    label: 'Antizapret',
+    description: '',
+    urls: ['https://example.test/antizapret.pac'],
+    enabled: true,
+    type: 'builtIn',
+  }, {
+    key: 'Антицензорити',
+    label: 'Anticensority',
+    description: '',
+    urls: ['https://example.test/anticensority.pac'],
+    enabled: true,
+    type: 'builtIn',
+  }, {
+    key: 'onlyOwnSites',
+    label: 'Only own sites and only own proxies',
+    description: '',
+    urls: ['data:application/x-ns-proxy-autoconfig,DIRECT'],
+    enabled: true,
+    type: 'builtIn',
+  }];
+  snapshot.state.currentPacProviderKey = null;
+  snapshot.state.pacMods.localTor.enabled = false;
+  snapshot.state.proxyApply = {
+    status: 'idle',
+    providerKey: null,
+    cookedPacSha256: null,
+    appliedAt: null,
+    clearedAt: null,
+    error: null,
+  };
+  snapshot.state.proxyControl = {
+    levelOfControl: 'controllable_by_this_extension',
+    canControl: true,
+    controlledByThisExtension: false,
+    rawValue: {mode: 'system'},
+  };
+  snapshot.proxy.proxyApply = snapshot.state.proxyApply;
+  snapshot.proxy.proxyControl = snapshot.state.proxyControl;
+  snapshot.proxy.stale = {cookedPac: {stale: false, reasons: []}};
+  snapshot.stale = snapshot.proxy.stale;
+  snapshot.reliability.proxyHealth = {status: 'unknown'};
+  return snapshot;
+
+}
+
 function deferred() {
 
   let resolve;
@@ -697,6 +747,241 @@ function getSection(root, id) {
 }
 
 describe('MV3 options UI', function() {
+
+  it('guides a pristine setup through source, optional proxy, and Apply',
+      async function() {
+
+        const snapshot = createInitialSetupSnapshot();
+        const harness = await createHarness({snapshot});
+        const setup = harness.root.querySelector('#initial-setup-card');
+        expect(setup).to.exist;
+        expect(setup.textContent).to.include('Set up routing');
+        expect(setup.textContent).to.include('Choose automatic routing');
+        expect(setup.textContent).to.include('Not selected');
+        expect(setup.textContent).to.include('Proxy connections — optional');
+        expect(setup.textContent).to.include(
+            'Optional — none configured',
+        );
+        expect(setup.textContent).to.include('Waiting for a source');
+        expect(findButton(setup, 'Apply configuration')).not.to.exist;
+        expect(harness.root.querySelector('#global-action-bar').hidden)
+            .to.equal(true);
+        expect(harness.root.querySelectorAll('button').filter((button) =>
+          button.textContent === 'Choose source',
+        )).to.have.length(1);
+        expect(harness.calls.map((call) => call.method)).to.deep.equal([
+          'getState',
+        ]);
+
+        findButton(setup, 'Choose source').dispatch('click');
+        expect(harness.location.hash).to.equal('routing-sources');
+        expect(harness.document.activeElement.id)
+            .to.equal('routing-sources-heading');
+        expect(harness.root.querySelector('#global-action-bar').hidden)
+            .to.equal(false);
+        harness.location.hash = '#overview';
+        harness.context.window.dispatch('hashchange');
+        findButton(setup, 'Configure proxy connections').dispatch('click');
+        expect(harness.location.hash).to.equal('proxy-methods');
+        expect(harness.document.activeElement.id)
+            .to.equal('proxy-methods-heading');
+        expect(harness.calls.map((call) => call.method)).to.deep.equal([
+          'getState',
+        ]);
+
+      });
+
+  it('uses semantic source choices without selecting or applying automatically',
+      async function() {
+
+        const snapshot = createInitialSetupSnapshot();
+        const harness = await createHarness({
+          snapshot,
+          hash: '#routing-sources',
+          rpcHandler: async (method, params) => {
+            if (method === 'getState') {
+              return snapshot;
+            }
+            if (method === 'setCurrentPacProvider') {
+              snapshot.state.currentPacProviderKey = params.providerKey;
+              return {ok: true};
+            }
+            return {ok: true};
+          },
+        });
+        const choices = harness.root.querySelectorAll(
+            'input[name="automatic-routing-source"]',
+        );
+        expect(choices).to.have.length(3);
+        expect(choices.map((input) => input.type))
+            .to.deep.equal(['radio', 'radio', 'radio']);
+        expect(choices.every((input) => input.parentNode.tagName === 'LABEL'))
+            .to.equal(true);
+        expect(choices.filter((input) => input.checked)).to.have.length(0);
+        const routing = getSection(harness.root, 'routing-sources');
+        expect(routing.textContent).to.include('Antizapret');
+        expect(routing.textContent).to.include('Anticensority');
+        expect(routing.textContent).to.include('Manual rules only');
+        expect(routing.textContent).to.include(
+            'Only sites you explicitly mark Proxy or Direct are overridden.',
+        );
+        expect(routing.textContent).to.include('Add custom source');
+        expect(harness.calls.map((call) => call.method)).to.deep.equal([
+          'getState',
+        ]);
+
+        const anticensority = choices.find((input) =>
+          input.value === 'Антицензорити',
+        );
+        anticensority.checked = true;
+        anticensority.dispatch('change');
+        await flush();
+
+        expect(harness.calls.filter((call) =>
+          call.method === 'setCurrentPacProvider',
+        )).to.have.length(1);
+        expect(harness.calls.find((call) =>
+          call.method === 'setCurrentPacProvider',
+        ).params).to.deep.equal({providerKey: 'Антицензорити'});
+        expect(harness.calls.some((call) =>
+          call.method === 'applyPopupChanges',
+        )).to.equal(false);
+        const refreshedSetup = harness.root.querySelector(
+            '#initial-setup-card',
+        );
+        expect(refreshedSetup.textContent).to.include(
+            'Selected: Anticensority',
+        );
+        expect(refreshedSetup.textContent).to.include('Ready to apply');
+        expect(findButton(refreshedSetup, 'Apply configuration')).to.exist;
+        const selectedChoice = harness.root.querySelectorAll(
+            'input[name="automatic-routing-source"]',
+        ).find((input) => input.value === 'Антицензорити');
+        expect(selectedChoice.checked).to.equal(true);
+        expect(selectedChoice.parentNode.textContent).to.include('Selected');
+
+        harness.location.hash = '#proxy-methods';
+        harness.context.window.dispatch('hashchange');
+        const host = getInput(harness.root, 'localTor.host');
+        host.value = '127.0.0.2';
+        host.dispatch('change');
+        harness.location.hash = '#overview';
+        harness.context.window.dispatch('hashchange');
+        const setupWithDraft = harness.root.querySelector(
+            '#initial-setup-card',
+        );
+        expect(setupWithDraft.textContent).to.include(
+            'Save pending changes first',
+        );
+        expect(findButton(setupWithDraft, 'Apply configuration').disabled)
+            .to.equal(true);
+        expect(getInput(harness.root, 'localTor.host').value)
+            .to.equal('127.0.0.2');
+
+      });
+
+  it('runs setup Apply through the existing guarded workflow and then exits',
+      async function() {
+
+        const snapshot = createInitialSetupSnapshot();
+        snapshot.state.currentPacProviderKey = 'Антизапрет';
+        const harness = await createHarness({
+          snapshot,
+          rpcHandler: async (method, params) => {
+            if (method === 'getState') {
+              return snapshot;
+            }
+            if (method === 'applyPopupChanges') {
+              expect(params).to.deep.equal({operation: 'apply', draft: {}});
+              snapshot.state.proxyApply = {
+                status: 'applied',
+                providerKey: 'Антизапрет',
+                cookedPacSha256: 'safe-sha',
+                appliedAt: Date.now(),
+              };
+              snapshot.state.proxyControl = {
+                levelOfControl: 'controlled_by_this_extension',
+                canControl: true,
+                controlledByThisExtension: true,
+                rawValue: {mode: 'pac_script'},
+              };
+              snapshot.proxy.proxyApply = snapshot.state.proxyApply;
+              snapshot.proxy.proxyControl = snapshot.state.proxyControl;
+              return {ok: true, status: 'applied'};
+            }
+            return {ok: true};
+          },
+        });
+        const setup = harness.root.querySelector('#initial-setup-card');
+        const apply = findButton(setup, 'Apply configuration');
+        await apply.onclick();
+        await flush();
+
+        expect(harness.calls.filter((call) =>
+          call.method === 'applyPopupChanges',
+        )).to.have.length(1);
+        expect(harness.root.querySelector('#initial-setup-card')).not.to.exist;
+        expect(harness.root.textContent).to.include('Extension proxy is on');
+
+      });
+
+  it('keeps setup errors contextual but never reclassifies off or external state',
+      async function() {
+
+        const initial = createInitialSetupSnapshot();
+        initial.state.currentPacProviderKey = 'Антизапрет';
+        const failed = await createHarness({
+          snapshot: initial,
+          rpcHandler: async (method) => {
+            if (method === 'getState') {
+              return initial;
+            }
+            if (method === 'applyPopupChanges') {
+              return {
+                ok: false,
+                status: 'error',
+                error: {code: 'PROXY_SET_FAILED'},
+              };
+            }
+            return {ok: true};
+          },
+        });
+        await findButton(
+            failed.root.querySelector('#initial-setup-card'),
+            'Apply configuration',
+        ).onclick();
+        expect(failed.root.querySelector('#initial-setup-card').textContent)
+            .to.include('Apply needs attention');
+
+        const clearedSnapshot = createInitialSetupSnapshot();
+        clearedSnapshot.state.currentPacProviderKey = 'Антизапрет';
+        clearedSnapshot.state.proxyApply = {
+          status: 'cleared',
+          providerKey: 'Антизапрет',
+          cookedPacSha256: 'safe-sha',
+          clearedAt: Date.now(),
+        };
+        clearedSnapshot.proxy.proxyApply = clearedSnapshot.state.proxyApply;
+        const cleared = await createHarness({snapshot: clearedSnapshot});
+        expect(cleared.root.querySelector('#initial-setup-card')).not.to.exist;
+        expect(cleared.root.textContent).to.include('Extension proxy is off');
+
+        const externalSnapshot = createInitialSetupSnapshot();
+        externalSnapshot.state.proxyControl = {
+          levelOfControl: 'controlled_by_other_extensions',
+          canControl: false,
+          controlledByThisExtension: false,
+          rawValue: {mode: 'fixed_servers'},
+        };
+        externalSnapshot.proxy.proxyControl =
+          externalSnapshot.state.proxyControl;
+        const external = await createHarness({snapshot: externalSnapshot});
+        expect(external.root.querySelector('#initial-setup-card')).not.to.exist;
+        expect(external.root.textContent).to.include(
+            'Another extension or policy controls proxy settings',
+        );
+
+      });
 
   it('opens read-only with task navigation and one selected section',
       async function() {
@@ -1977,6 +2262,21 @@ describe('MV3 options UI', function() {
             'Automatic routing',
         );
 
+        const initialSnapshot = createInitialSetupSnapshot();
+        initialSnapshot.state.uiLanguage = 'ru';
+        const initial = await createHarness({
+          language: 'ru',
+          snapshot: initialSnapshot,
+        });
+        expect(initial.root.textContent).to.include(
+            'Настройте маршрутизацию',
+        );
+        expect(initial.root.textContent).to.include(
+            'Прокси-подключения — необязательно',
+        );
+        expect(initial.root.textContent).to.include('Только ручные правила');
+        expect(initial.root.textContent).not.to.include('Set up routing');
+
       });
 
   it('associates navigation, sections, fields, and errors accessibly',
@@ -2029,6 +2329,9 @@ describe('MV3 options UI', function() {
     expect(OPTIONS_CSS).to.include('@media (max-width: 900px)');
     expect(OPTIONS_CSS).to.include('@media (forced-colors: active)');
     expect(OPTIONS_CSS).to.include('@media (prefers-reduced-motion: reduce)');
+    expect(OPTIONS_CSS).to.include(
+        '.source-choice-input:focus-visible + .source-choice-content',
+    );
     expect(OPTIONS_CSS).not.to.match(/#[0-9a-f]{3,8}/i);
     expect(UI_TOKENS).to.include('--ui-color-accent-surface:');
     expect(OPTIONS_CSS).to.include('var(--ui-color-accent-surface)');
