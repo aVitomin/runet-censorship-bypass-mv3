@@ -21,6 +21,13 @@ from the actual HTTP proxy receivers:
   retry, deterministic success, and no direct-origin hit;
 - a different, previously unused proxy and credential after a full Chrome
   restart with the same disposable profile;
+- an HTTPS destination through an HTTP proxy performs unauthenticated
+  `CONNECT`, receives a real `407`, retries with the expected credential, opens
+  a TLS tunnel to the controlled HTTPS origin, and never reaches the distinct
+  direct-fallback trap;
+- an `HTTPS host:port` PAC candidate establishes TLS to the proxy itself,
+  receives and answers a real `407` inside that connection, uses HTTP/1.1 for
+  the deterministic fixture, and never reaches the HTTP direct trap;
 - an origin `401` receives neither `Authorization` nor `Proxy-Authorization`,
   while RUCB records the non-proxy challenge as ignored;
 - mismatched host/port and passwordless proxy challengers receive no credential
@@ -36,11 +43,20 @@ Receiver evidence stores only safe classifications such as `none`, `expected`,
 header. Usernames remain intentionally editable in the options/RPC model and
 are not treated as password leaks.
 
-This automated case covers plain HTTP requests through an HTTP proxy. HTTPS
-destination `CONNECT` and TLS-to-proxy (`HTTPS` PAC scheme) remain separate
-follow-up coverage. The retry counter is worker memory: a full browser restart
-before a new proxy request is covered, but forced worker termination in the
-middle of one active `407` sequence is not.
+The smoke deliberately keeps three paths separate: a plain HTTP request through
+an HTTP proxy, an HTTPS destination tunneled with `CONNECT` through an HTTP
+proxy, and an HTTP destination sent over TLS to an `HTTPS` proxy. It creates a
+temporary test certificate with installed OpenSSL and passes only that
+certificate's base64 SHA-256 SPKI through
+`--ignore-certificate-errors-spki-list`. `OPENSSL_BIN` is an explicit local
+override; global certificate-error suppression and trust-store changes are not
+used.
+
+The retry counter is worker memory: a full browser restart before a new proxy
+request is covered, but forced worker termination in the middle of one active
+`407` sequence is not. The automated run does not manipulate machine policy,
+and its fake hostnames, loopback receivers, and direct traps do not claim
+arbitrary real-world DNS-leak coverage.
 
 ## Settings and persistence
 
@@ -76,8 +92,9 @@ middle of one active `407` sequence is not.
 
 ## Authentication
 
-- The automated smoke covers a real plain-HTTP `webRequest.onAuthRequired`
-  proxy challenge, non-proxy `401`, unmatched host/port, passwordless and retry-
+- The automated smoke covers real `webRequest.onAuthRequired` proxy challenges
+  for plain HTTP, HTTPS destination `CONNECT`, and TLS-to-proxy `HTTPS` PAC
+  transport, plus non-proxy `401`, unmatched host/port, passwordless and retry-
   limit cases.
 - For a manual cross-check, trigger the same flow with an authorized test proxy
   and confirm the configured credentials authenticate without appearing in
