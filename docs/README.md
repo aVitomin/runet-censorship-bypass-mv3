@@ -1,6 +1,6 @@
 # Документация Runet Censorship Bypass MV3
 
-Актуальная документация относится к ограниченной Chromium MV3 beta. Материалы
+Актуальная документация относится к стабильному Chromium MV3 выпуску. Материалы
 в [`legacy/`](legacy/) сохранены для истории и атрибуции и не являются
 инструкцией по установке текущего продукта.
 
@@ -37,8 +37,8 @@
 - [Старые инструкции для ревьюеров MV2](legacy/FOR_REVIEWERS.md)
 - [Архивные инженерные и релизные материалы](legacy/)
 
-**English:** This index documents the current limited-beta Chromium MV3
-product. Start with the root [README](../README.md), the
+**English:** This index documents the current stable Chromium MV3 product.
+Start with the root [README](../README.md), the
 [installation guide](user/INSTALLATION.md), or the
 [development guide](development/DEVELOPMENT.md). Files under `docs/legacy/`
 are historical and may describe MV2, Firefox, old stores, or upstream releases.
