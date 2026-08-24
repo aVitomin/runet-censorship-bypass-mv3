@@ -1,8 +1,8 @@
-# Документация Runet Censorship Bypass MV3
+# Документация Runet Censorship Bypass
 
-Актуальная документация относится к стабильному Chromium MV3 выпуску. Материалы
-в [`legacy/`](legacy/) сохранены для истории и атрибуции и не являются
-инструкцией по установке текущего продукта.
+Актуальная документация относится к стабильному продукту для Chromium. Он
+использует Manifest V3. Материалы в [`legacy/`](legacy/) сохранены для истории и
+атрибуции и не являются инструкцией по установке текущего продукта.
 
 ## Пользователям
 
@@ -33,11 +33,12 @@
 
 ## Архив
 
-- [Исторический upstream README](legacy/UPSTREAM_README.md)
+- [README исходного проекта](legacy/UPSTREAM_README.md)
 - [Старые инструкции для ревьюеров MV2](legacy/FOR_REVIEWERS.md)
 - [Архивные инженерные и релизные материалы](legacy/)
 
-**English:** This index documents the current stable Chromium MV3 product.
+**English:** This index documents the current stable Chromium product, which
+uses Manifest V3.
 Start with the root [README](../README.md), the
 [installation guide](user/INSTALLATION.md), or the
 [development guide](development/DEVELOPMENT.md). Files under `docs/legacy/`

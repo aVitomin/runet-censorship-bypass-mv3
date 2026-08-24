@@ -706,9 +706,9 @@ describe('MV3 options UI', function() {
           'getState',
         ]);
         expect(harness.root.textContent).to.include('Overview');
-        expect(harness.root.textContent).to.include('Routing sources');
+        expect(harness.root.textContent).to.include('Automatic routing');
         expect(harness.root.textContent).to.include('0.0.2.03');
-        expect(harness.root.textContent).to.include('Limited MV3 beta');
+        expect(harness.root.textContent).to.include('Stable release');
         expect(harness.root.textContent).not.to.include('MV3 migration:');
         const aboutLinks = harness.root.querySelectorAll('.about-links a');
         expect(aboutLinks.map((link) => link.textContent)).to.deep.equal([
@@ -716,7 +716,7 @@ describe('MV3 options UI', function() {
           'What\'s new',
           'Report an issue',
           'GNU GPL v3 license',
-          'Upstream project',
+          'Original project',
         ]);
         expect(aboutLinks.map((link) => link.href)).to.deep.equal([
           'https://github.com/aVitomin/runet-censorship-bypass-mv3',
@@ -831,7 +831,7 @@ describe('MV3 options UI', function() {
           },
         });
         expect(external.root.textContent).to.include(
-            'Proxy settings are controlled elsewhere',
+            'Another extension or policy controls proxy settings',
         );
         expect(findButton(external.root, 'Apply configuration')).not.to.exist;
         const turnOff = findButton(external.root, 'Turn off extension proxy');
@@ -843,7 +843,7 @@ describe('MV3 options UI', function() {
         expect(external.calls.map((call) => call.method)).to.include('clearProxy');
         expect(external.root.textContent).to.include('Extension proxy is off');
         expect(external.root.textContent).to.include(
-            'The external proxy controller remains active',
+            'The other extension or policy remains in control',
         );
         expect(findButton(external.root, 'Turn off extension proxy')).not.to.exist;
 
@@ -865,7 +865,7 @@ describe('MV3 options UI', function() {
         harness.dispatchProxyChange();
         await flush();
         expect(harness.root.textContent).to.include(
-            'Proxy settings are controlled elsewhere',
+            'Another extension or policy controls proxy settings',
         );
         expect(findButton(harness.root, 'Apply configuration')).not.to.exist;
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
@@ -1839,12 +1839,12 @@ describe('MV3 options UI', function() {
         const snapshot = createSnapshot();
         snapshot.state.uiLanguage = 'ru';
         const harness = await createHarness({language: 'ru', snapshot});
-        expect(harness.root.textContent).to.include('Источники правил');
+        expect(harness.root.textContent).to.include('Автоматическая маршрутизация');
         expect(harness.root.textContent).to.include(
-            'Обновления и проверка',
+            'Обновления и проверка подключения',
         );
         expect(harness.root.textContent).to.include(
-            'Ограниченная бета-версия MV3',
+            'Стабильный выпуск',
         );
         expect(harness.root.textContent).to.include(
             'Сообщить о проблеме',
@@ -1854,7 +1854,7 @@ describe('MV3 options UI', function() {
             harness.root.textContent.includes('Выключить прокси расширения'),
         ).to.equal(true);
         expect(harness.root.textContent).not.to.include(
-            'Routing sources',
+            'Automatic routing',
         );
 
       });

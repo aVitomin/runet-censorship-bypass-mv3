@@ -64,8 +64,8 @@ state для proxy authentication. Они исключаются из PAC, пл�
 1. Откройте **Advanced → Legacy migration**.
 2. Запустите аудит и прочитайте найденные категории и конфликты.
 3. Выберите только необходимые совместимые поля.
-4. Примените миграцию и повторно проверьте Routing sources, Site rules и Proxy
-   methods.
+4. Примените миграцию и повторно проверьте Automatic routing, Site rules и Proxy
+   connections.
 5. Запустите единый workflow **Apply configuration**. Сама миграция не включает
    глобальное управление прокси.
 
