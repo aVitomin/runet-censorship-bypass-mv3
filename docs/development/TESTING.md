@@ -21,6 +21,17 @@ anchors, запрещает developer-machine paths и stale current-release/def
 branch/install metadata. Она не делает CI зависимым от доступности внешних
 сайтов; отдельный bounded аудит можно запустить с `--audit-external`.
 
+### Production npm audit
+
+```powershell
+npm --prefix $Project run audit:prod
+```
+
+CI запускает этот gate сразу после `npm ci`. Команда использует
+`npm audit --omit=dev` и блокирует любую advisory в production dependency tree.
+Полный `npm audit` остаётся диагностическим: принятые dev-only findings дерева
+Mocha не входят в production gate и не блокируют CI.
+
 ### PAC semantics
 
 ```powershell
