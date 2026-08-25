@@ -150,6 +150,12 @@ main {
   background: var(--ui-color-error);
 }
 
+.global-card.compact {
+  gap: var(--ui-space-0-5);
+  padding-top: var(--ui-space-1);
+  padding-bottom: var(--ui-space-1);
+}
+
 .global-actions {
   display: flex;
   flex-wrap: wrap;
@@ -158,7 +164,7 @@ main {
 }
 
 .global-actions .ui-button {
-  flex: 1 1 128px;
+  flex: 0 1 auto;
 }
 
 .status-message {
@@ -187,6 +193,10 @@ main {
   overflow-wrap: anywhere;
   font-size: var(--ui-font-size-heading);
   font-weight: var(--ui-font-weight-bold);
+}
+
+.site-card {
+  gap: var(--ui-space-0-5);
 }
 
 .route-fieldset,
@@ -258,15 +268,52 @@ main {
 }
 
 .route-description {
-  min-height: 38px;
   color: var(--ui-color-text-secondary);
+}
+
+.scope-disclosure {
+  margin-top: var(--ui-space-0-5);
+  border-top: 1px solid var(--ui-color-divider);
+}
+
+.scope-disclosure > summary,
+.daily-details > summary {
+  display: flex;
+  gap: var(--ui-space-1);
+  align-items: center;
+  min-height: var(--ui-control-height-compact);
+  color: var(--ui-color-text-secondary);
+  cursor: pointer;
+  font-size: var(--ui-font-size-control);
+  font-weight: var(--ui-font-weight-medium);
+  list-style: none;
+}
+
+.scope-disclosure > summary::-webkit-details-marker,
+.daily-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.scope-disclosure > summary::before,
+.daily-details > summary::before {
+  display: inline-block;
+  color: var(--ui-color-text-muted);
+  content: "›";
+  font-size: var(--ui-font-size-title);
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform var(--ui-transition-fast);
+}
+
+.scope-disclosure[open] > summary::before,
+.daily-details[open] > summary::before {
+  transform: rotate(90deg);
 }
 
 .scope-fieldset {
   display: grid;
   gap: var(--ui-space-1);
   padding-top: var(--ui-space-1);
-  border-top: 1px solid var(--ui-color-divider);
 }
 
 .scope-options {
@@ -299,155 +346,72 @@ main {
   font-size: var(--ui-font-size-caption);
 }
 
-.summary-list {
-  display: grid;
-  gap: 0;
-}
-
-.summary-row {
-  display: grid;
-  grid-template-columns: minmax(112px, 0.8fr) minmax(0, 1.2fr);
-  gap: var(--ui-space-1);
-  padding: var(--ui-space-1) 0;
-  border-bottom: 1px solid var(--ui-color-divider);
-  align-items: start;
-}
-
-.summary-row:first-child {
-  padding-top: 0;
-}
-
-.summary-row:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.summary-row dt {
-  color: var(--ui-color-text-muted);
-}
-
-.summary-row dd {
-  overflow-wrap: anywhere;
-  color: var(--ui-color-text-secondary);
-  font-weight: var(--ui-font-weight-medium);
-}
-
-.summary-value-with-pill {
+.site-pending {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--ui-space-0-5);
+  gap: var(--ui-space-1);
   align-items: center;
+  justify-content: space-between;
+  padding-top: var(--ui-space-1);
+  border-top: 1px solid var(--ui-color-divider);
 }
 
-.health-action {
-  justify-self: start;
+.compact-action,
+.compact-link {
   min-height: var(--ui-control-height-compact);
-  margin-top: var(--ui-space-1);
   padding: var(--ui-space-0-5) var(--ui-space-1);
 }
 
-.advanced-disclosure {
+.compact-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.daily-details {
   overflow: hidden;
 }
 
-.advanced-disclosure > summary {
-  display: flex;
-  gap: var(--ui-space-1);
-  align-items: center;
+.daily-details > summary {
   min-height: var(--ui-control-height);
   padding: var(--ui-space-1-5);
-  color: var(--ui-color-text-secondary);
-  cursor: pointer;
-  font-size: var(--ui-font-size-control);
   font-weight: var(--ui-font-weight-bold);
-  list-style: none;
 }
 
-.advanced-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-
-.advanced-disclosure > summary::before {
-  display: inline-block;
-  color: var(--ui-color-text-muted);
-  content: "›";
-  font-size: var(--ui-font-size-title);
-  line-height: 1;
-  transform: rotate(0deg);
-  transition: transform var(--ui-transition-fast);
-}
-
-.advanced-disclosure[open] > summary::before {
-  transform: rotate(90deg);
-}
-
-.advanced-content {
+.daily-details-content {
   display: grid;
-  gap: var(--ui-space-1-5);
+  gap: var(--ui-space-1);
   padding: 0 var(--ui-space-1-5) var(--ui-space-1-5);
   border-top: 1px solid var(--ui-color-divider);
 }
 
-.advanced-group {
-  display: grid;
+.daily-detail-row {
+  display: flex;
   gap: var(--ui-space-1);
+  align-items: baseline;
+  justify-content: space-between;
   padding-top: var(--ui-space-1-5);
-}
-
-.advanced-heading {
   color: var(--ui-color-text-secondary);
-  font-size: var(--ui-font-size-body);
-  font-weight: var(--ui-font-weight-bold);
 }
 
-.provider-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.daily-detail-row strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.daily-detail-links {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--ui-space-1);
 }
 
-.provider-row .ui-input {
-  width: 100%;
-  min-width: 0;
-  min-height: var(--ui-control-height);
-  padding: var(--ui-space-1);
-}
-
-.toggle-list {
-  display: grid;
-  gap: var(--ui-space-1);
-}
-
-.toggle-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--ui-space-1);
-  align-items: start;
-  min-height: 28px;
-  color: var(--ui-color-text-secondary);
-  cursor: pointer;
-}
-
-.toggle-row input {
-  width: 18px;
-  height: 18px;
-  margin: 1px 0 0;
-  accent-color: var(--ui-color-accent);
-}
-
-.toggle-row.disabled {
-  color: var(--ui-color-disabled);
-  cursor: default;
-}
-
-.toggle-content {
-  display: grid;
-  gap: 2px;
-}
-
-.toggle-hint {
-  color: var(--ui-color-text-muted);
-  font-size: var(--ui-font-size-caption);
+.settings-link {
+  color: var(--ui-color-accent);
+  font-size: var(--ui-font-size-control);
+  font-weight: var(--ui-font-weight-medium);
+  text-underline-offset: 2px;
 }
 
 .loading-card {
@@ -479,15 +443,6 @@ main {
 
   .card {
     padding: var(--ui-space-1);
-  }
-
-  .summary-row {
-    grid-template-columns: 1fr;
-    gap: 2px;
-  }
-
-  .provider-row {
-    grid-template-columns: 1fr;
   }
 
 }
@@ -537,7 +492,8 @@ main {
     background: Highlight;
   }
 
-  .advanced-disclosure > summary::before {
+  .scope-disclosure > summary::before,
+  .daily-details > summary::before {
     color: CanvasText;
   }
 
@@ -546,7 +502,8 @@ main {
 @media (prefers-reduced-motion: reduce) {
 
   .route-label,
-  .advanced-disclosure > summary::before {
+  .scope-disclosure > summary::before,
+  .daily-details > summary::before {
     transition: none;
   }
 

@@ -20,7 +20,7 @@
   let draft = null;
   let busyOperation = '';
   let lastOperation = null;
-  let advancedOpen = false;
+  let scopeOpen = false;
   let requestedFocus = '';
   let initPromise = null;
   let refreshAfterInit = false;
@@ -265,9 +265,10 @@
     const presentation = getGlobalPresentation(state, lastOperation);
     renderHeader(root, presentation);
     renderGlobalCard(root, state, presentation, lastOperation);
-    renderSiteCard(root, state);
-    renderConnectionCard(root, state);
-    renderAdvancedDisclosure(root, state);
+    if (presentation.kind !== 'setup') {
+      renderSiteCard(root, state);
+      renderDailyDetails(root, state, presentation);
+    }
     renderLiveAnnouncement(root, state, presentation, lastOperation);
     focusRequestedControl();
 
@@ -287,14 +288,6 @@
           `ui-pill ${presentation.pillClass || ''}`.trim(),
       );
     }
-    if (draft && latestState && isDraftDirty(latestState)) {
-      appendText(
-          statusRow,
-          'span',
-          t('popupStatusPendingPill'),
-          'ui-pill warning',
-      );
-    }
     appendSettingsButton(header, true);
 
   }
@@ -305,12 +298,11 @@
     const card = append(
         parent,
         'section',
-        `ui-card card global-card${tone}`,
+        `ui-card card global-card compact${tone}`,
     );
     card.dataset.area = 'global-status';
     const headingId = 'popup-global-heading';
     card.setAttribute('aria-labelledby', headingId);
-    appendText(card, 'p', t('popupExtensionControl'), 'eyebrow');
     const heading = appendText(
         card,
         'h2',
@@ -318,7 +310,13 @@
         'card-title',
     );
     heading.id = headingId;
-    appendText(card, 'p', presentation.description, 'card-copy');
+    const description = appendText(
+        card,
+        'p',
+        presentation.description,
+        'card-copy',
+    );
+    description.id = 'popup-global-description';
 
     renderOperationMessage(card, operation);
     renderGlobalActions(card, state, presentation, operation);
@@ -362,6 +360,7 @@
     const actions = append(parent, 'div', 'global-actions');
     let ifActionAdded = false;
     const primaryAction = getPrimaryAction(state, operation);
+    const siteChangePending = isSiteDraftDirty(state);
 
     if (primaryAction === 'retry') {
       const retry = appendButton(
@@ -387,7 +386,7 @@
       );
       choose.onclick = openFullSettings;
       ifActionAdded = true;
-    } else if (primaryAction === 'apply') {
+    } else if (primaryAction === 'apply' && !siteChangePending) {
       const applyButton = appendButton(
           actions,
           t('popupApplyChanges'),
@@ -402,13 +401,21 @@
       }
       applyButton.onclick = () => runPopupOperation('apply');
       ifActionAdded = true;
+    } else if (primaryAction === 'connection-check') {
+      appendOptionsLink(
+          actions,
+          t('popupOpenConnectionCheck'),
+          'maintenance',
+          'ui-button primary',
+      );
+      ifActionAdded = true;
     }
 
     if (canTurnOffProxy(state)) {
       const clearButton = appendButton(
           actions,
           t('popupTurnOffProxy'),
-          'ui-button',
+          'ui-button quiet',
       );
       clearButton.title = t('popupTurnOffProxyHelp');
       clearButton.onclick = clearProxy;
@@ -445,13 +452,20 @@
     if (!draft.providerKey) {
       return 'choose-provider';
     }
+    if (
+      controlsPac(state) &&
+      state.proxyHealth &&
+      state.proxyHealth.status === 'error'
+    ) {
+      return 'connection-check';
+    }
     return shouldOfferApply(state, operation) ? 'apply' : '';
 
   }
 
   function renderSiteCard(parent, state) {
 
-    const card = append(parent, 'section', 'ui-card card');
+    const card = append(parent, 'section', 'ui-card card site-card');
     card.dataset.area = 'site-routing';
     const headingId = 'popup-site-heading';
     card.setAttribute('aria-labelledby', headingId);
@@ -500,6 +514,9 @@
           return;
         }
         draft.siteMode = mode;
+        if (mode === 'auto') {
+          scopeOpen = false;
+        }
         markDraftPending(`mode-${mode}`);
       };
       label.appendChild(input);
@@ -523,25 +540,42 @@
           'status-message warning',
       );
       warning.id = 'popup-site-warning';
-      const configure = appendButton(
+      appendOptionsLink(
           card,
           t('popupConfigureProxyMethods'),
-          'ui-button',
+          'proxy-methods',
+          'ui-button quiet compact-link',
       );
-      configure.onclick = () => openAdvanced('proxy-methods');
     }
 
     if (draft.siteMode !== 'auto') {
       renderScopeControl(card, state, ifDisabled);
     }
 
+    renderPendingSiteChange(card, state, ifDisabled);
+
   }
 
   function renderScopeControl(parent, state, ifDisabled) {
 
     const patterns = state.sitePatterns || {};
-    const fieldset = append(parent, 'fieldset', 'scope-fieldset');
-    appendText(fieldset, 'legend', t('popupScope'), 'eyebrow');
+    const details = append(parent, 'details', 'scope-disclosure');
+    details.open = scopeOpen;
+    const selectedScope = draft.siteScope === 'host' ?
+      t('popupHostOnly') :
+      t('popupDomainAndSubdomains');
+    const summary = appendText(
+        details,
+        'summary',
+        t('popupScopeSummary', [selectedScope]),
+    );
+    summary.setAttribute('aria-controls', 'popup-scope-content');
+    details.ontoggle = () => {
+      scopeOpen = details.open;
+    };
+    const fieldset = append(details, 'fieldset', 'scope-fieldset');
+    fieldset.id = 'popup-scope-content';
+    appendText(fieldset, 'legend', t('popupScope'), 'ui-sr-only');
     const options = append(fieldset, 'div', 'scope-options');
     [
       ['host', t('popupHostOnly')],
@@ -590,244 +624,73 @@
 
   }
 
-  function renderConnectionCard(parent, state) {
+  function renderPendingSiteChange(parent, state, ifDisabled) {
 
-    const card = append(parent, 'section', 'ui-card card');
-    card.dataset.area = 'connection-summary';
-    const heading = appendText(
-        card,
-        'h2',
-        t('popupConnectionSummary'),
-        'card-title',
-    );
-    heading.id = 'popup-connection-heading';
-    card.setAttribute('aria-labelledby', heading.id);
-    const list = append(card, 'dl', 'summary-list');
-    const providerIfPending = draft.providerKey !== state.selectedProvider;
-    appendSummaryRow(
-        list,
-        t('popupRoutingSource'),
-        getDraftProviderLabel(state),
-        providerIfPending ? t('popupStatusPendingPill') : '',
-        providerIfPending ? 'warning' : '',
-    );
-    appendSummaryRow(
-        list,
-        t('popupProxyMethods'),
-        getProxyMethodSummary(state),
-    );
-    appendSummaryRow(
-        list,
-        t('popupLastHealthCheck'),
-        getProxyHealthSummary(state),
-    );
-    appendSummaryRow(
-        list,
-        t('popupLastRoutingUpdate'),
-        getRoutingUpdateSummary(state),
-    );
-
-    if (
-      state.mode === 'proxy' &&
-      controlsPac(state) &&
-      !isOperationBusy(state) &&
-      !isExternallyControlled(state) &&
-      !(lastOperation && lastOperation.kind === 'check' &&
-        canRetryOperation(lastOperation))
-    ) {
-      const checkButton = appendButton(
-          card,
-          state.proxyHealth && state.proxyHealth.status === 'error' ?
-            t('popupCheckProxyAgain') :
-            t('popupCheckProxy'),
-          'ui-button health-action',
-      );
-      checkButton.onclick = checkProxy;
+    if (!isSiteDraftDirty(state) || isOperationBusy(state)) {
+      return;
     }
+    const pending = append(parent, 'div', 'site-pending');
+    const status = appendText(
+        pending,
+        'span',
+        t('popupNotApplied'),
+        'ui-pill warning',
+    );
+    status.id = 'popup-site-pending-status';
+    const applyButton = appendButton(
+        pending,
+        t('popupApplyChanges'),
+        'ui-button primary compact-action',
+    );
+    const candidateMissing = draft.siteMode === 'proxy' &&
+      getDraftProxyMethodCount(state) === 0;
+    applyButton.disabled = ifDisabled || candidateMissing;
+    applyButton.setAttribute('aria-describedby', candidateMissing ?
+      'popup-site-warning' :
+      isExternallyControlled(state) ?
+        'popup-global-description' :
+        'popup-site-pending-status');
+    applyButton.onclick = () => runPopupOperation('apply');
 
   }
 
-  function renderAdvancedDisclosure(parent, state) {
+  function renderDailyDetails(parent, state, presentation) {
 
     const details = append(
         parent,
         'details',
-        'ui-card advanced-disclosure',
+        'ui-card daily-details',
     );
-    details.dataset.area = 'advanced';
-    details.open = advancedOpen;
+    details.dataset.area = 'details';
     const summary = appendText(
         details,
         'summary',
-        t('popupAdvancedSettings'),
+        t('popupDetails'),
     );
-    summary.setAttribute('aria-controls', 'popup-advanced-content');
-    summary.setAttribute('aria-expanded', details.open ? 'true' : 'false');
-    details.ontoggle = () => {
-      advancedOpen = details.open;
-      summary.setAttribute('aria-expanded', details.open ? 'true' : 'false');
-    };
-    const content = append(details, 'div', 'advanced-content');
-    content.id = 'popup-advanced-content';
-    appendText(
-        content,
-        'p',
-        t('popupAdvancedSettingsHelp'),
-        'helper-text',
+    summary.setAttribute('aria-controls', 'popup-details-content');
+    const content = append(details, 'div', 'daily-details-content');
+    content.id = 'popup-details-content';
+    const source = append(content, 'div', 'daily-detail-row');
+    appendText(source, 'span', t('popupRoutingSource'));
+    appendText(source, 'strong', getDraftProviderLabel(state));
+    const links = append(content, 'div', 'daily-detail-links');
+    appendOptionsLink(
+        links,
+        t('popupAutomaticRoutingSettings'),
+        'routing-sources',
     );
-    renderAdvancedProvider(content, state);
-    renderAdvancedProxyMethods(content, state);
-    renderAdvancedStatus(content, state);
-
-  }
-
-  function renderAdvancedProvider(parent, state) {
-
-    const group = append(parent, 'section', 'advanced-group');
-    appendText(group, 'h3', t('popupRoutingSource'), 'advanced-heading');
-    const row = append(group, 'div', 'provider-row');
-    const select = append(row, 'select', 'ui-input');
-    select.setAttribute('aria-label', t('popupPacProvider'));
-    appendOption(select, '', t('popupSelectProvider'));
-    (state.providers || []).forEach((provider) => {
-      appendOption(select, provider.key, getProviderLabel(provider));
-    });
-    select.value = draft.providerKey || '';
-    select.disabled = isOperationBusy(state);
-    select.dataset.focusKey = 'provider';
-    select.onchange = () => {
-      draft.providerKey = select.value;
-      markDraftPending('provider');
-    };
-    const updateButton = appendButton(
-        row,
-        t('popupRefreshRoutingData'),
-        'ui-button',
+    appendOptionsLink(
+        links,
+        t('popupConfigureProxyMethods'),
+        'proxy-methods',
     );
-    updateButton.title = t('popupRefreshRoutingDataHelp');
-    updateButton.disabled = isOperationBusy(state) || !draft.providerKey;
-    updateButton.onclick = () => runPopupOperation('updatePac');
-
-  }
-
-  function renderAdvancedProxyMethods(parent, state) {
-
-    const quick = state.quickProxies || {};
-    const group = append(parent, 'section', 'advanced-group');
-    group.dataset.focusKey = 'proxy-methods';
-    appendText(group, 'h3', t('popupProxyMethods'), 'advanced-heading');
-    const list = append(group, 'div', 'toggle-list');
-    renderToggle(
-        list,
-        t('popupUsePacScriptProxies'),
-        'usePacScriptProxies',
-        false,
-        t('popupUsePacScriptProxiesHelp'),
-    );
-    renderToggle(
-        list,
-        t('popupOwnProxiesOnlyForOwnSites'),
-        'ownProxiesOnlyForOwnSites',
-        false,
-        t('popupOwnProxiesOnlyForOwnSitesHelp'),
-    );
-    renderToggle(
-        list,
-        t('popupLocalTor'),
-        'localTorEnabled',
-        false,
-        t('popupLocalTorHelp'),
-    );
-    renderToggle(
-        list,
-        t('popupTorBrowser'),
-        'torBrowserEnabled',
-        false,
-        t('popupTorBrowserHelp'),
-    );
-    renderToggle(
-        list,
-        t('popupWarpCustomProxy'),
-        'warpEnabled',
-        false,
-        t('popupWarpHelp'),
-    );
-    renderToggle(
-        list,
-        quick.ownProxiesConfigured ?
-          t('popupOwnProxiesCount', [String(quick.ownProxyCount)]) :
-          t('popupOwnProxies'),
-        'ownProxiesEnabled',
-        !quick.ownProxiesConfigured,
-        quick.ownProxiesConfigured ?
-          t('popupOwnProxiesHelp') :
-          t('popupOwnProxiesConfigure'),
-    );
-    appendText(group, 'p', t('popupTorModeNote'), 'helper-text');
-    appendText(group, 'p', t('popupTorAvailabilityNote'), 'helper-text');
-
-  }
-
-  function renderToggle(parent, labelText, key, disabled, helpText) {
-
-    const ifDisabled = disabled || isOperationBusy(latestState);
-    const label = append(
-        parent,
-        'label',
-        ifDisabled ? 'toggle-row disabled' : 'toggle-row',
-    );
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = draft.quickProxies[key] === true;
-    input.disabled = ifDisabled;
-    input.onchange = () => {
-      if (input.disabled) {
-        return;
-      }
-      draft.quickProxies[key] = input.checked;
-      if (key === 'localTorEnabled' && input.checked) {
-        draft.quickProxies.torBrowserEnabled = false;
-      }
-      if (key === 'torBrowserEnabled' && input.checked) {
-        draft.quickProxies.localTorEnabled = false;
-      }
-      advancedOpen = true;
-      markDraftPending('');
-    };
-    label.appendChild(input);
-    const content = append(label, 'span', 'toggle-content');
-    appendText(content, 'span', labelText);
-    if (helpText) {
-      appendText(content, 'span', helpText, 'toggle-hint');
-    }
-
-  }
-
-  function renderAdvancedStatus(parent, state) {
-
-    const group = append(parent, 'section', 'advanced-group');
-    appendText(group, 'h3', t('popupTechnicalStatus'), 'advanced-heading');
-    const list = append(group, 'dl', 'summary-list');
-    appendSummaryRow(list, t('popupPac'), getPacStatusText(state));
-    appendSummaryRow(
-        list,
-        t('popupAutoUpdate'),
-        getAutoUpdateStatusText(state),
-    );
-    appendSummaryRow(
-        list,
-        t('popupBrowserProxyControl'),
-        getControlDetailText(state),
-    );
-    const warnings = (state.warnings || []).filter(Boolean);
-    warnings.forEach((warning) => {
-      appendText(
-          group,
-          'p',
-          localizeWarning(warning),
-          'status-message warning',
+    if (presentation.kind === 'degraded') {
+      appendOptionsLink(
+          links,
+          t('popupOpenConnectionCheck'),
+          'maintenance',
       );
-    });
+    }
 
   }
 
@@ -901,7 +764,9 @@
           'error',
           'error',
           'popupControlError',
-          t('popupControlErrorHelp'),
+          t(controlsPac(state) ?
+            'popupControlErrorActiveHelp' :
+            'popupControlErrorOffHelp'),
           'popupStatusErrorPill',
       );
     }
@@ -1076,6 +941,17 @@
 
   }
 
+  function isSiteDraftDirty(state) {
+
+    if (!draft) {
+      return false;
+    }
+    const persisted = createDraft(state);
+    return draft.siteMode !== persisted.siteMode ||
+      draft.siteMode !== 'auto' && draft.siteScope !== persisted.siteScope;
+
+  }
+
   function getSiteModeDescription(mode) {
 
     if (mode === 'proxy') {
@@ -1118,18 +994,6 @@
 
   }
 
-  function getProxyMethodSummary(state) {
-
-    const count = getDraftProxyMethodCount(state);
-    if (count) {
-      return t('popupProxyMethodsCount', [String(count)]);
-    }
-    return draft.siteMode === 'proxy' ?
-      t('popupProxyMethodsRequired') :
-      t('popupProxyMethodsOptional');
-
-  }
-
   function getDraftProviderLabel(state) {
 
     if (!draft.providerKey) {
@@ -1154,27 +1018,6 @@
 
   }
 
-  function getProxyHealthSummary(state) {
-
-    const health = state.proxyHealth || {};
-    const status = health.status || 'unknown';
-    let label;
-    if (status === 'checking') {
-      label = t('popupProxyHealthChecking');
-    } else if (status === 'ok') {
-      label = t('popupProxyHealthOk');
-    } else if (status === 'error') {
-      label = t('popupProxyHealthError');
-    } else {
-      label = t('popupProxyHealthUnknown');
-    }
-    if (!health.lastCheckedAt) {
-      return label;
-    }
-    return t('popupStatusWithTime', [label, formatTimestamp(health.lastCheckedAt)]);
-
-  }
-
   function getProxyHealthErrorText(proxyHealth) {
 
     if (proxyHealth.candidateType === 'torBrowser') {
@@ -1184,102 +1027,6 @@
       return t('proxyHealthLocalTorError');
     }
     return t('proxyHealthGenericError');
-
-  }
-
-  function getRoutingUpdateSummary(state) {
-
-    if (state.autoUpdate && state.autoUpdate.error) {
-      return t('popupRoutingUpdateFailed');
-    }
-    if (!state.pacUpdatedAt) {
-      return t('popupNeverUpdated');
-    }
-    return state.pacStale ?
-      t('popupRoutingUpdatePending', [formatTimestamp(state.pacUpdatedAt)]) :
-      formatTimestamp(state.pacUpdatedAt);
-
-  }
-
-  function getPacStatusText(state) {
-
-    if (!state.pacDownloaded) {
-      return t('popupNotDownloaded');
-    }
-    if (!state.pacCooked) {
-      return t('popupDownloaded');
-    }
-    return state.pacStale ?
-      t('popupCookedStale') :
-      t('popupDownloadedAndCooked');
-
-  }
-
-  function getAutoUpdateStatusText(state) {
-
-    const autoUpdate = state.autoUpdate || {};
-    if (!autoUpdate.enabled) {
-      return t('optionsDisabled');
-    }
-    return t('popupAutoUpdateEveryHours', [
-      String(Math.round(autoUpdate.intervalHours || 12)),
-    ]);
-
-  }
-
-  function getControlDetailText(state) {
-
-    if (isExternallyControlled(state)) {
-      return t('popupControlExternalShort');
-    }
-    if (controlsPac(state)) {
-      return t('popupControlActiveShort');
-    }
-    return t('popupControlOffShort');
-
-  }
-
-  function appendSummaryRow(parent, label, value, pillText, pillClass) {
-
-    const row = append(parent, 'div', 'summary-row');
-    appendText(row, 'dt', label);
-    const definition = append(row, 'dd');
-    if (pillText) {
-      const group = append(definition, 'span', 'summary-value-with-pill');
-      appendText(group, 'span', value);
-      appendText(
-          group,
-          'span',
-          pillText,
-          `ui-pill ${pillClass || ''}`.trim(),
-      );
-    } else {
-      definition.textContent = value;
-    }
-
-  }
-
-  function formatTimestamp(value) {
-
-    if (!value) {
-      return t('popupNeverUpdated');
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return t('popupNeverUpdated');
-    }
-    const elapsedMinutes = Math.max(
-        0,
-        Math.floor((Date.now() - date.getTime()) / (60 * 1000)),
-    );
-    if (elapsedMinutes < 60) {
-      return t('popupMinutesAgo', [String(elapsedMinutes)]);
-    }
-    const elapsedHours = Math.floor(elapsedMinutes / 60);
-    if (elapsedHours < 48) {
-      return t('popupHoursAgo', [String(elapsedHours)]);
-    }
-    return t('popupDaysAgo', [String(Math.floor(elapsedHours / 24))]);
 
   }
 
@@ -1296,7 +1043,7 @@
     ) {
       return false;
     }
-    return ['apply', 'updatePac', 'clear', 'check'].includes(operation.kind);
+    return ['apply', 'updatePac', 'clear'].includes(operation.kind);
 
   }
 
@@ -1307,9 +1054,6 @@
     }
     if (lastOperation.kind === 'clear') {
       return clearProxy();
-    }
-    if (lastOperation.kind === 'check') {
-      return checkProxy();
     }
     return runPopupOperation(lastOperation.kind);
 
@@ -1376,34 +1120,6 @@
 
   }
 
-  async function checkProxy() {
-
-    if (busyOperation || isExternallyControlled(latestState)) {
-      return;
-    }
-    busyOperation = 'check';
-    lastOperation = null;
-    renderPopup(latestState);
-    try {
-      const result = await rpc.callBackground('checkProxyHealth', {
-        tabUrl: activeTabUrl,
-      });
-      latestState = await rpc.callBackground('getPopupState', {
-        tabUrl: activeTabUrl,
-      });
-      lastOperation = Object.assign({
-        kind: 'check',
-        message: localizeProxyCheckResult(result),
-      }, result);
-    } catch (err) {
-      lastOperation = createOperationError('check', err);
-    } finally {
-      busyOperation = '';
-      renderPopup(latestState);
-    }
-
-  }
-
   function createOperationError(kind, err) {
 
     return {
@@ -1440,27 +1156,6 @@
 
   }
 
-  function localizeProxyCheckResult(result) {
-
-    if (result.status === 'ok') {
-      return t('popupProxyCheckSucceeded');
-    }
-    if (result.status === 'error') {
-      return getProxyHealthErrorText(result.proxyHealth || {});
-    }
-    if (result.code === 'PROXY_CHECK_REQUIRES_PROXY_RULE') {
-      return t('popupProxyCheckRequiresProxyRule');
-    }
-    if (result.code === 'PROXY_CHECK_NOT_APPLIED') {
-      return t('popupProxyCheckNotApplied');
-    }
-    if (result.code === 'NO_PROXY_CANDIDATE') {
-      return t('popupNoProxyCandidate');
-    }
-    return t('popupProxyCheckInconclusive');
-
-  }
-
   function localizeOperationMessage(message) {
 
     const text = String(message || '');
@@ -1483,48 +1178,6 @@
         t('popupStaleOperation'),
     };
     return exact[text] || t('popupOperationCompleted');
-
-  }
-
-  function localizeWarning(message) {
-
-    const text = String(message || '');
-    if (text === 'No proxy is enabled. Enable Tor, WARP, or an own proxy.') {
-      return t('popupNoProxyCandidate');
-    }
-    if (text.includes('host-pattern matching')) {
-      return t('popupMv2RulesWarning');
-    }
-    if (text.includes('no proxy candidates are enabled')) {
-      return t('popupNoProxyCandidate');
-    }
-    if (text.includes('credentials are removed from cooked PAC')) {
-      return t('popupCredentialsRedactedWarning');
-    }
-    if (text.includes('Tor itself must be running locally')) {
-      return t('popupTorMustRunWarning');
-    }
-    if (text.includes('WARP is treated')) {
-      return t('popupWarpLocalProxyWarning');
-    }
-    if (text.includes('replaceDirectWithProxy is enabled')) {
-      return t('popupDirectReplacementNoCandidateWarning');
-    }
-    if (text.includes('PAC provider proxies are disabled')) {
-      return t('popupNoPacOrOwnProxyWarning');
-    }
-    if (text === 'This page cannot be controlled.') {
-      return t('popupPageCannotBeControlled');
-    }
-    return t('popupConfigurationWarning');
-
-  }
-
-  function openAdvanced(focusKey) {
-
-    advancedOpen = true;
-    requestedFocus = focusKey || '';
-    renderPopup(latestState);
 
   }
 
@@ -1622,21 +1275,23 @@
 
   }
 
+  function appendOptionsLink(parent, text, section, className) {
+
+    const link = append(parent, 'a', className || 'settings-link');
+    link.textContent = text;
+    link.href = `${chrome.runtime.getURL('pages/options/index.html')}#${section}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    return link;
+
+  }
+
   function appendButton(parent, text, className) {
 
     const button = append(parent, 'button', className || 'ui-button');
     button.type = 'button';
     button.textContent = text;
     return button;
-
-  }
-
-  function appendOption(parent, value, label) {
-
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    parent.appendChild(option);
 
   }
 

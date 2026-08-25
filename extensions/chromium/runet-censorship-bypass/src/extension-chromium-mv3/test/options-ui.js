@@ -921,7 +921,7 @@ describe('MV3 options UI', function() {
           call.method === 'applyPopupChanges',
         )).to.have.length(1);
         expect(harness.root.querySelector('#initial-setup-card')).not.to.exist;
-        expect(harness.root.textContent).to.include('Extension proxy is on');
+        expect(harness.root.textContent).to.include('Routing is active');
 
       });
 
@@ -964,7 +964,7 @@ describe('MV3 options UI', function() {
         clearedSnapshot.proxy.proxyApply = clearedSnapshot.state.proxyApply;
         const cleared = await createHarness({snapshot: clearedSnapshot});
         expect(cleared.root.querySelector('#initial-setup-card')).not.to.exist;
-        expect(cleared.root.textContent).to.include('Extension proxy is off');
+        expect(cleared.root.textContent).to.include('Routing is turned off');
 
         const externalSnapshot = createInitialSetupSnapshot();
         externalSnapshot.state.proxyControl = {
@@ -978,7 +978,7 @@ describe('MV3 options UI', function() {
         const external = await createHarness({snapshot: externalSnapshot});
         expect(external.root.querySelector('#initial-setup-card')).not.to.exist;
         expect(external.root.textContent).to.include(
-            'Another extension or policy controls proxy settings',
+            'Another extension or browser policy controls proxy settings',
         );
 
       });
@@ -1180,7 +1180,7 @@ describe('MV3 options UI', function() {
       async function() {
 
         const applied = await createHarness();
-        expect(applied.root.textContent).to.include('Extension proxy is on');
+        expect(applied.root.textContent).to.include('Routing is active');
         expect(findButton(applied.root, 'Turn off extension proxy')).to.exist;
         const clearedSnapshot = createSnapshot();
         clearedSnapshot.state.proxyApply = {status: 'cleared'};
@@ -1193,7 +1193,7 @@ describe('MV3 options UI', function() {
         clearedSnapshot.proxy.proxyControl =
           clearedSnapshot.state.proxyControl;
         const cleared = await createHarness({snapshot: clearedSnapshot});
-        expect(cleared.root.textContent).to.include('Extension proxy is off');
+        expect(cleared.root.textContent).to.include('Routing is turned off');
         expect(findButton(cleared.root, 'Apply configuration')).to.exist;
         const externalSnapshot = createSnapshot();
         externalSnapshot.state.proxyApply = {status: 'idle'};
@@ -1225,7 +1225,7 @@ describe('MV3 options UI', function() {
           },
         });
         expect(external.root.textContent).to.include(
-            'Another extension or policy controls proxy settings',
+            'Another extension or browser policy controls proxy settings',
         );
         expect(findButton(external.root, 'Apply configuration')).not.to.exist;
         const turnOff = findButton(external.root, 'Turn off extension proxy');
@@ -1235,7 +1235,7 @@ describe('MV3 options UI', function() {
         await flush();
 
         expect(external.calls.map((call) => call.method)).to.include('clearProxy');
-        expect(external.root.textContent).to.include('Extension proxy is off');
+        expect(external.root.textContent).to.include('Routing is turned off');
         expect(external.root.textContent).to.include(
             'The other extension or policy remains in control',
         );
@@ -1259,7 +1259,7 @@ describe('MV3 options UI', function() {
         harness.dispatchProxyChange();
         await flush();
         expect(harness.root.textContent).to.include(
-            'Another extension or policy controls proxy settings',
+            'Another extension or browser policy controls proxy settings',
         );
         expect(findButton(harness.root, 'Apply configuration')).not.to.exist;
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;

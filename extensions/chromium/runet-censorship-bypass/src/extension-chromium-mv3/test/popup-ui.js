@@ -338,6 +338,11 @@ function createPopupHarness(options = {}) {
       },
       runtime: {
         lastError: null,
+        getURL(path) {
+
+          return `chrome-extension://popup-test/${path}`;
+
+        },
         openOptionsPage() {},
       },
       storage: {
@@ -445,6 +450,14 @@ function findButton(root, text) {
 
 }
 
+function findLink(root, text) {
+
+  return findAll(root, (node) =>
+    node.tagName === 'A' && node.textContent === text,
+  )[0] || null;
+
+}
+
 function getRadios(root, name) {
 
   return findAll(root, (node) =>
@@ -486,12 +499,18 @@ describe('MV3 popup UI', () => {
 
         expect(harness.calls.map((call) => call.method))
             .to.deep.equal(['getPopupState']);
-        expect(harness.root.textContent).to.include('Extension proxy is on');
-        expect(harness.root.textContent).to.include('Routing for this site');
+        expect(harness.root.textContent).to.include('Routing is active');
+        expect(harness.root.textContent).to.include('This site');
         expect(harness.root.textContent)
-            .to.include('No site override. The selected source decides.');
+            .to.include('Uses the selected automatic-routing source.');
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
         expect(findButton(harness.root, 'Apply')).to.equal(null);
+        expect(harness.root.textContent).to.not.include('Connection summary');
+        expect(harness.root.textContent).to.not.include('Advanced routing settings');
+        expect(harness.root.textContent).to.not.include('Last connection check');
+        expect(findAll(harness.root, (node) =>
+          node.dataset.area === 'global-status',
+        )).to.have.length(1);
 
         const radios = getRadios(harness.root, 'site-mode');
         expect(radios).to.have.length(3);
@@ -554,7 +573,7 @@ describe('MV3 popup UI', () => {
 
         stateRequest.resolve(createPopupState());
         await flushUi();
-        expect(harness.root.textContent).to.include('Extension proxy is on');
+        expect(harness.root.textContent).to.include('Routing is active');
 
       });
 
@@ -590,7 +609,7 @@ describe('MV3 popup UI', () => {
 
         expect(stateReads).to.equal(2);
         expect(harness.root.textContent)
-            .to.include('Another extension or policy controls proxy settings');
+            .to.include('Another extension or browser policy controls proxy settings');
         expect(findButton(harness.root, 'Apply')).to.equal(null);
         expect(getRadios(harness.root, 'site-mode').every((radio) => radio.disabled))
             .to.equal(true);
@@ -614,7 +633,7 @@ describe('MV3 popup UI', () => {
         });
         cleared.start();
         await flushUi();
-        expect(cleared.root.textContent).to.include('Extension proxy is off');
+        expect(cleared.root.textContent).to.include('Routing is turned off');
         expect(findButton(cleared.root, 'Apply')).to.exist;
         expect(findButton(cleared.root, 'Turn off extension proxy')).to.equal(null);
 
@@ -651,7 +670,7 @@ describe('MV3 popup UI', () => {
         external.start();
         await flushUi();
         expect(external.root.textContent)
-            .to.include('Another extension or policy controls proxy settings');
+            .to.include('Another extension or browser policy controls proxy settings');
         expect(findButton(external.root, 'Apply')).to.equal(null);
         const turnOff = findButton(external.root, 'Turn off extension proxy');
         expect(turnOff).to.exist;
@@ -662,7 +681,7 @@ describe('MV3 popup UI', () => {
         await flushUi();
 
         expect(external.calls.map((call) => call.method)).to.include('clearProxy');
-        expect(external.root.textContent).to.include('Extension proxy is off');
+        expect(external.root.textContent).to.include('Routing is turned off');
         expect(external.root.textContent)
             .to.include('The other extension or policy remains in control');
         expect(findButton(external.root, 'Turn off extension proxy')).to.equal(null);
@@ -687,7 +706,9 @@ describe('MV3 popup UI', () => {
     await flushUi();
 
     expect(harness.root.textContent)
-        .to.include('The last operation needs attention');
+        .to.include('Routing needs attention');
+    expect(harness.root.textContent)
+        .to.include('Routing is off because the requested change failed');
     expect(findButton(harness.root, 'Retry')).to.exist;
     expect(findButton(harness.root, 'Apply')).to.equal(null);
     expect(findButton(harness.root, 'Turn off extension proxy')).to.equal(null);
@@ -711,28 +732,23 @@ describe('MV3 popup UI', () => {
             candidateType: 'localTor',
           },
         });
-        const harness = createPopupHarness({
-          state,
-          rpcHandler: async (method) => method === 'checkProxyHealth' ? {
-            ok: false,
-            status: 'error',
-            code: 'net::ERR_PROXY_CONNECTION_FAILED',
-          } : state,
-        });
+        const harness = createPopupHarness({state});
         harness.start();
         await flushUi();
 
-        expect(harness.root.textContent).to.include('Extension proxy is on');
+        expect(harness.root.textContent).to.include('Routing is active');
         expect(harness.root.textContent).to.include('Proxy problem');
         expect(harness.root.textContent)
             .to.include('Could not connect to the Tor service');
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
-        expect(findButton(harness.root, 'Check again')).to.exist;
-
-        await findButton(harness.root, 'Check again').onclick();
-        await flushUi();
-        expect(findButton(harness.root, 'Retry')).to.exist;
-        expect(findButton(harness.root, 'Check again')).to.equal(null);
+        const connectionCheck = findLink(
+            harness.root,
+            'Open connection check',
+        );
+        expect(connectionCheck).to.exist;
+        expect(connectionCheck.href).to.match(/#maintenance$/);
+        expect(harness.calls.map((call) => call.method))
+            .to.deep.equal(['getPopupState']);
 
       });
 
@@ -755,10 +771,14 @@ describe('MV3 popup UI', () => {
         });
         setup.start();
         await flushUi();
-        expect(setup.root.textContent).to.include('Setup is not complete');
+        expect(setup.root.textContent).to.include('Setup is required');
         const openSetup = findButton(setup.root, 'Set up extension');
         expect(openSetup).to.exist;
         expect(findButton(setup.root, 'Apply')).to.equal(null);
+        expect(getRadios(setup.root, 'site-mode')).to.have.length(0);
+        expect(findAll(setup.root, (node) =>
+          node.dataset.area === 'details',
+        )).to.have.length(0);
 
         await openSetup.onclick();
         await flushUi();
@@ -798,8 +818,13 @@ describe('MV3 popup UI', () => {
         proxyRadio.onchange();
         expect(noCandidate.root.textContent)
             .to.include('Proxy routing needs at least one enabled');
-        expect(noCandidate.root.textContent).to.include('Pending');
-        expect(findButton(noCandidate.root, 'Configure proxy connections')).to.exist;
+        expect(noCandidate.root.textContent).to.include('Not applied');
+        const proxySettings = findLink(
+            noCandidate.root,
+            'Configure proxy connections',
+        );
+        expect(proxySettings).to.exist;
+        expect(proxySettings.href).to.match(/#proxy-methods$/);
         expect(findButton(noCandidate.root, 'Apply').disabled).to.equal(true);
         expect(noCandidate.calls.map((call) => call.method))
             .to.deep.equal(['getPopupState']);
@@ -836,11 +861,6 @@ describe('MV3 popup UI', () => {
         harness.start();
         await flushUi();
 
-        let details = findAll(harness.root, (node) =>
-          node.tagName === 'DETAILS' && node.dataset.area === 'advanced',
-        )[0];
-        details.open = true;
-        details.ontoggle();
         const directRadio = getRadios(harness.root, 'site-mode')
             .find((radio) => radio.value === 'direct');
         directRadio.checked = true;
@@ -857,18 +877,13 @@ describe('MV3 popup UI', () => {
         await flushUi();
 
         expect(harness.root.textContent)
-            .to.include('Another extension or policy controls proxy settings');
-        expect(findButton(harness.root, 'Apply')).to.equal(null);
+            .to.include('Another extension or browser policy controls proxy settings');
+        expect(findButton(harness.root, 'Apply').disabled).to.equal(true);
         expect(findButton(harness.root, 'Retry')).to.equal(null);
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
         expect(getRadios(harness.root, 'site-mode').every((radio) => radio.disabled))
             .to.equal(true);
-        details = findAll(harness.root, (node) =>
-          node.tagName === 'DETAILS' && node.dataset.area === 'advanced',
-        )[0];
-        expect(details.open).to.equal(true);
-        expect(details.children.find((node) => node.tagName === 'SUMMARY')
-            .getAttribute('aria-expanded')).to.equal('true');
+        expect(harness.root.textContent).to.include('Not applied');
 
       });
 
@@ -917,7 +932,7 @@ describe('MV3 popup UI', () => {
         await harness.emitStorageChange();
         await flushUi();
 
-        expect(harness.root.textContent).to.include('Extension proxy is on');
+        expect(harness.root.textContent).to.include('Routing is active');
         expect(harness.root.textContent).to.not.include('Testing proxy connection');
         expect(findButton(harness.root, 'Turn off extension proxy')).to.exist;
         expect(harness.calls.filter((call) => call.method === 'getPopupState'))
@@ -956,7 +971,7 @@ describe('MV3 popup UI', () => {
         );
         await flushUi();
 
-        expect(harness.root.textContent).to.include('Working');
+        expect(harness.root.textContent).to.include('Check passed');
         expect(harness.root.textContent).to.not.include(
             'Could not connect to Tor Browser',
         );
@@ -1006,7 +1021,7 @@ describe('MV3 popup UI', () => {
     clearRequest.resolve({ok: true, status: 'cleared'});
     await firstClear;
     await flushUi();
-    expect(harness.root.textContent).to.include('Extension proxy is off');
+    expect(harness.root.textContent).to.include('Routing is turned off');
 
   });
 
@@ -1040,7 +1055,7 @@ describe('MV3 popup UI', () => {
         proxyRadio.onchange();
         expect(harness.calls.map((call) => call.method))
             .to.deep.equal(['getPopupState']);
-        expect(harness.root.textContent).to.include('Pending');
+        expect(harness.root.textContent).to.include('Not applied');
 
         const applyButton = findButton(harness.root, 'Apply');
         const firstApply = applyButton.onclick();
@@ -1146,7 +1161,7 @@ describe('MV3 popup UI', () => {
 
   });
 
-  it('keeps Advanced collapsed, exposes expansion semantics, and renders no secrets',
+  it('keeps daily details compact, links to Options, and renders no secrets',
       async () => {
 
         const secret = ['do-not', '-render'].join('');
@@ -1158,23 +1173,24 @@ describe('MV3 popup UI', () => {
         await flushUi();
 
         const details = findAll(harness.root, (node) =>
-          node.tagName === 'DETAILS' && node.dataset.area === 'advanced',
+          node.tagName === 'DETAILS' && node.dataset.area === 'details',
         )[0];
         const summary = details.children.find((node) => node.tagName === 'SUMMARY');
         expect(details.open).to.equal(false);
-        expect(summary.getAttribute('aria-expanded')).to.equal('false');
         expect(summary.getAttribute('aria-controls'))
-            .to.equal('popup-advanced-content');
+            .to.equal('popup-details-content');
         expect(findAll(details, (node) =>
-          node.id === 'popup-advanced-content',
+          node.id === 'popup-details-content',
         )).to.have.length(1);
         expect(harness.root.textContent).to.not.include(secret);
-
-        const callsBefore = harness.calls.length;
-        details.open = true;
-        details.ontoggle();
-        expect(summary.getAttribute('aria-expanded')).to.equal('true');
-        expect(harness.calls).to.have.length(callsBefore);
+        expect(findAll(harness.root, (node) =>
+          ['SELECT'].includes(node.tagName) ||
+          node.tagName === 'INPUT' && node.type === 'checkbox',
+        )).to.have.length(0);
+        expect(findLink(harness.root, 'Automatic routing settings').href)
+            .to.match(/#routing-sources$/);
+        expect(findLink(harness.root, 'Configure proxy connections').href)
+            .to.match(/#proxy-methods$/);
 
       });
 
@@ -1227,7 +1243,7 @@ describe('MV3 popup UI', () => {
         hostRadio.onchange();
         await findButton(harness.root, 'Apply').onclick();
         await flushUi();
-        expect(harness.root.textContent).to.include('requested change was not completed');
+        expect(harness.root.textContent).to.include('requested change failed');
         expect(harness.root.textContent).to.not.include(hostileError);
         expect(findAll(harness.root, (node) => node.tagName === 'SCRIPT'))
             .to.have.length(0);
@@ -1244,10 +1260,10 @@ describe('MV3 popup UI', () => {
         harness.start();
         await flushUi();
 
-        expect(harness.root.textContent).to.include('Прокси расширения включён');
-        expect(harness.root.textContent).to.include('Маршрут для этого сайта');
+        expect(harness.root.textContent).to.include('Маршрутизация включена');
+        expect(harness.root.textContent).to.include('Этот сайт');
         expect(harness.root.textContent).to.include('Проверка пройдена');
-        expect(harness.root.textContent).to.not.include('Extension proxy is on');
+        expect(harness.root.textContent).to.not.include('Routing is active');
 
         const setup = createPopupHarness({
           language: 'ru',
@@ -1267,7 +1283,7 @@ describe('MV3 popup UI', () => {
         });
         setup.start();
         await flushUi();
-        expect(setup.root.textContent).to.include('Настройка не завершена');
+        expect(setup.root.textContent).to.include('Требуется настройка');
         expect(findButton(setup.root, 'Настроить расширение')).to.exist;
         expect(setup.root.textContent).not.to.include('Set up extension');
 
