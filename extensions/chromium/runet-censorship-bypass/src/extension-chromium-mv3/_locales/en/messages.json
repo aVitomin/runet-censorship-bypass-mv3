@@ -30,19 +30,19 @@
     "message": "Extension proxy"
   },
   "popupControlActive": {
-    "message": "Extension proxy is on"
+    "message": "Routing is active"
   },
   "popupControlActiveHelp": {
-    "message": "This extension currently controls Chromium proxy settings. Routing for each site is shown separately below."
+    "message": "This extension controls the browser's proxy settings. Choose what happens to this site below."
   },
   "popupControlOff": {
-    "message": "Extension proxy is off"
+    "message": "Routing is turned off"
   },
   "popupControlOffHelp": {
-    "message": "Chromium is using its system proxy settings. Your saved routing rules and downloaded data are kept."
+    "message": "The browser uses its system proxy settings. Your saved routing setup is kept."
   },
   "popupControlExternal": {
-    "message": "Another extension or policy controls proxy settings"
+    "message": "Another extension or browser policy controls proxy settings"
   },
   "popupControlExternalHelp": {
     "message": "Another extension or browser policy controls proxy settings. This extension will not override that ownership."
@@ -90,16 +90,22 @@
     "message": "A newer setting or operation took priority. Review the current state before retrying."
   },
   "popupControlError": {
-    "message": "The last operation needs attention"
+    "message": "Routing needs attention"
   },
   "popupControlErrorHelp": {
     "message": "The requested change was not completed. Review the message below and retry when it is safe."
   },
+  "popupControlErrorActiveHelp": {
+    "message": "The previous routing remains active, but the requested change failed. Review the message below and retry."
+  },
+  "popupControlErrorOffHelp": {
+    "message": "Routing is off because the requested change failed. Review the message below and retry."
+  },
   "popupControlSetup": {
-    "message": "Setup is not complete"
+    "message": "Setup is required"
   },
   "popupControlSetupHelp": {
-    "message": "Open setup to choose an automatic routing source and apply it."
+    "message": "Choose an automatic-routing source and apply routing to get started."
   },
   "popupControlActiveShort": {
     "message": "Controlled by this extension"
@@ -147,7 +153,7 @@
     "message": "Use Chromium's system proxy settings. Saved rules and downloaded routing data are kept."
   },
   "popupCurrentSiteRouting": {
-    "message": "Routing for this site"
+    "message": "This site"
   },
   "popupCurrentTabUnavailable": {
     "message": "Current page unavailable"
@@ -164,19 +170,39 @@
     }
   },
   "popupAutoModeDescription": {
-    "message": "No site override. The selected source decides."
+    "message": "Uses the selected automatic-routing source."
   },
   "popupProxyModeDescription": {
-    "message": "Always use an enabled proxy connection for this site."
+    "message": "Routes this site through an enabled Proxy connection."
   },
   "popupDirectModeDescription": {
-    "message": "Always bypass the extension proxy for this site."
+    "message": "Connects to this site directly."
   },
   "popupProxyRouteNeedsMethod": {
     "message": "Proxy routing needs at least one enabled connection: Tor, WARP, or a custom proxy server."
   },
   "popupConfigureProxyMethods": {
     "message": "Configure proxy connections"
+  },
+  "popupAutomaticRoutingSettings": {
+    "message": "Automatic routing settings"
+  },
+  "popupOpenConnectionCheck": {
+    "message": "Open connection check"
+  },
+  "popupDetails": {
+    "message": "Details"
+  },
+  "popupNotApplied": {
+    "message": "Not applied"
+  },
+  "popupScopeSummary": {
+    "message": "Applies to: $SCOPE$",
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
   },
   "popupHostScopeOnly": {
     "message": "Only this hostname can be used for localhost and IP addresses."
