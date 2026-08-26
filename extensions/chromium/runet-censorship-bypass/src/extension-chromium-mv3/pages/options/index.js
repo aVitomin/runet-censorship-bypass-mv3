@@ -50,6 +50,7 @@
     setupEligible: false,
   };
   let fieldId = 0;
+  let proxyEditorId = 0;
 
   function t(key, substitutions) {
 
@@ -688,6 +689,7 @@
       return;
     }
     fieldId = 0;
+    proxyEditorId = 0;
     root.replaceChildren();
     root.removeAttribute('aria-busy');
     document.title = t('optionsPageTitle');
@@ -2486,30 +2488,48 @@
         'optionsProxyMethodsDescription',
     );
     const pacMods = state.snapshot.state.pacMods;
+    const candidateCount = getProxyCandidateCount(pacMods);
     const summary = append(section, 'div', 'settings-card ui-card compact');
     const summaryHeader = append(summary, 'div', 'card-header');
     appendText(summaryHeader, 'h3', t('optionsProxyMethodAvailability'));
-    appendText(
+    const availability = appendText(
         summaryHeader,
         'span',
         formatCount(
-            getProxyCandidateCount(pacMods),
+            candidateCount,
             'optionsOneProxyMethod',
             'optionsManyProxyMethods',
         ),
-        getProxyCandidateCount(pacMods) ? 'ui-pill success' : 'ui-pill warning',
+        candidateCount ? 'ui-pill success' : 'ui-pill warning',
     );
+    availability.dataset.proxyAvailability = '';
     appendText(
         summary,
         'p',
-        t('optionsProxyHealthAuthSeparateHelp'),
+        t('optionsProxyAvailabilityHelp'),
         'section-description',
     );
     const card = append(section, 'div', 'settings-card ui-card');
-    const form = append(card, 'form');
+    const form = append(card, 'form', 'proxy-connections-form');
     form.onsubmit = (event) => event.preventDefault();
-    renderProxyPolicy(form, pacMods);
-    const methods = append(form, 'div', 'method-grid');
+    const formHeader = append(form, 'div', 'proxy-form-header');
+    appendText(formHeader, 'h3', t('optionsConfigureProxyConnections'));
+    const pending = appendText(
+        formHeader,
+        'span',
+        t('popupNotApplied'),
+        'ui-pill warning',
+    );
+    pending.dataset.proxyDraftStatus = '';
+    pending.hidden = true;
+    renderSourceProxyBlock(form, pacMods);
+    const localGroup = createProxyConnectionGroup(
+        form,
+        'local',
+        t('optionsLocalProxyApplications'),
+        t('optionsLocalProxyApplicationsHelp'),
+    );
+    const methods = append(localGroup, 'div', 'connection-list');
     renderTorMethod(
         methods,
         'localTor',
@@ -2526,6 +2546,7 @@
     );
     renderWarpMethod(methods, pacMods.warp || {});
     renderOwnProxyMethods(form, pacMods.ownProxies || []);
+    renderProxyPolicy(form, pacMods);
     const actions = append(form, 'div', 'split-actions');
     const save = createButton(
         actions,
@@ -2541,58 +2562,144 @@
     );
     discard.onclick = () => confirmDiscardAll();
     bindDraftForm(form, 'proxy-methods', {usesPacMods: true});
+    syncProxyFormPresentation(form);
+    const updateAvailability = () => updateProxyAvailabilitySummary(form);
+    form.addEventListener('input', updateAvailability);
+    form.addEventListener('change', updateAvailability);
     renderDraftConflict(form, 'proxy-methods');
+
+  }
+
+  function createProxyConnectionGroup(parent, key, title, description) {
+
+    const group = append(parent, 'section', 'proxy-connection-group');
+    group.dataset.proxyGroup = key;
+    const header = append(group, 'div', 'proxy-group-header');
+    appendText(header, 'h3', title);
+    if (description) {
+      appendText(header, 'p', description, 'section-description');
+    }
+    return group;
+
+  }
+
+  function renderSourceProxyBlock(parent, pacMods) {
+
+    const group = createProxyConnectionGroup(
+        parent,
+        'source',
+        t('optionsSourceProvidedProxies'),
+        t('optionsSourceProvidedProxiesHelp'),
+    );
+    const block = append(group, 'div', 'connection-card source-connection');
+    const header = append(block, 'div', 'connection-summary');
+    const copy = append(header, 'div', 'connection-summary-copy');
+    appendText(copy, 'h4', t('optionsAutomaticRoutingSourceProxies'));
+    appendText(
+        copy,
+        'p',
+        t('optionsAutomaticRoutingSourceProxiesHelp'),
+        'connection-requirement',
+    );
+    const controls = append(header, 'div', 'connection-summary-controls');
+    const enabled = pacMods.usePacScriptProxies !== false;
+    const status = appendText(
+        controls,
+        'span',
+        t(enabled ? 'optionsEnabled' : 'optionsDisabled'),
+        `ui-pill ${enabled ? 'success' : ''}`.trim(),
+    );
+    status.dataset.sourceConnectionStatus = '';
+    const input = appendCheckbox(
+        controls,
+        'usePacScriptProxies',
+        t('optionsUseSourceProvidedProxies'),
+        enabled,
+        '',
+        'connection-toggle',
+    );
+    input.onchange = () => updateEnabledStatus(status, input.checked);
 
   }
 
   function renderProxyPolicy(parent, pacMods) {
 
-    const group = append(parent, 'div', 'editor-panel');
-    appendText(group, 'h3', t('optionsProxyMethodPolicy'));
-    appendCheckbox(
-        group,
-        'usePacScriptProxies',
-        t('popupUsePacScriptProxies'),
-        pacMods.usePacScriptProxies !== false,
-        t('popupUsePacScriptProxiesHelp'),
+    const disclosure = createDetails(
+        parent,
+        'proxy-routing-policies',
+        t('optionsAdvancedProxyPolicies'),
+    );
+    disclosure.details.dataset.proxyGroup = 'advanced';
+    appendText(
+        disclosure.content,
+        'p',
+        t('optionsAdvancedProxyPoliciesHelp'),
+        'section-description',
     );
     appendCheckbox(
-        group,
+        disclosure.content,
         'ownProxiesOnlyForOwnSites',
         t('popupOwnProxiesOnlyForOwnSites'),
         pacMods.ownProxiesOnlyForOwnSites === true,
         t('popupOwnProxiesOnlyForOwnSitesHelp'),
     );
+    const advanced = createButton(
+        disclosure.content,
+        t('optionsOpenAdvancedRouting'),
+        'quiet compact-action',
+    );
+    advanced.onclick = () => {
+      state.openDisclosures.add('advanced-routing');
+      navigateTo('advanced');
+      const routing = root.querySelector(
+          '[data-disclosure-key="advanced-routing"]',
+      );
+      if (routing) {
+        routing.open = true;
+      }
+    };
 
   }
 
   function renderTorMethod(parent, key, title, config, defaultPort) {
 
-    const card = append(parent, 'fieldset', 'method-card');
-    appendText(card, 'legend', title, 'item-title');
-    const enabled = appendCheckbox(
-        card,
-        `${key}.enabled`,
-        t('optionsEnabled'),
-        config.enabled === true,
-        key === 'torBrowser' ?
-          t('optionsTorBrowserHelp') :
-          t('optionsLocalTorHelp'),
-    );
+    const healthError = getProxyConnectionHealthError(key);
+    const connection = createProxyConnectionCard(parent, {
+      key,
+      title,
+      enabled: config.enabled === true,
+      requirement: key === 'torBrowser' ?
+        t('optionsTorBrowserRequirement') :
+        t('optionsTorRequirement'),
+      endpoint: formatProxyEndpoint(
+          config.type || 'SOCKS5',
+          config.host || '127.0.0.1',
+          config.port || defaultPort,
+      ),
+      healthError,
+      forceOpen: Boolean(healthError),
+    });
+    const enabled = connection.enabled;
+    enabled.name = `${key}.enabled`;
     enabled.onchange = () => {
-      if (!enabled.checked) {
-        return;
-      }
+      updateEnabledStatus(connection.status, enabled.checked);
+      setConnectionEditorExpanded(connection.card, enabled.checked, true);
       const otherName = key === 'localTor' ?
         'torBrowser.enabled' :
         'localTor.enabled';
       const other = parent.querySelector(`[name="${otherName}"]`);
-      if (other) {
+      if (enabled.checked && other) {
         other.checked = false;
+        const otherCard = other.closest('[data-connection-key]');
+        updateEnabledStatus(
+            otherCard.querySelector('[data-connection-status]'),
+            false,
+        );
+        setConnectionEditorExpanded(otherCard, false, true);
       }
     };
     appendSelect(
-        card,
+        connection.editor,
         `${key}.type`,
         t('optionsType'),
         ['SOCKS5', 'SOCKS4', 'PROXY', 'HTTPS'],
@@ -2600,7 +2707,7 @@
         {full: true},
     );
     appendField(
-        card,
+        connection.editor,
         'text',
         `${key}.host`,
         t('optionsHost'),
@@ -2608,7 +2715,7 @@
         {full: true},
     );
     appendField(
-        card,
+        connection.editor,
         'number',
         `${key}.port`,
         t('optionsPort'),
@@ -2616,14 +2723,14 @@
         {full: true, min: 1, max: 65535},
     );
     appendCheckbox(
-        card,
+        connection.editor,
         `${key}.useForOnion`,
         t('optionsUseForOnion'),
         config.useForOnion !== false,
         '',
     );
     appendCheckbox(
-        card,
+        connection.editor,
         `${key}.useAsDirectReplacement`,
         t('optionsUseAsDirectReplacement'),
         config.useAsDirectReplacement === true,
@@ -2634,26 +2741,37 @@
 
   function renderWarpMethod(parent, warp) {
 
-    const card = append(parent, 'fieldset', 'method-card');
-    appendText(card, 'legend', t('popupWarpCustomProxy'), 'item-title');
-    appendCheckbox(
-        card,
-        'warp.enabled',
-        t('optionsEnabled'),
-        warp.enabled === true,
-        t('optionsWarpLocalProxyWarning'),
-    );
+    const proxyString = warp.proxyString ||
+      'SOCKS5 127.0.0.1:40000; HTTPS 127.0.0.1:40000';
+    const healthError = getProxyConnectionHealthError('warp');
+    const connection = createProxyConnectionCard(parent, {
+      key: 'warp',
+      title: t('optionsWarpConnection'),
+      enabled: warp.enabled === true,
+      requirement: t('optionsWarpRequirement'),
+      endpoint: proxyString,
+      healthError,
+      forceOpen: Boolean(healthError),
+    });
+    connection.enabled.name = 'warp.enabled';
+    connection.enabled.onchange = () => {
+      updateEnabledStatus(connection.status, connection.enabled.checked);
+      setConnectionEditorExpanded(
+          connection.card,
+          connection.enabled.checked,
+          true,
+      );
+    };
     appendField(
-        card,
+        connection.editor,
         'text',
         'warp.proxyString',
         t('optionsProxyString'),
-        warp.proxyString ||
-          'SOCKS5 127.0.0.1:40000; HTTPS 127.0.0.1:40000',
+        proxyString,
         {full: true, help: t('optionsProxyStringHelp')},
     );
     appendCheckbox(
-        card,
+        connection.editor,
         'warp.useAsDirectReplacement',
         t('optionsUseAsDirectReplacement'),
         warp.useAsDirectReplacement === true,
@@ -2662,18 +2780,189 @@
 
   }
 
+  function createProxyConnectionCard(parent, options) {
+
+    const card = append(parent, 'div', 'connection-card');
+    card.dataset.connectionKey = options.key;
+    card.mv3ExpandLabel = t('optionsEditConnection');
+    card.mv3CollapseLabel = t('optionsHideConnectionDetails');
+    const summary = append(card, 'div', 'connection-summary');
+    const copy = append(summary, 'div', 'connection-summary-copy');
+    appendText(copy, 'h4', options.title);
+    appendText(
+        copy,
+        'p',
+        options.requirement,
+        'connection-requirement',
+    );
+    appendText(
+        copy,
+        'p',
+        options.endpoint,
+        'connection-endpoint',
+    );
+    const controls = append(summary, 'div', 'connection-summary-controls');
+    const status = appendText(controls, 'span', '', 'ui-pill');
+    status.dataset.connectionStatus = '';
+    updateEnabledStatus(status, options.enabled);
+    const enabled = appendCheckbox(
+        controls,
+        '',
+        t('optionsEnabled'),
+        options.enabled,
+        '',
+        'connection-toggle',
+    );
+    const toggle = createButton(
+        controls,
+        card.mv3ExpandLabel,
+        'quiet compact-action',
+    );
+    toggle.dataset.connectionEdit = options.key;
+    toggle.dataset.focusKey = `proxy-connection-${options.key}`;
+    const editor = append(card, 'div', 'connection-editor field-grid');
+    editor.dataset.connectionEditor = '';
+    proxyEditorId += 1;
+    editor.id = `proxy-connection-editor-${proxyEditorId}`;
+    toggle.setAttribute('aria-controls', editor.id);
+    toggle.onclick = () => setConnectionEditorExpanded(
+        card,
+        toggle.getAttribute('aria-expanded') !== 'true',
+        true,
+    );
+    const expanded = options.enabled || options.forceOpen ||
+      state.openDisclosures.has(`connection:${options.key}`);
+    setConnectionEditorExpanded(card, expanded, false);
+    if (options.healthError) {
+      const warning = append(
+          card,
+          'div',
+          'connection-error status-banner error',
+      );
+      warning.setAttribute('role', 'status');
+      appendText(warning, 'p', options.healthError);
+      const maintenance = createButton(
+          warning,
+          t('popupOpenConnectionCheck'),
+          'quiet compact-action',
+      );
+      maintenance.onclick = () => navigateTo('maintenance');
+    }
+    return {card, editor, enabled, status, toggle};
+
+  }
+
+  function setConnectionEditorExpanded(card, expanded, remember) {
+
+    const editor = card.querySelector('[data-connection-editor]');
+    const toggle = card.querySelector('[data-connection-edit]');
+    if (!editor || !toggle) {
+      return;
+    }
+    editor.hidden = !expanded;
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    toggle.textContent = expanded ?
+      card.mv3CollapseLabel :
+      card.mv3ExpandLabel;
+    if (remember) {
+      const key = `connection:${card.dataset.connectionKey}`;
+      if (expanded) {
+        state.openDisclosures.add(key);
+      } else {
+        state.openDisclosures.delete(key);
+      }
+    }
+
+  }
+
+  function updateEnabledStatus(status, enabled) {
+
+    status.textContent = t(enabled ? 'optionsEnabled' : 'optionsDisabled');
+    status.className = `ui-pill${enabled ? ' success' : ''}`;
+
+  }
+
+  function formatProxyEndpoint(type, host, port) {
+
+    const endpoint = `${String(host || '').trim()}:` +
+      String(port || '').trim();
+    return `${String(type || '').trim()} · ${endpoint}`;
+
+  }
+
+  function getProxyConnectionHealthError(key) {
+
+    const health = state.snapshot.reliability &&
+      state.snapshot.reliability.proxyHealth || {};
+    if (health.status !== 'error' || health.candidateType !== key) {
+      return '';
+    }
+    return getLocalizedProxyHealthError(health);
+
+  }
+
+  function updateProxyAvailabilitySummary(form) {
+
+    const own = Array.from(form.querySelectorAll('.proxy-row'))
+        .filter((row) => getChecked(row, 'proxy.enabled') &&
+          getValue(row, 'proxy.host') && getValue(row, 'proxy.port'))
+        .length;
+    const count = own +
+      (getChecked(form, 'localTor.enabled') ? 1 : 0) +
+      (getChecked(form, 'torBrowser.enabled') ? 1 : 0) +
+      (getChecked(form, 'warp.enabled') &&
+        getValue(form, 'warp.proxyString') ? 1 : 0);
+    const status = root.querySelector('[data-proxy-availability]');
+    if (!status) {
+      return;
+    }
+    status.textContent = formatCount(
+        count,
+        'optionsOneProxyMethod',
+        'optionsManyProxyMethods',
+    );
+    status.className = `ui-pill ${count ? 'success' : 'warning'}`;
+
+  }
+
+  function syncProxyFormPresentation(form) {
+
+    const sourceStatus = form.querySelector('[data-source-connection-status]');
+    if (sourceStatus) {
+      updateEnabledStatus(
+          sourceStatus,
+          getChecked(form, 'usePacScriptProxies'),
+      );
+    }
+    form.querySelectorAll('[data-connection-key]').forEach((card) => {
+      const enabled = card.querySelector('.connection-toggle input');
+      const status = card.querySelector('[data-connection-status]');
+      if (enabled && status) {
+        updateEnabledStatus(status, enabled.checked);
+        if (enabled.checked) {
+          setConnectionEditorExpanded(card, true, false);
+        }
+      }
+    });
+    form.querySelectorAll('.proxy-row').forEach(updateOwnProxySummary);
+    updateProxyAvailabilitySummary(form);
+
+  }
+
   function renderOwnProxyMethods(parent, proxies) {
 
-    const section = append(parent, 'fieldset', 'editor-panel');
-    appendText(section, 'legend', t('popupOwnProxies'), 'item-title');
-    appendText(
-        section,
-        'p',
+    const section = createProxyConnectionGroup(
+        parent,
+        'custom',
+        t('popupOwnProxies'),
         t('optionsOwnProxyEditorHelp'),
-        'section-description',
     );
     const rows = append(section, 'div', 'own-proxy-rows');
-    proxies.forEach((proxy) => renderOwnProxyRow(rows, proxy));
+    proxies.forEach((proxy, index) => renderOwnProxyRow(
+        rows,
+        proxy,
+        {index, open: false},
+    ));
     if (!proxies.length) {
       const empty = append(rows, 'div', 'empty-state proxy-empty-state');
       appendText(empty, 'p', t('optionsNoOwnProxies'), 'item-title');
@@ -2689,10 +2978,30 @@
       if (empty) {
         empty.remove();
       }
-      renderOwnProxyRow(rows, createEmptyProxy());
+      renderOwnProxyRow(
+          rows,
+          createEmptyProxy(),
+          {index: rows.querySelectorAll('.proxy-row').length, open: true},
+      );
       updateOwnProxyOrderButtons(rows);
       markDraftDirty(parent);
     };
+    const healthError = getProxyConnectionHealthError('ownProxy');
+    if (healthError) {
+      const warning = append(
+          section,
+          'div',
+          'connection-error status-banner error',
+      );
+      warning.setAttribute('role', 'status');
+      appendText(warning, 'p', healthError);
+      const maintenance = createButton(
+          warning,
+          t('popupOpenConnectionCheck'),
+          'quiet compact-action',
+      );
+      maintenance.onclick = () => navigateTo('maintenance');
+    }
 
   }
 
@@ -2711,38 +3020,76 @@
 
   }
 
-  function renderOwnProxyRow(parent, proxy) {
+  function renderOwnProxyRow(parent, proxy, options = {}) {
 
-    const row = append(parent, 'div', 'proxy-row');
+    const row = append(parent, 'div', 'proxy-row compact-proxy-row');
     row.mv3CredentialRef = proxy.credentialRef ?
       clone(proxy.credentialRef) :
       null;
     row.mv3HasPassword = proxy.hasPassword === true;
-    appendCheckbox(
-        row,
+    row.mv3ExpandLabel = t('optionsEditConnection');
+    row.mv3CollapseLabel = t('optionsHideConnectionDetails');
+    const summary = append(row, 'div', 'proxy-row-summary');
+    const copy = append(summary, 'div', 'proxy-summary-copy');
+    const title = appendText(
+        copy,
+        'h4',
+        t('optionsCustomProxyNumber', [String((options.index || 0) + 1)]),
+    );
+    title.dataset.proxyRowTitle = '';
+    const endpoint = appendText(copy, 'p', '', 'connection-endpoint');
+    endpoint.dataset.proxyEndpointSummary = '';
+    const authentication = appendText(
+        copy,
+        'p',
+        '',
+        'connection-authentication',
+    );
+    authentication.dataset.proxyAuthenticationSummary = '';
+    const controls = append(summary, 'div', 'connection-summary-controls');
+    const status = appendText(controls, 'span', '', 'ui-pill');
+    status.dataset.connectionStatus = '';
+    const enabled = appendCheckbox(
+        controls,
         'proxy.enabled',
         t('optionsEnabled'),
         proxy.enabled !== false,
         '',
-        'full',
+        'connection-toggle',
     );
-    appendSelect(
+    const edit = createButton(
+        controls,
+        row.mv3ExpandLabel,
+        'quiet compact-action',
+    );
+    edit.dataset.proxyEdit = '';
+    edit.dataset.focusKey = `proxy-row-edit-${proxyEditorId + 1}`;
+    const editor = append(row, 'div', 'proxy-editor field-grid');
+    editor.dataset.proxyEditor = '';
+    proxyEditorId += 1;
+    editor.id = `proxy-editor-${proxyEditorId}`;
+    edit.setAttribute('aria-controls', editor.id);
+    edit.onclick = () => setOwnProxyEditorExpanded(
         row,
+        edit.getAttribute('aria-expanded') !== 'true',
+    );
+    const type = appendSelect(
+        editor,
         'proxy.type',
         t('optionsType'),
         ['PROXY', 'HTTPS', 'SOCKS4', 'SOCKS5'],
         proxy.type || 'PROXY',
     );
-    appendField(
-        row,
+    const host = appendField(
+        editor,
         'text',
         'proxy.host',
         t('optionsHost'),
         proxy.host || '',
         {required: true},
     );
-    appendField(
-        row,
+    const port = appendField(
+        editor,
         'number',
         'proxy.port',
         t('optionsPort'),
@@ -2750,7 +3097,7 @@
         {min: 1, max: 65535, required: true},
     );
     appendField(
-        row,
+        editor,
         'text',
         'proxy.username',
         t('optionsUsername'),
@@ -2758,7 +3105,7 @@
         {autocomplete: 'username'},
     );
     const passwordMode = appendSelect(
-        row,
+        editor,
         'proxy.passwordMode',
         t('optionsPasswordAction'),
         proxy.hasPassword ? [
@@ -2773,7 +3120,7 @@
         {help: t('optionsPasswordIntentHelp')},
     );
     const password = appendField(
-        row,
+        editor,
         'password',
         'proxy.password',
         t('optionsNewPassword'),
@@ -2789,9 +3136,10 @@
       if (password.disabled) {
         password.value = '';
       }
+      updateOwnProxySummary(row);
     };
     appendCheckbox(
-        row,
+        editor,
         'proxy.useAsDirectReplacement',
         t('optionsDirectReplacement'),
         proxy.useAsDirectReplacement === true,
@@ -2799,14 +3147,14 @@
         'full',
     );
     appendField(
-        row,
+        editor,
         'text',
         'proxy.note',
         t('optionsNote'),
         proxy.note || '',
         {full: true},
     );
-    const actions = append(row, 'div', 'rule-actions full');
+    const actions = append(row, 'div', 'rule-actions proxy-row-actions');
     const moveUp = createButton(
         actions,
         t('optionsMoveUp'),
@@ -2834,7 +3182,62 @@
         markDraftDirty(form);
       }
     };
+    enabled.onchange = () => updateOwnProxySummary(row);
+    type.onchange = () => updateOwnProxySummary(row);
+    host.oninput = () => updateOwnProxySummary(row);
+    port.oninput = () => updateOwnProxySummary(row);
+    password.oninput = () => updateOwnProxySummary(row);
+    const invalid = !String(proxy.host || '').trim() ||
+      !Number.isInteger(Number(proxy.port)) || Number(proxy.port) < 1 ||
+      Number(proxy.port) > 65535;
+    setOwnProxyEditorExpanded(row, options.open === true || invalid);
+    updateOwnProxySummary(row);
     updateOwnProxyOrderButtons(parent);
+
+  }
+
+  function setOwnProxyEditorExpanded(row, expanded) {
+
+    const editor = row.querySelector('[data-proxy-editor]');
+    const edit = row.querySelector('[data-proxy-edit]');
+    if (!editor || !edit) {
+      return;
+    }
+    editor.hidden = !expanded;
+    edit.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    edit.textContent = expanded ?
+      row.mv3CollapseLabel :
+      row.mv3ExpandLabel;
+
+  }
+
+  function updateOwnProxySummary(row) {
+
+    const type = getValue(row, 'proxy.type') || 'PROXY';
+    const host = getValue(row, 'proxy.host');
+    const port = getValue(row, 'proxy.port');
+    const endpoint = row.querySelector('[data-proxy-endpoint-summary]');
+    endpoint.textContent = host && port ?
+      formatProxyEndpoint(type, host, port) :
+      t('optionsEndpointNotConfigured');
+    const passwordMode = getValue(row, 'proxy.passwordMode');
+    const hasReplacement = passwordMode === 'replace' &&
+      Boolean(getRawValue(row, 'proxy.password'));
+    const hasAuthentication = (
+      row.mv3HasPassword && passwordMode === 'preserve'
+    ) || hasReplacement;
+    row.querySelector('[data-proxy-authentication-summary]').textContent =
+      t(hasAuthentication ?
+        'optionsAuthenticationConfigured' :
+        'optionsNoAuthenticationConfigured');
+    const invalid = Boolean(row.querySelector('[aria-invalid="true"]'));
+    const status = row.querySelector('[data-connection-status]');
+    if (invalid) {
+      status.textContent = t('optionsNeedsAttention');
+      status.className = 'ui-pill error';
+    } else {
+      updateEnabledStatus(status, getChecked(row, 'proxy.enabled'));
+    }
 
   }
 
@@ -2863,6 +3266,10 @@
 
     const rows = Array.from(parent.querySelectorAll('.proxy-row'));
     rows.forEach((row, index) => {
+      const title = row.querySelector('[data-proxy-row-title]');
+      if (title) {
+        title.textContent = t('optionsCustomProxyNumber', [String(index + 1)]);
+      }
       const up = row.querySelector('[data-proxy-move="up"]');
       const down = row.querySelector('[data-proxy-move="down"]');
       if (up) {
@@ -2928,6 +3335,7 @@
     clearValidation(form);
     let firstInvalid = null;
     form.querySelectorAll('.proxy-row').forEach((row) => {
+      let rowInvalid = false;
       const host = row.querySelector('[name="proxy.host"]');
       const port = row.querySelector('[name="proxy.port"]');
       const passwordMode = row.querySelector(
@@ -2938,15 +3346,18 @@
       if (!host.value.trim()) {
         showFieldError(host, t('optionsProxyHostRequired'));
         firstInvalid = firstInvalid || host;
+        rowInvalid = true;
       }
       const portValue = Number(port.value);
       if (!Number.isInteger(portValue) || portValue < 1 || portValue > 65535) {
         showFieldError(port, t('optionsProxyPortInvalid'));
         firstInvalid = firstInvalid || port;
+        rowInvalid = true;
       }
       if (passwordMode.value === 'replace' && !password.value) {
         showFieldError(password, t('optionsPasswordRequiredForReplace'));
         firstInvalid = firstInvalid || password;
+        rowInvalid = true;
       }
       const ref = row.mv3CredentialRef;
       const endpointChanged = ref && (
@@ -2960,7 +3371,12 @@
             t('optionsPasswordEndpointChanged'),
         );
         firstInvalid = firstInvalid || passwordMode;
+        rowInvalid = true;
       }
+      if (rowInvalid) {
+        setOwnProxyEditorExpanded(row, true);
+      }
+      updateOwnProxySummary(row);
     });
     if (firstInvalid) {
       firstInvalid.focus();
@@ -3207,7 +3623,7 @@
     const keys = {
       localTor: 'popupLocalTor',
       torBrowser: 'popupTorBrowser',
-      warp: 'popupWarpCustomProxy',
+      warp: 'optionsWarpConnection',
       ownProxy: 'popupOwnProxies',
     };
     return keys[type] ? t(keys[type]) : t('optionsNone');
@@ -4182,6 +4598,12 @@
       const draft = state.drafts.get(form.dataset.draftKey);
       form.dataset.dirty = draft && draft.dirty ? 'true' : 'false';
       form.dataset.conflict = draft && draft.conflict ? 'true' : 'false';
+      if (form.dataset.draftKey === 'proxy-methods') {
+        const pending = form.querySelector('[data-proxy-draft-status]');
+        if (pending) {
+          pending.hidden = !(draft && draft.dirty);
+        }
+      }
     });
     const bar = root.querySelector('#global-action-bar');
     if (bar && state.snapshot) {
