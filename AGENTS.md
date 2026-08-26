@@ -22,7 +22,7 @@ npm --prefix $Project run build:mv2
 npm --prefix $Project run verify:mv3
 ```
 
-Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only when extension dependencies are missing. A functional legacy options bundle additionally needs `npm ci --prefix "$Project\src\extension-common\pages\options"` followed by `npm --prefix "$Project\src\extension-common\pages\options" run build`. `build:mv2` deletes the complete `build` directory, so always build MV2 before the final MV3 build. Whole-tree `npm run lint` has pre-existing legacy failures; use the focused `lint:mv3` check for MV3 work and report the legacy baseline rather than reformatting it.
+Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only when extension dependencies are missing. The obsolete dependency tree under `$Project\src\extension-common\pages\options` is security-quarantined: do not install or build it during ordinary work, reuse it for Firefox, or add it to normal CI. Any task that genuinely requires that toolchain must first be scoped as dedicated dependency/toolchain remediation using `$dependency-review`. `build:mv2` deletes the complete `build` directory, so always build MV2 before the final MV3 build. Whole-tree `npm run lint` has pre-existing legacy failures; use the focused `lint:mv3` check for MV3 work and report the legacy baseline rather than reformatting it.
 
 ## Coding approach
 
@@ -30,6 +30,18 @@ Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only 
 - For non-trivial work, use observable success criteria to guide implementation and verification. State them only when they help align scope or explain the evidence.
 - Prefer the simplest solution that fully meets the requirement and fits the existing architecture. Add features, configuration, flexibility, or abstractions only for a demonstrated requirement or design need.
 - Make focused changes and preserve unrelated behavior and user work. Do not reformat legacy files, regenerate lockfiles unnecessarily, or alter production behavior as cleanup.
+
+## Dependency, Actions, and supply-chain policy
+
+- Adding a dependency is not the default solution. Check browser/WebExtension APIs, Node APIs, and existing dependencies first. Prefer a small auditable local implementation for simple functionality when it avoids a large dependency tree, but do not reimplement mature security-sensitive primitives merely to avoid a legitimate established dependency.
+- A package version must have been publicly available for at least 7 full days (168 hours), measured from its registry publication timestamp to review time, before it may be newly added or selected by an update. This applies to direct production and development dependencies; do not reduce it to 24, 48, or 72 hours or an unspecified few days. An exception requires a concrete security or compatibility emergency, explicit user approval, and a prominent PR record of the package/version, publication age, reason, and additional review. An AI agent cannot approve its own exception.
+- Before adding a new direct dependency, use `$dependency-review` and verify its exact registry identity and selected version, publication date, public source repository and source/package correspondence, compatible license, maintenance history, observable maintainers/owners, advisories or malware reports, package/tarball contents, lifecycle scripts, transitive delta, registry integrity/signature, available provenance/attestation, and unexplained dependency or package-size growth. Downloads, stars, repository activity, OpenSSF Scorecard, and similar metrics are signals only, never proof of safety; there is no `npm reviews` requirement.
+- Re-review a previously accepted package when there is evidence of an unexpected maintainer or repository-ownership change, source-repository change, dormant-project release, new lifecycle script, dramatic package-size or unusual transitive growth, public-source/package mismatch, or unusual registry, source, or integrity change.
+- Manually inspect exactly what every newly introduced direct or transitive `preinstall`, `install`, or `postinstall` script executes. The dependency review must record why the script is needed and safe; never dismiss it as normal package behavior.
+- Commit package locks, use `npm ci` for deterministic installation and CI, and review lockfile deltas for the versions actually installed. Reject unexplained registry/source or integrity changes and require explicit review for git, file, or arbitrary-URL dependencies. Never run `npm audit fix --force` automatically. Prefer exact direct version pins because this project has no library-consumer semver flexibility requirement; convert existing ranges only in a separately reviewed change.
+- Pin third-party GitHub Actions to full immutable commit SHAs, verify each SHA belongs to the intended official repository/version, declare explicit least-privilege workflow permissions, and set `persist-credentials: false` unless a task explicitly requires write credentials. Review new or changed third-party Actions like dependencies.
+- An AI/Codex agent must not propose or install a package merely because it remembers the name, finds it convenient, sees it in generated output, or thinks the name looks right. It must first prove that the package exists, its registry and source-repository identities are correct, the requested version exists, and the same age, trust, and security policy was applied. This guards against hallucinated, dependency-confusion, and slopsquatted package names.
+- Apply the same trust and security review to new vendored runtime libraries or code. Copying a minified library into the repository does not bypass dependency review.
 
 ## Documentation and release ownership
 
@@ -54,10 +66,12 @@ Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only 
 
 ## Change rules and required checks
 
+- Dependency manifests, lockfiles, vendored third-party libraries, dependency-manager configuration, or GitHub Action additions/updates: use `$dependency-review`. If the change also crosses an MV3 security boundary, use `$mv3-security-review` as well.
 - PAC/routing/candidate changes: use `$pac-regression`, run `test:pac` and `test:mv3`, and add semantic cases when behavior changes.
 - MV3 permissions, service worker, downloads, storage, auth, migration, external requests, or proxy errors: use `$mv3-security-review`, run `lint:mv3`, `test:mv3`, and `build:mv3`; identify real-browser QA.
-- Shared/template/gulp/MV2 changes: run the full tests and `build:mv2`, then rebuild MV3. Report when the legacy options bundle could not be rebuilt.
+- Shared/template/gulp/MV2 changes: run the full tests and `build:mv2`, then rebuild MV3. Report the quarantined legacy Options functional build as unavailable and describe only the copy/template scope actually validated.
 - MV3 UI/localization changes: update both `en` and `ru`, build MV3, and manually check affected controls. Never render stored values with HTML injection sinks.
+- Release preparation, provenance, packaging, or audit work: use `$release-candidate`.
 - Agent/docs-only changes: run `node ./scripts/verify-docs.mjs`, validate skill frontmatter/paths when relevant, and run `git diff --check`; do not claim product checks were necessary if no runtime file changed.
 
 Before calling work complete, review the complete relevant diff and run the checks required above. If a required check cannot run, report the work as incomplete and explain why. Confirm that generated/profile/secret material is neither staged nor packaged, preserve unrelated changes, and name browser-dependent gaps. Report changed files and checks with pass/fail results; mention security/routing impact, unresolved product issues, generated artifacts, and browser QA only when relevant. Include final `git status --short`. Never commit, push, publish, or upload unless separately authorized.

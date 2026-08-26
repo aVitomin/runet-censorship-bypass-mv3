@@ -10,7 +10,14 @@ This workflow produces a local preflight artifact only. Its locally built and pa
 Work from the repository root, set `$Project = '.\extensions\chromium\runet-censorship-bypass'`, and read `AGENTS.md`. Do not commit, publish, upload, clean user changes, overwrite an existing archive, or reveal matched secret/private URL values.
 
 1. Inspect `git status --short`, staged paths, and the complete release-relevant diff. A normal RC requires a clean tree; package a dirty tree only when the user explicitly accepts its exact contents.
-2. Run the existing deterministic checks and builds. MV2 must precede MV3 because `build:mv2` deletes all of `build`:
+2. Check the release supply chain. Run the production audit and `npm audit signatures`; record tool limitations rather than weakening the check. Confirm that package/lock, vendored-code, dependency-manager, and GitHub Action changes received `$dependency-review`. Inspect newly introduced lifecycle scripts, reject unexpected non-registry dependency sources, and confirm source/package correspondence for vendored runtime dependencies where applicable.
+
+   ```powershell
+   npm --prefix $Project run audit:prod
+   npm audit signatures --prefix $Project
+   ```
+
+3. Run the existing deterministic checks and builds. MV2 must precede MV3 because `build:mv2` deletes all of `build`:
 
    ```powershell
    npm --prefix $Project test
@@ -19,7 +26,7 @@ Work from the repository root, set `$Project = '.\extensions\chromium\runet-cens
    npm --prefix $Project run build:mv3
    ```
 
-3. Validate `$Project\build\extension-chromium-mv3\manifest.json`, derive a new local archive name from its version, and package the contents of that build directory at archive root with PowerShell `Compress-Archive`. Confirm `manifest.json` is at archive root and calculate SHA-256 with `Get-FileHash`.
-4. If the ignored legacy options bundle is unavailable, report that the MV2 result was copy/template sanity only; do not call it a functional legacy UI build. Rebuild that bundle with its existing nested lockfile when legacy/shared changes require it.
-5. Scan staged paths, generated output, and the archive without printing matched values. Reject dependency, cache, profile, log, environment, key, coverage, nested build/dist, secret, credential, or private-URL material.
-6. Return version/version-name, local preflight archive path relative to the project, SHA-256, commands and results, dirty-tree state, legacy-build scope, a concise change/security summary, and remaining browser QA. Label the archive as local preflight output, not a public release source. Browser QA includes load-unpacked startup/restart, provider refresh without auto-enable, Proxy/Auto/Direct, real Tor and authenticated proxy behavior, proxy errors/takeover, IndexedDB persistence, and upgraded-profile migration.
+4. Validate `$Project\build\extension-chromium-mv3\manifest.json`, derive a new local archive name from its version, and package the contents of that build directory at archive root with PowerShell `Compress-Archive`. Confirm `manifest.json` is at archive root and calculate SHA-256 with `Get-FileHash`.
+5. Treat the legacy Options toolchain under `$Project\src\extension-common\pages\options` as security-quarantined. Do not install or build it merely to obtain a functional legacy UI bundle. Report that functional build as unavailable/quarantined and state the MV2 copy/template scope actually checked. Any future need to run it requires a dedicated remediation task after `$dependency-review`.
+6. Scan staged paths, generated output, and the archive without printing matched values. Reject dependency, cache, profile, log, environment, key, coverage, nested build/dist, secret, credential, or private-URL material.
+7. Return version/version-name, local preflight archive path relative to the project, SHA-256, commands and results, dirty-tree state, legacy-build scope, supply-chain checks, a concise change/security summary, and remaining browser QA. Label the archive as local preflight output, not a public release source. Browser QA includes load-unpacked startup/restart, provider refresh without auto-enable, Proxy/Auto/Direct, real Tor and authenticated proxy behavior, proxy errors/takeover, IndexedDB persistence, and upgraded-profile migration.
