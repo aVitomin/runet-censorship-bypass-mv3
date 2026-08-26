@@ -105,36 +105,25 @@ DNS-утечек.
 
 ## Интерфейс
 
-> Снимки ниже сделаны в Google Chrome Stable из доверенной ветки `main` на
-> ревизии `cd91cb5`. Этот интерфейс новее опубликованного ZIP `v0.0.2.3` и не
-> выдаётся за содержимое стабильного release asset. Установочные данные выше
-> относятся именно к `v0.0.2.3`; расположение и подписи элементов в нём могут
-> отличаться до следующего выпуска.
+<p align="center">
+  <a href="docs/assets/readme/popup-daily-auto.png"><img src="docs/assets/readme/popup-daily-auto.png" alt="Popup в здоровом состоянии Auto для example.test" width="300"></a><br>
+  <sub>Popup: ежедневный выбор маршрута</sub>
+</p>
 
-<table>
-  <tr>
-    <td align="center">
-      <img src="docs/assets/readme/popup-daily-auto.png" alt="Popup в здоровом состоянии Auto для example.test" width="320"><br>
-      <sub>Popup: ежедневный выбор маршрута</sub>
-    </td>
-    <td align="center">
-      <img src="docs/assets/readme/options-overview.png" alt="Overview с активной применённой конфигурацией" width="720"><br>
-      <sub>Overview: состояние конфигурации</sub>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="docs/assets/readme/options-automatic-routing.png" alt="Automatic routing с выбором встроенного источника" width="900"><br>
-      <sub>Automatic routing: выбор источника при первой настройке</sub>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="docs/assets/readme/options-proxy-connections.png" alt="Proxy connections с компактными Tor, Tor Browser и WARP" width="900"><br>
-      <sub>Proxy connections: компактный список подключений</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <a href="docs/assets/readme/options-overview.png"><img src="docs/assets/readme/options-overview.png" alt="Overview с активной применённой конфигурацией" width="760"></a><br>
+  <sub>Overview: состояние конфигурации</sub>
+</p>
+
+<p align="center">
+  <a href="docs/assets/readme/options-automatic-routing.png"><img src="docs/assets/readme/options-automatic-routing.png" alt="Automatic routing с выбором встроенного источника" width="760"></a><br>
+  <sub>Automatic routing: выбор источника при первой настройке</sub>
+</p>
+
+<p align="center">
+  <a href="docs/assets/readme/options-proxy-connections.png"><img src="docs/assets/readme/options-proxy-connections.png" alt="Proxy connections с компактными Tor, Tor Browser и WARP" width="760"></a><br>
+  <sub>Proxy connections: компактный список подключений</sub>
+</p>
 
 Все кадры сняты с английским интерфейсом и синтетическим адресом
 `example.test`; в них нет личных данных, реальных прокси или учётных данных.
