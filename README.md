@@ -9,10 +9,10 @@ Runet Censorship Bypass — расширение для Chromium с выборо
 
 Текущий продукт поддерживает Chromium и проверяется в Google Chrome Stable.
 Последний опубликованный стабильный выпуск —
-[`v0.0.2.3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3).
+[`v0.0.3.0`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.3.0).
 Он устанавливается вручную из распакованного ZIP и не обновляется через магазин.
 
-[Скачать стабильный выпуск](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3) ·
+[Скачать стабильный выпуск](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.3.0) ·
 [Инструкция по установке](docs/user/INSTALLATION.md) ·
 [Руководство пользователя](docs/user/USER_GUIDE.md) ·
 [Сообщить о проблеме](https://github.com/aVitomin/runet-censorship-bypass-mv3/issues)
@@ -23,7 +23,7 @@ Runet Censorship Bypass — расширение для Chromium с выборо
 Runet Censorship Bypass is a Chromium extension for selective website routing:
 blocked or chosen sites can use automatic routing or configured proxy
 connections while the rest of browsing stays direct. The latest published
-stable release is `v0.0.2.3`. Installation and updates are manual and unpacked;
+stable release is `v0.0.3.0`. Installation and updates are manual and unpacked;
 Firefox is not part of the current Chromium release. See the
 [installation guide](docs/user/INSTALLATION.md) and
 [user guide](docs/user/USER_GUIDE.md).
@@ -51,13 +51,13 @@ DNS-утечек.
 
 ### Текущий стабильный выпуск
 
-- Версия: [`v0.0.2.3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3)
-- Архив (355 601 байт):
-  [`runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.3/runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip)
+- Версия: [`v0.0.3.0`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.3.0)
+- Архив (361 977 байт):
+  [`runet-censorship-bypass-mv3-0.0.3.0-cd59e14.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.3.0/runet-censorship-bypass-mv3-0.0.3.0-cd59e14.zip)
 - SHA-256:
-  `693d50f9ec9d1e4db54ca0760d6130532e2547bc174b1e233f101ee5fb8b1677`
+  `68a32aa9162d5ba8b2cd9070c2eba6e5eb055434b899c284107c55d3e5a55635`
 - Опубликованный файл контрольной суммы:
-  [`runet-censorship-bypass-mv3-0.0.2.3-cb53097.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.3/runet-censorship-bypass-mv3-0.0.2.3-cb53097.sha256.txt)
+  [`runet-censorship-bypass-mv3-0.0.3.0-cd59e14.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.3.0/runet-censorship-bypass-mv3-0.0.3.0-cd59e14.sha256.txt)
 
 1. Скачайте ZIP со страницы стабильного выпуска.
 2. При необходимости сверьте SHA-256 с опубликованным файлом контрольной
