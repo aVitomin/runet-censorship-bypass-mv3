@@ -6,19 +6,16 @@
 обновлений сейчас нет.
 
 Последний опубликованный стабильный выпуск —
-[`v0.0.2.3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3).
-Доверенная ветка `main` уже содержит более новый интерфейс, поэтому скриншоты и
-названия разделов в текущей документации могут отличаться от расположения
-элементов в ZIP `v0.0.2.3`. Это не меняет ссылку, версию или контрольную сумму
-опубликованного файла.
+[`v0.0.3.0`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.3.0).
+Текущая документация и скриншоты соответствуют интерфейсу этого выпуска.
 
 ## Скачать стабильный выпуск
 
-1. Откройте [страницу `v0.0.2.3`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.2.3).
+1. Откройте [страницу `v0.0.3.0`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/tag/v0.0.3.0).
 2. Скачайте
-   [`runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.3/runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip).
+   [`runet-censorship-bypass-mv3-0.0.3.0-cd59e14.zip`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.3.0/runet-censorship-bypass-mv3-0.0.3.0-cd59e14.zip).
 3. При желании скачайте рядом
-   [`runet-censorship-bypass-mv3-0.0.2.3-cb53097.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.2.3/runet-censorship-bypass-mv3-0.0.2.3-cb53097.sha256.txt).
+   [`runet-censorship-bypass-mv3-0.0.3.0-cd59e14.sha256.txt`](https://github.com/aVitomin/runet-censorship-bypass-mv3/releases/download/v0.0.3.0/runet-censorship-bypass-mv3-0.0.3.0-cd59e14.sha256.txt).
 
 Не скачивайте исходный код из автоматически созданных ссылок **Source code**:
 это не готовое расширение.
@@ -28,13 +25,13 @@
 Ожидаемый SHA-256 ZIP:
 
 ```text
-693d50f9ec9d1e4db54ca0760d6130532e2547bc174b1e233f101ee5fb8b1677
+68a32aa9162d5ba8b2cd9070c2eba6e5eb055434b899c284107c55d3e5a55635
 ```
 
 В PowerShell:
 
 ```powershell
-Get-FileHash .\runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip -Algorithm SHA256
+Get-FileHash .\runet-censorship-bypass-mv3-0.0.3.0-cd59e14.zip -Algorithm SHA256
 ```
 
 Результат должен точно совпасть с опубликованным значением и файлом
@@ -96,8 +93,8 @@ Get-FileHash .\runet-censorship-bypass-mv3-0.0.2.3-cb53097.zip -Algorithm SHA256
    - удалите старую карточку и загрузите новую папку через **Load unpacked**;
    - либо замените содержимое текущей папки целиком и нажмите **Reload**, если
      точно сохранили путь и не смешали версии.
-6. Откройте **About** и проверьте версию, затем проверьте Overview и снова
-   примените конфигурацию только если интерфейс этого требует.
+6. Откройте **About** и проверьте версию `0.0.3.00`, затем проверьте Overview и
+   снова примените конфигурацию только если интерфейс этого требует.
 7. Старую папку удаляйте лишь после успешного запуска новой версии.
 
 Не объединяйте файлы двух выпусков и не копируйте поверх них исходники из
