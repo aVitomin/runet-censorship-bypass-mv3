@@ -5,7 +5,7 @@ description: Prepare or audit a local Chromium MV3 release preflight for this re
 
 # Local release preflight
 
-This workflow produces a local preflight artifact only. Its locally built and packaged archive is not the canonical public release artifact and must not be published as one. Every public beta or release must follow `docs/development/RELEASE_PROCESS.md` and use the exact artifact from successful trusted-main CI for the validated `main` commit.
+This workflow produces a local preflight artifact only. Its locally built and packaged archive is not the canonical public release artifact and must not be published as one. Every public beta or release must follow `docs/development/RELEASE_PROCESS.md` and use the exact artifact from successful trusted-main CI for the validated `main` commit. Normally that is the push-to-main run. If GitHub creates no push run, do not rewrite or synthesize a commit: manually dispatch `Verify MV3` on `main` and accept it only when the event is `workflow_dispatch`, the ref is `refs/heads/main`, its head SHA equals current `origin/main`, the complete normal job succeeds, and that run uploads the canonical artifact.
 
 Work from the repository root, set `$Project = '.\extensions\chromium\runet-censorship-bypass'`, and read `AGENTS.md`. Do not commit, publish, upload, clean user changes, overwrite an existing archive, or reveal matched secret/private URL values.
 
@@ -13,6 +13,8 @@ Work from the repository root, set `$Project = '.\extensions\chromium\runet-cens
 2. Check the release supply chain. Run the production audit and `npm audit signatures`; record tool limitations rather than weakening the check. Confirm that package/lock, vendored-code, dependency-manager, and GitHub Action changes received `$dependency-review`. Inspect newly introduced lifecycle scripts, reject unexpected non-registry dependency sources, and confirm source/package correspondence for vendored runtime dependencies where applicable.
 
    ```powershell
+   node .\scripts\verify-supply-chain.mjs
+   node --test .\scripts\verify-supply-chain.test.mjs
    npm --prefix $Project run audit:prod
    npm audit signatures --prefix $Project
    ```
