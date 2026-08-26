@@ -51,6 +51,7 @@
   };
   let fieldId = 0;
   let proxyEditorId = 0;
+  let statusId = 0;
 
   function t(key, substitutions) {
 
@@ -1288,6 +1289,7 @@
     );
     const status = body.querySelector('.setup-step-status');
     status.dataset.setupApplyStatus = 'true';
+    status.id = 'options-setup-apply-status';
     if (!provider) {
       return;
     }
@@ -1299,6 +1301,7 @@
     );
     apply.dataset.setupApplyAction = 'true';
     apply.disabled = ifApplying || hasDirtyDrafts();
+    apply.setAttribute('aria-describedby', status.id);
     apply.onclick = () => applyConfiguration(apply);
 
   }
@@ -1425,10 +1428,19 @@
     const status = appendText(
         header,
         'span',
-        selected ? t('optionsSelected') : t('optionsAvailable'),
-        selected ? 'ui-pill success' : 'scope-badge',
+        provider.enabled === false ?
+          t('optionsDisabled') :
+          selected ? t('optionsSelected') : t('optionsAvailable'),
+        selected && provider.enabled !== false ?
+          'ui-pill success' :
+          'scope-badge',
     );
+    statusId += 1;
+    status.id = `options-source-status-${statusId}`;
     status.dataset.sourceChoiceStatus = provider.key;
+    if (input.disabled) {
+      input.setAttribute('aria-describedby', status.id);
+    }
     input.onchange = () => {
       if (!input.checked) {
         return;
@@ -1479,12 +1491,14 @@
         ),
         'item-meta',
     );
-    appendText(
+    const providerStatus = appendText(
         summary,
         'span',
         provider.enabled ? t('optionsEnabled') : t('optionsDisabled'),
         provider.enabled ? 'ui-pill success' : 'scope-badge',
     );
+    statusId += 1;
+    providerStatus.id = `options-custom-source-status-${statusId}`;
     const form = append(disclosure.content, 'form', 'field-grid');
     form.onsubmit = (event) => event.preventDefault();
     const key = `provider:${provider.key}`;
@@ -1555,6 +1569,9 @@
     );
     use.disabled = state.snapshot.state.currentPacProviderKey === provider.key ||
       provider.enabled === false;
+    if (use.disabled) {
+      use.setAttribute('aria-describedby', providerStatus.id);
+    }
     use.onclick = () => selectProvider(provider.key, use);
     const remove = createButton(
         actions,
@@ -3508,6 +3525,16 @@
         t('optionsUpdatingRoutingRules'),
     );
     update.disabled = !state.snapshot.state.currentPacProviderKey;
+    if (update.disabled) {
+      const unavailable = appendText(
+          form,
+          'p',
+          t('optionsUpdateRequiresSource'),
+          'field-help action-help',
+      );
+      unavailable.id = 'options-update-requires-source';
+      update.setAttribute('aria-describedby', unavailable.id);
+    }
     update.onclick = () => runUpdateNow(update);
     bindDraftForm(form, 'updates');
     const healthCard = append(section, 'div', 'settings-card ui-card');
