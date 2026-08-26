@@ -1,6 +1,7 @@
 name: Verify MV3
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -29,6 +30,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
@@ -41,8 +43,25 @@ jobs:
       - name: Verify documentation integrity
         run: node ./scripts/verify-docs.mjs
 
+      - name: Verify supply-chain policy
+        env:
+          SUPPLY_CHAIN_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: node ./scripts/verify-supply-chain.mjs
+
+      - name: Test supply-chain verifier
+        run: node --test ./scripts/verify-supply-chain.test.mjs
+
+      - name: Review dependency changes
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          show-openssf-scorecard: false
+
       - name: Install extension dependencies
         run: npm ci --prefix ./extensions/chromium/runet-censorship-bypass
+
+      - name: Verify registry signatures
+        run: npm audit signatures --prefix ./extensions/chromium/runet-censorship-bypass
 
       - name: Audit production dependencies
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run audit:prod
@@ -75,7 +94,7 @@ jobs:
         run: git diff --exit-code
 
       - name: Upload unpacked MV3 build
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: runet-censorship-bypass-mv3-${{ github.sha }}

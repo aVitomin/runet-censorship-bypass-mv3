@@ -21,6 +21,34 @@ anchors, запрещает developer-machine paths и stale current-release/def
 branch/install metadata. Она не делает CI зависимым от доступности внешних
 сайтов; отдельный bounded аудит можно запустить с `--audit-external`.
 
+### Supply-chain gates
+
+```powershell
+node .\scripts\verify-supply-chain.mjs
+node --test .\scripts\verify-supply-chain.test.mjs
+npm audit signatures --prefix $Project
+```
+
+Статический verifier разрешает только два известных npm-root: основной tooling
+package и явно quarantined legacy Options package. Для основного lockfile он
+проверяет exact direct pins, официальный npm registry source, integrity и
+минимальный lifecycle baseline (`fsevents@2.3.3`, optional). Legacy Options
+dependency tree не устанавливается и не становится допустимым baseline. На PR
+registry publication time запрашивается только для новых выбранных direct
+versions; граница равна 168 часам и ошибка registry/metadata блокирует change.
+Эти gates дают defense in depth, но не доказывают безопасность package.
+
+Pull request дополнительно использует официальный
+`actions/dependency-review-action` v5.0.0, pinned на signed commit
+`a1d282b36b6f3519aa1f3fc636f609c47dddb294`. Release опубликован
+2026-05-08T20:23:50Z и на review 2026-08-26 был старше 2619 часов; repository
+принадлежит GitHub `actions`, license — MIT, consumer запускает committed Node
+24 bundle и не устанавливает source dependencies. Проверенный source lock имел
+753 package entries, без non-registry sources или missing integrity; его
+build-time install metadata (`esbuild` и optional `fsevents`) не исполняется в
+этом workflow. Action получает только `contents: read`; custom license/severity
+policy не включена, Scorecard display отключён как необязательный сигнал.
+
 ### Production npm audit
 
 ```powershell

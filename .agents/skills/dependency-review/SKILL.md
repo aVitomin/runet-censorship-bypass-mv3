@@ -17,6 +17,8 @@ Work from the repository root, read `AGENTS.md` and any scoped `AGENTS.md`, and 
 
    ```powershell
    $Project = '.\extensions\chromium\runet-censorship-bypass'
+   node .\scripts\verify-supply-chain.mjs
+   node --test .\scripts\verify-supply-chain.test.mjs
    npm ci --prefix $Project
    npm --prefix $Project run audit:prod
    npm audit --prefix $Project

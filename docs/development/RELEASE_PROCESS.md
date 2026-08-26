@@ -30,7 +30,10 @@ trusted-main CI и проверки того же артефакта, котор
 ```powershell
 $Project = '.\extensions\chromium\runet-censorship-bypass'
 node .\scripts\verify-docs.mjs
+node .\scripts\verify-supply-chain.mjs
+node --test .\scripts\verify-supply-chain.test.mjs
 npm ci --prefix $Project
+npm audit signatures --prefix $Project
 npm --prefix $Project run test:pac
 npm --prefix $Project run test:mv3
 npm --prefix $Project run lint:mv3
@@ -46,10 +49,16 @@ MV3 build. После всех команд tracked tree должен остат
 ## 3. Подтвердить trusted-main CI
 
 Для exact main SHA workflow **Verify MV3** должен завершиться успешно как
-trusted push в `main`. Проверьте не только общий зелёный статус, но наличие и
-успех обязательных gates:
+trusted push в `main`. Если GitHub не создал ожидаемый push run, не переписывайте
+и не дополняйте `main`: вручную запустите тот же workflow на `main`. Такой run
+допустим только при `event = workflow_dispatch`, `ref = refs/heads/main`,
+`head_sha = origin/main`, полном успехе обычного job и наличии canonical
+artifact этого run. Dispatch другой ветки не является trusted source и не
+загружает canonical artifact. Проверьте не только общий зелёный статус, но
+наличие и успех обязательных gates:
 
 - documentation integrity;
+- static supply-chain policy, focused verifier tests и registry signatures;
 - PAC и MV3 tests;
 - focused MV3 lint и build;
 - aggregate `verify`;

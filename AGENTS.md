@@ -16,6 +16,8 @@ When required by the change rules below, run these commands from the repository 
 
 ```powershell
 $Project = '.\extensions\chromium\runet-censorship-bypass'
+node .\scripts\verify-supply-chain.mjs
+node --test .\scripts\verify-supply-chain.test.mjs
 npm --prefix $Project test
 npm --prefix $Project run test:pac
 npm --prefix $Project run build:mv2
@@ -66,7 +68,7 @@ Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only 
 
 ## Change rules and required checks
 
-- Dependency manifests, lockfiles, vendored third-party libraries, dependency-manager configuration, or GitHub Action additions/updates: use `$dependency-review`. If the change also crosses an MV3 security boundary, use `$mv3-security-review` as well.
+- Dependency manifests, lockfiles, vendored third-party libraries, dependency-manager configuration, or GitHub Action additions/updates: use `$dependency-review`, run `node .\scripts\verify-supply-chain.mjs` and its focused Node test, and run the applicable audit/build/test gates. If the change also crosses an MV3 security boundary, use `$mv3-security-review` as well.
 - PAC/routing/candidate changes: use `$pac-regression`, run `test:pac` and `test:mv3`, and add semantic cases when behavior changes.
 - MV3 permissions, service worker, downloads, storage, auth, migration, external requests, or proxy errors: use `$mv3-security-review`, run `lint:mv3`, `test:mv3`, and `build:mv3`; identify real-browser QA.
 - Shared/template/gulp/MV2 changes: run the full tests and `build:mv2`, then rebuild MV3. Report the quarantined legacy Options functional build as unavailable and describe only the copy/template scope actually validated.
