@@ -620,7 +620,7 @@
     "message": "Proxy string"
   },
   "optionsAddProxyRow": {
-    "message": "Add proxy row"
+    "message": "Add custom proxy server"
   },
   "optionsUsername": {
     "message": "Username"
@@ -1377,10 +1377,10 @@
     "message": "Site rule removed. Apply the configuration to activate the change."
   },
   "optionsProxyMethodAvailability": {
-    "message": "Proxy connection availability"
+    "message": "Local and custom connection availability"
   },
   "optionsOneProxyMethod": {
-    "message": "$COUNT$ enabled connection",
+    "message": "$COUNT$ Proxy connection available",
     "placeholders": {
       "count": {
         "content": "$1"
@@ -1388,12 +1388,86 @@
     }
   },
   "optionsManyProxyMethods": {
-    "message": "$COUNT$ enabled connections",
+    "message": "$COUNT$ Proxy connections available",
     "placeholders": {
       "count": {
         "content": "$1"
       }
     }
+  },
+  "optionsProxyAvailabilityHelp": {
+    "message": "This count reflects enabled, configured connections for explicit Proxy rules; connection and authentication checks are in Maintenance. Automatic routing can use the selected source separately."
+  },
+  "optionsConfigureProxyConnections": {
+    "message": "Configure Proxy connections"
+  },
+  "optionsSourceProvidedProxies": {
+    "message": "Source-provided proxies"
+  },
+  "optionsSourceProvidedProxiesHelp": {
+    "message": "Keep proxy connections supplied by Automatic routing separate from local applications and custom servers."
+  },
+  "optionsAutomaticRoutingSourceProxies": {
+    "message": "Proxies from the Automatic routing source"
+  },
+  "optionsAutomaticRoutingSourceProxiesHelp": {
+    "message": "Allows the selected source to use the proxy connections it supplies."
+  },
+  "optionsUseSourceProvidedProxies": {
+    "message": "Use source-provided proxies"
+  },
+  "optionsLocalProxyApplications": {
+    "message": "Local proxy applications"
+  },
+  "optionsLocalProxyApplicationsHelp": {
+    "message": "Enable only applications that are installed and running on this computer."
+  },
+  "optionsTorRequirement": {
+    "message": "The local Tor service must be running."
+  },
+  "optionsTorBrowserRequirement": {
+    "message": "Tor Browser must be running."
+  },
+  "optionsWarpConnection": {
+    "message": "WARP"
+  },
+  "optionsWarpRequirement": {
+    "message": "The local proxy configured for WARP must be running; it is not discovered automatically."
+  },
+  "optionsEditConnection": {
+    "message": "Edit"
+  },
+  "optionsHideConnectionDetails": {
+    "message": "Hide details"
+  },
+  "optionsAdvancedProxyPolicies": {
+    "message": "Advanced proxy-routing policies"
+  },
+  "optionsAdvancedProxyPoliciesHelp": {
+    "message": "Scope custom proxy servers here. Direct replacement and Direct fallback policies remain in Advanced."
+  },
+  "optionsOpenAdvancedRouting": {
+    "message": "Open Advanced routing settings"
+  },
+  "optionsCustomProxyNumber": {
+    "message": "Custom proxy server $NUMBER$",
+    "placeholders": {
+      "number": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsEndpointNotConfigured": {
+    "message": "Endpoint not configured"
+  },
+  "optionsAuthenticationConfigured": {
+    "message": "Authentication configured"
+  },
+  "optionsNoAuthenticationConfigured": {
+    "message": "No authentication configured"
+  },
+  "optionsNeedsAttention": {
+    "message": "Needs attention"
   },
   "optionsProxyHealthAuthSeparateHelp": {
     "message": "Connection availability and successful proxy authentication are separate checks."

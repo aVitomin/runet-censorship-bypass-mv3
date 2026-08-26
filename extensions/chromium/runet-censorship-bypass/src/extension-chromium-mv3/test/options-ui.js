@@ -1176,6 +1176,210 @@ describe('MV3 options UI', function() {
 
       });
 
+  it('groups source, local, custom, and advanced Proxy connections once',
+      async function() {
+
+        const snapshot = createSnapshot();
+        snapshot.state.pacMods.localTor.enabled = false;
+        snapshot.state.pacMods.torBrowser.enabled = false;
+        snapshot.state.pacMods.warp.enabled = false;
+        snapshot.state.pacMods.ownProxies = [];
+        const harness = await createHarness({snapshot});
+        const proxies = getSection(harness.root, 'proxy-methods');
+        expect(proxies.querySelectorAll('[data-proxy-group]')
+            .map((group) => group.dataset.proxyGroup)).to.deep.equal([
+          'source',
+          'local',
+          'custom',
+          'advanced',
+        ]);
+        expect(proxies.textContent).to.include('Source-provided proxies');
+        expect(proxies.textContent).to.include('Local proxy applications');
+        expect(proxies.textContent).to.include('Custom proxy servers');
+        expect(proxies.textContent).to.include(
+            'Advanced proxy-routing policies',
+        );
+        expect(getInput(proxies, 'usePacScriptProxies').checked)
+            .to.equal(true);
+        expect(proxies.querySelectorAll(
+            '[name="ownProxiesOnlyForOwnSites"]',
+        )).to.have.length(1);
+        expect(harness.root.querySelectorAll(
+            '[name="replaceDirectWithProxy"]',
+        )).to.have.length(1);
+        expect(harness.root.querySelectorAll('[name="noDirect"]'))
+            .to.have.length(1);
+        const policies = proxies.querySelector(
+            '[data-proxy-group="advanced"]',
+        );
+        expect(policies.tagName).to.equal('DETAILS');
+        findButton(policies, 'Open Advanced routing settings').onclick();
+        expect(getSection(harness.root, 'advanced').hidden).to.equal(false);
+        expect(harness.root.querySelector(
+            '[data-disclosure-key="advanced-routing"]',
+        ).open).to.equal(true);
+
+      });
+
+  it('keeps disabled local applications compact and exposes exact endpoints',
+      async function() {
+
+        const snapshot = createSnapshot();
+        snapshot.state.pacMods.localTor.enabled = false;
+        snapshot.state.pacMods.torBrowser.enabled = false;
+        snapshot.state.pacMods.warp.enabled = false;
+        const harness = await createHarness({snapshot});
+        const proxies = getSection(harness.root, 'proxy-methods');
+        const tor = proxies.querySelector('[data-connection-key="localTor"]');
+        const browser = proxies.querySelector(
+            '[data-connection-key="torBrowser"]',
+        );
+        const warp = proxies.querySelector('[data-connection-key="warp"]');
+        [tor, browser, warp].forEach((card) => {
+          expect(card.querySelector('[data-connection-editor]').hidden)
+              .to.equal(true);
+          expect(card.querySelector('[data-connection-edit]')
+              .getAttribute('aria-expanded')).to.equal('false');
+          expect(card.textContent).to.include('Disabled');
+        });
+        expect(tor.textContent).to.include('127.0.0.1:9050');
+        expect(tor.textContent).to.include(
+            'The local Tor service must be running.',
+        );
+        expect(browser.textContent).to.include('127.0.0.1:9150');
+        expect(browser.textContent).to.include('Tor Browser must be running.');
+        expect(warp.textContent).to.include('WARP');
+        expect(warp.textContent).to.not.include('WARP/custom proxy');
+        expect(getInput(warp, 'warp.proxyString').value)
+            .to.equal('SOCKS5 127.0.0.1:40000');
+
+        getInput(tor, 'localTor.enabled').checked = true;
+        getInput(tor, 'localTor.enabled').dispatch('change');
+        expect(tor.querySelector('[data-connection-editor]').hidden)
+            .to.equal(false);
+        expect(getInput(tor, 'localTor.host').value).to.equal('127.0.0.1');
+        expect(getInput(tor, 'localTor.port').value).to.equal('9050');
+        expect(harness.calls.map((call) => call.method))
+            .to.deep.equal(['getState']);
+        expect(proxies.querySelector('[data-proxy-draft-status]').hidden)
+            .to.equal(false);
+
+        getInput(browser, 'torBrowser.enabled').checked = true;
+        getInput(browser, 'torBrowser.enabled').dispatch('change');
+        expect(getInput(tor, 'localTor.enabled').checked).to.equal(false);
+        expect(browser.querySelector('[data-connection-editor]').hidden)
+            .to.equal(false);
+        expect(getInput(browser, 'torBrowser.port').value).to.equal('9150');
+
+        getInput(warp, 'warp.enabled').checked = true;
+        getInput(warp, 'warp.enabled').dispatch('change');
+        expect(warp.querySelector('[data-connection-editor]').hidden)
+            .to.equal(false);
+        expect(proxies.querySelector('[data-proxy-availability]').textContent)
+            .to.include('2 Proxy connections available');
+
+        harness.dispatchProxyChange();
+        await flush();
+        const refreshed = getSection(harness.root, 'proxy-methods');
+        const refreshedBrowser = refreshed.querySelector(
+            '[data-connection-key="torBrowser"]',
+        );
+        expect(getInput(refreshedBrowser, 'torBrowser.enabled').checked)
+            .to.equal(true);
+        expect(refreshedBrowser.querySelector(
+            '[data-connection-editor]',
+        ).hidden).to.equal(false);
+        expect(refreshedBrowser.textContent).to.include('Enabled');
+        expect(refreshed.querySelector('[data-proxy-availability]').textContent)
+            .to.include('2 Proxy connections available');
+
+      });
+
+  it('never substitutes the Tor and Tor Browser endpoint values',
+      async function() {
+
+        const snapshot = createSnapshot();
+        snapshot.state.pacMods.localTor = Object.assign(
+            {},
+            snapshot.state.pacMods.localTor,
+            {enabled: false, port: 9150},
+        );
+        snapshot.state.pacMods.torBrowser = Object.assign(
+            {},
+            snapshot.state.pacMods.torBrowser,
+            {enabled: false, port: 9050},
+        );
+        const harness = await createHarness({snapshot});
+        expect(getInput(harness.root, 'localTor.port').value).to.equal('9150');
+        expect(getInput(harness.root, 'torBrowser.port').value).to.equal('9050');
+
+      });
+
+  it('renders compact custom summaries and opens new or invalid editors',
+      async function() {
+
+        const snapshot = createSnapshot();
+        snapshot.state.pacMods.ownProxies = [{
+          enabled: true,
+          type: 'HTTPS',
+          host: 'first.example',
+          port: 443,
+          username: 'stored-user',
+          hasPassword: true,
+          credentialRef: {
+            index: 0,
+            revision: 4,
+            type: 'HTTPS',
+            host: 'first.example',
+            port: 443,
+            username: 'stored-user',
+          },
+          note: '',
+        }, {
+          enabled: false,
+          type: 'SOCKS5',
+          host: 'second.example',
+          port: 1080,
+          username: '',
+          hasPassword: false,
+          note: '',
+        }];
+        const harness = await createHarness({snapshot});
+        const proxies = getSection(harness.root, 'proxy-methods');
+        let rows = proxies.querySelectorAll('.proxy-row');
+        expect(rows).to.have.length(2);
+        expect(rows.every((row) => row.querySelector(
+            '[data-proxy-editor]',
+        ).hidden)).to.equal(true);
+        expect(rows[0].textContent).to.include('HTTPS · first.example:443');
+        expect(rows[0].textContent).to.include('Authentication configured');
+        expect(rows[0].textContent).to.not.include('stored-user');
+        expect(getInput(rows[0], 'proxy.password').value).to.equal('');
+
+        rows[0].querySelector('[data-proxy-edit]').onclick();
+        expect(rows[0].querySelector('[data-proxy-editor]').hidden)
+            .to.equal(false);
+        expect(rows[0].querySelector('[data-proxy-edit]')
+            .getAttribute('aria-expanded')).to.equal('true');
+
+        findButton(proxies, 'Add custom proxy server').onclick();
+        rows = proxies.querySelectorAll('.proxy-row');
+        expect(rows).to.have.length(3);
+        expect(rows[2].querySelector('[data-proxy-editor]').hidden)
+            .to.equal(false);
+        expect(getInput(rows[2], 'proxy.type').value).to.equal('PROXY');
+        expect(getInput(rows[2], 'proxy.port').value).to.equal('8080');
+        await findButton(proxies, 'Save proxy settings').onclick();
+        const invalidHost = getInput(rows[2], 'proxy.host');
+        expect(invalidHost.getAttribute('aria-invalid')).to.equal('true');
+        expect(harness.document.activeElement).to.equal(invalidHost);
+        expect(rows[2].textContent).to.include('Needs attention');
+        expect(harness.calls.some((call) =>
+          call.method === 'applyPopupChanges',
+        )).to.equal(false);
+
+      });
+
   it('separates applied, cleared, and external ownership actions',
       async function() {
 

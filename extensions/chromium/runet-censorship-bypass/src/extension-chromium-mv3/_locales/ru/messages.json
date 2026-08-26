@@ -620,7 +620,7 @@
     "message": "Строка прокси"
   },
   "optionsAddProxyRow": {
-    "message": "Добавить строку прокси"
+    "message": "Добавить пользовательский прокси-сервер"
   },
   "optionsUsername": {
     "message": "Имя пользователя"
@@ -1377,10 +1377,10 @@
     "message": "Правило сайта удалено. Примените конфигурацию, чтобы активировать изменение."
   },
   "optionsProxyMethodAvailability": {
-    "message": "Доступность прокси-подключений"
+    "message": "Доступность локальных и пользовательских подключений"
   },
   "optionsOneProxyMethod": {
-    "message": "Включённых подключений: $COUNT$",
+    "message": "Доступных прокси-подключений: $COUNT$",
     "placeholders": {
       "count": {
         "content": "$1"
@@ -1388,12 +1388,86 @@
     }
   },
   "optionsManyProxyMethods": {
-    "message": "Включённых подключений: $COUNT$",
+    "message": "Доступных прокси-подключений: $COUNT$",
     "placeholders": {
       "count": {
         "content": "$1"
       }
     }
+  },
+  "optionsProxyAvailabilityHelp": {
+    "message": "Счётчик учитывает включённые настроенные подключения для явных правил «Через прокси»; проверка подключения и аутентификации находится в разделе «Обслуживание». Автоматическая маршрутизация может отдельно использовать выбранный источник."
+  },
+  "optionsConfigureProxyConnections": {
+    "message": "Настройка прокси-подключений"
+  },
+  "optionsSourceProvidedProxies": {
+    "message": "Прокси от источника"
+  },
+  "optionsSourceProvidedProxiesHelp": {
+    "message": "Прокси автоматической маршрутизации отделены от локальных приложений и пользовательских серверов."
+  },
+  "optionsAutomaticRoutingSourceProxies": {
+    "message": "Прокси от источника автоматической маршрутизации"
+  },
+  "optionsAutomaticRoutingSourceProxiesHelp": {
+    "message": "Разрешает выбранному источнику использовать предоставленные им прокси-подключения."
+  },
+  "optionsUseSourceProvidedProxies": {
+    "message": "Использовать прокси от источника"
+  },
+  "optionsLocalProxyApplications": {
+    "message": "Локальные прокси-приложения"
+  },
+  "optionsLocalProxyApplicationsHelp": {
+    "message": "Включайте только приложения, которые установлены и запущены на этом компьютере."
+  },
+  "optionsTorRequirement": {
+    "message": "Локальная служба Tor должна быть запущена."
+  },
+  "optionsTorBrowserRequirement": {
+    "message": "Tor Browser должен быть запущен."
+  },
+  "optionsWarpConnection": {
+    "message": "WARP"
+  },
+  "optionsWarpRequirement": {
+    "message": "Локальный прокси для WARP должен быть запущен; автоматического обнаружения нет."
+  },
+  "optionsEditConnection": {
+    "message": "Изменить"
+  },
+  "optionsHideConnectionDetails": {
+    "message": "Скрыть параметры"
+  },
+  "optionsAdvancedProxyPolicies": {
+    "message": "Расширенные политики прокси-маршрутизации"
+  },
+  "optionsAdvancedProxyPoliciesHelp": {
+    "message": "Здесь задаётся область пользовательских прокси-серверов. Замена Direct и fallback-политики Direct остаются в разделе «Расширенные»."
+  },
+  "optionsOpenAdvancedRouting": {
+    "message": "Открыть расширенные настройки маршрутизации"
+  },
+  "optionsCustomProxyNumber": {
+    "message": "Пользовательский прокси-сервер $NUMBER$",
+    "placeholders": {
+      "number": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsEndpointNotConfigured": {
+    "message": "Адрес подключения не настроен"
+  },
+  "optionsAuthenticationConfigured": {
+    "message": "Аутентификация настроена"
+  },
+  "optionsNoAuthenticationConfigured": {
+    "message": "Аутентификация не настроена"
+  },
+  "optionsNeedsAttention": {
+    "message": "Требует внимания"
   },
   "optionsProxyHealthAuthSeparateHelp": {
     "message": "Доступность подключения и успешная прокси-аутентификация проверяются отдельно."
