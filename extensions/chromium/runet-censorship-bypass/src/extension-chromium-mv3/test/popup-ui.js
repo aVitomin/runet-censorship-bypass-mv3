@@ -676,6 +676,10 @@ describe('MV3 popup UI', () => {
         expect(turnOff).to.exist;
         expect(getRadios(external.root, 'site-mode').every((radio) => radio.disabled))
             .to.equal(true);
+        expect(getRadios(external.root, 'site-mode').every((radio) =>
+          radio.getAttribute('aria-describedby') ===
+            'popup-route-description popup-global-description',
+        )).to.equal(true);
 
         await turnOff.onclick();
         await flushUi();
@@ -825,7 +829,10 @@ describe('MV3 popup UI', () => {
         );
         expect(proxySettings).to.exist;
         expect(proxySettings.href).to.match(/#proxy-methods$/);
-        expect(findButton(noCandidate.root, 'Apply').disabled).to.equal(true);
+        const apply = findButton(noCandidate.root, 'Apply');
+        expect(apply.disabled).to.equal(true);
+        expect(apply.getAttribute('aria-describedby'))
+            .to.equal('popup-site-warning');
         expect(noCandidate.calls.map((call) => call.method))
             .to.deep.equal(['getPopupState']);
 

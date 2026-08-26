@@ -40,6 +40,38 @@ const CATALOGS = Object.fromEntries(['en', 'ru'].map((language) => [
   )),
 ]));
 
+function getCssColorToken(source, name) {
+
+  const match = source.match(new RegExp(
+      `${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*(#[0-9a-f]{6})`,
+      'i',
+  ));
+  return match && match[1];
+
+}
+
+function getRelativeLuminance(hexColor) {
+
+  const channels = hexColor.slice(1).match(/../g).map((value) =>
+    Number.parseInt(value, 16) / 255,
+  ).map((value) => value <= 0.04045 ?
+    value / 12.92 :
+    ((value + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * channels[0] + 0.7152 * channels[1] +
+    0.0722 * channels[2];
+
+}
+
+function getContrastRatio(firstColor, secondColor) {
+
+  const first = getRelativeLuminance(firstColor);
+  const second = getRelativeLuminance(secondColor);
+  return (Math.max(first, second) + 0.05) /
+    (Math.min(first, second) + 0.05);
+
+}
+
 class FakeClassList {
 
   constructor(node) {
@@ -853,7 +885,13 @@ describe('MV3 options UI', function() {
             'Selected: Anticensority',
         );
         expect(refreshedSetup.textContent).to.include('Ready to apply');
-        expect(findButton(refreshedSetup, 'Apply configuration')).to.exist;
+        const setupApply = findButton(
+            refreshedSetup,
+            'Apply configuration',
+        );
+        expect(setupApply).to.exist;
+        expect(setupApply.getAttribute('aria-describedby'))
+            .to.equal('options-setup-apply-status');
         const selectedChoice = harness.root.querySelectorAll(
             'input[name="automatic-routing-source"]',
         ).find((input) => input.value === 'Антицензорити');
@@ -875,6 +913,11 @@ describe('MV3 options UI', function() {
         );
         expect(findButton(setupWithDraft, 'Apply configuration').disabled)
             .to.equal(true);
+        expect(findButton(
+            setupWithDraft,
+            'Apply configuration',
+        ).getAttribute('aria-describedby'))
+            .to.equal('options-setup-apply-status');
         expect(getInput(harness.root, 'localTor.host').value)
             .to.equal('127.0.0.2');
 
@@ -2524,6 +2567,33 @@ describe('MV3 options UI', function() {
               .to.equal(`${option.value}-heading`);
         }
 
+        const initial = await createHarness({
+          snapshot: createInitialSetupSnapshot(),
+          hash: '#maintenance',
+        });
+        const update = findButton(initial.root, 'Update routing rules');
+        expect(update.disabled).to.equal(true);
+        expect(update.getAttribute('aria-describedby'))
+            .to.equal('options-update-requires-source');
+        expect(initial.root.querySelector(
+            '#options-update-requires-source',
+        ).textContent).to.include('Choose an Automatic routing source');
+
+        const disabledSourceSnapshot = createInitialSetupSnapshot();
+        disabledSourceSnapshot.providers[0].enabled = false;
+        const disabledSource = await createHarness({
+          snapshot: disabledSourceSnapshot,
+          hash: '#routing-sources',
+        });
+        const unavailable = disabledSource.root.querySelectorAll(
+            'input[name="automatic-routing-source"]',
+        ).find((input) => input.value === 'Антизапрет');
+        expect(unavailable.disabled).to.equal(true);
+        const statusId = unavailable.getAttribute('aria-describedby');
+        expect(statusId).to.match(/^options-source-status-/);
+        expect(disabledSource.root.querySelector(`#${statusId}`).textContent)
+            .to.equal('Disabled');
+
       });
 
   it('uses shared tokens and responsive accessible navigation', function() {
@@ -2536,12 +2606,37 @@ describe('MV3 options UI', function() {
     expect(OPTIONS_CSS).to.include(
         '.source-choice-input:focus-visible + .source-choice-content',
     );
+    expect(OPTIONS_CSS).to.include(
+        '.section-header h2[tabindex="-1"]:focus',
+    );
+    expect(UI_TOKENS).to.include('a:focus-visible');
+    expect(UI_TOKENS).to.include('.ui-input::placeholder');
+    expect(UI_TOKENS).not.to.include('opacity: 0.72');
     expect(OPTIONS_CSS).not.to.match(/#[0-9a-f]{3,8}/i);
     expect(UI_TOKENS).to.include('--ui-color-accent-surface:');
     expect(OPTIONS_CSS).to.include('var(--ui-color-accent-surface)');
     expect(POPUP_CSS).to.include('var(--ui-color-accent)');
     expect(POPUP_CSS).to.include('@media (forced-colors: active)');
+    expect(POPUP_CSS).to.include(
+        '.route-option input:checked + .route-label::before',
+    );
     expect(POPUP_CSS).not.to.include('--ui-color-accent-surface:');
+
+    const muted = getCssColorToken(UI_TOKENS, '--ui-color-text-muted');
+    const backgrounds = [
+      '--ui-color-canvas',
+      '--ui-color-surface',
+      '--ui-color-surface-subtle',
+      '--ui-color-accent-surface',
+      '--ui-color-success-surface',
+      '--ui-color-warning-surface',
+      '--ui-color-error-surface',
+    ].map((name) => getCssColorToken(UI_TOKENS, name));
+    expect(muted).to.match(/^#[0-9a-f]{6}$/i);
+    backgrounds.forEach((background) => {
+      expect(background).to.match(/^#[0-9a-f]{6}$/i);
+      expect(getContrastRatio(muted, background)).to.be.at.least(4.5);
+    });
 
   });
 

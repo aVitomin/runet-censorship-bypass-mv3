@@ -174,6 +174,10 @@ ul:last-child {
   content: "";
 }
 
+.options-nav a:focus-visible {
+  background: var(--ui-color-accent-surface);
+}
+
 .mobile-nav {
   display: none;
   margin-bottom: var(--ui-space-2);
@@ -191,6 +195,13 @@ ul:last-child {
 
 .section-header {
   padding: 0 var(--ui-space-0-5);
+}
+
+.section-header h2[tabindex="-1"]:focus {
+  border-radius: var(--ui-radius-small);
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 4px;
+  box-shadow: var(--ui-focus-ring);
 }
 
 .settings-card {
@@ -296,6 +307,14 @@ ul:last-child {
   border-bottom: 1px solid var(--ui-color-divider);
 }
 
+.proxy-form-header h3,
+.proxy-group-header h3,
+.card-header h3,
+.item-header h3,
+.status-heading h3 {
+  margin-bottom: 0;
+}
+
 .proxy-group-header {
   display: grid;
   gap: var(--ui-space-0-5);
@@ -304,9 +323,22 @@ ul:last-child {
 .connection-card,
 .compact-proxy-row {
   padding: var(--ui-space-1-5);
-  border: 1px solid var(--ui-color-divider);
+  border: 1px solid transparent;
   border-radius: var(--ui-radius-medium);
+  background: var(--ui-color-surface-subtle);
+}
+
+.connection-card:focus-within,
+.compact-proxy-row:focus-within,
+.connection-card:has([aria-expanded="true"]),
+.compact-proxy-row:has([aria-expanded="true"]) {
+  border-color: var(--ui-color-border);
   background: var(--ui-color-surface);
+}
+
+.connection-card:has(.connection-error),
+.compact-proxy-row:has([aria-invalid="true"]) {
+  border-color: var(--ui-color-error);
 }
 
 .connection-summary-copy,
@@ -516,6 +548,7 @@ ul:last-child {
 .source-choice.selected {
   border-color: var(--ui-color-accent);
   background: var(--ui-color-accent-surface);
+  box-shadow: inset 3px 0 0 var(--ui-color-accent);
 }
 
 .source-choice-input {
@@ -598,6 +631,10 @@ textarea.ui-input {
   margin: 0;
   font-size: var(--ui-font-size-caption);
   line-height: var(--ui-line-height-body);
+}
+
+.action-help {
+  margin-top: var(--ui-space-1);
 }
 
 .validation-message {
@@ -915,6 +952,18 @@ details.disclosure[open] > summary {
 
 }
 
+@media (max-width: 480px) {
+
+  .global-action-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .global-action-buttons .ui-button {
+    width: 100%;
+  }
+
+}
+
 @media (forced-colors: active) {
 
   .options-nav a[aria-current="page"],
@@ -937,6 +986,11 @@ details.disclosure[open] > summary {
   .options-nav a[aria-current="page"] {
     color: LinkText;
     background: Canvas;
+  }
+
+  .section-header h2[tabindex="-1"]:focus {
+    outline-color: Highlight;
+    box-shadow: none;
   }
 
 }

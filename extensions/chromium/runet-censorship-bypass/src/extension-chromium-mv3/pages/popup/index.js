@@ -508,7 +508,10 @@
       input.value = mode;
       input.checked = draft.siteMode === mode;
       input.disabled = ifDisabled;
-      input.setAttribute('aria-describedby', 'popup-route-description');
+      input.setAttribute('aria-describedby', [
+        'popup-route-description',
+        ...(ifDisabled ? ['popup-global-description'] : []),
+      ].join(' '));
       input.onchange = () => {
         if (input.disabled || !input.checked) {
           return;
@@ -559,6 +562,7 @@
   function renderScopeControl(parent, state, ifDisabled) {
 
     const patterns = state.sitePatterns || {};
+    const scopeHelpId = 'popup-scope-help';
     const details = append(parent, 'details', 'scope-disclosure');
     details.open = scopeOpen;
     const selectedScope = draft.siteScope === 'host' ?
@@ -589,6 +593,16 @@
       input.checked = draft.siteScope === value;
       input.disabled = ifDisabled ||
         value === 'domain' && !patterns.wildcardAvailable;
+      const descriptions = [];
+      if (ifDisabled) {
+        descriptions.push('popup-global-description');
+      }
+      if (value === 'domain' && !patterns.wildcardAvailable) {
+        descriptions.push(scopeHelpId);
+      }
+      if (descriptions.length) {
+        input.setAttribute('aria-describedby', descriptions.join(' '));
+      }
       input.onchange = () => {
         if (input.disabled || !input.checked) {
           return;
@@ -607,19 +621,21 @@
         'pattern-detail',
     );
     if (!patterns.wildcardAvailable) {
-      appendText(
+      const help = appendText(
           fieldset,
           'p',
           t('popupHostScopeOnly'),
           'helper-text',
       );
+      help.id = scopeHelpId;
     } else {
-      appendText(
+      const help = appendText(
           fieldset,
           'p',
           t('popupDomainScopeSafeHelp'),
           'helper-text',
       );
+      help.id = scopeHelpId;
     }
 
   }

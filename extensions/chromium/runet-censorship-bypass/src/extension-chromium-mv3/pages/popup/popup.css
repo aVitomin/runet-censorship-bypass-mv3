@@ -169,6 +169,7 @@ main {
 
 .status-message {
   padding: var(--ui-space-1);
+  border-left: 3px solid currentColor;
   border-radius: var(--ui-radius-medium);
   color: var(--ui-color-text-secondary);
   background: var(--ui-color-surface-subtle);
@@ -234,8 +235,11 @@ main {
 
 .route-label {
   display: grid;
+  grid-auto-flow: column;
+  gap: var(--ui-space-0-5);
   min-height: var(--ui-control-height);
   padding: var(--ui-space-1);
+  justify-content: center;
   place-items: center;
   color: var(--ui-color-text-secondary);
   background: var(--ui-color-surface);
@@ -246,6 +250,11 @@ main {
   transition:
     background-color var(--ui-transition-fast),
     color var(--ui-transition-fast);
+}
+
+.route-option input:checked + .route-label::before {
+  content: "✓";
+  font-weight: var(--ui-font-weight-bold);
 }
 
 .route-option input:checked + .route-label {
@@ -287,6 +296,11 @@ main {
   font-size: var(--ui-font-size-control);
   font-weight: var(--ui-font-weight-medium);
   list-style: none;
+}
+
+.daily-details > summary:focus-visible {
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 2px var(--ui-color-surface);
 }
 
 .scope-disclosure > summary::-webkit-details-marker,
@@ -488,6 +502,7 @@ main {
   }
 
   .route-option input:checked + .route-label {
+    border: 1px solid Highlight;
     color: HighlightText;
     background: Highlight;
   }

@@ -1544,6 +1544,9 @@
   "optionsUpdateRoutingRules": {
     "message": "Update routing rules"
   },
+  "optionsUpdateRequiresSource": {
+    "message": "Choose an Automatic routing source before updating routing data."
+  },
   "optionsUpdatingRoutingRules": {
     "message": "Updating routing rules…"
   },

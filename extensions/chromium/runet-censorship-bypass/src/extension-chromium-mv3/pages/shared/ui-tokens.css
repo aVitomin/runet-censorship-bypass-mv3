@@ -6,7 +6,7 @@
   --ui-color-surface-subtle: #f8fafc;
   --ui-color-text: #172033;
   --ui-color-text-secondary: #334155;
-  --ui-color-text-muted: #64748b;
+  --ui-color-text-muted: #5f6f83;
   --ui-color-border: #d8e0ea;
   --ui-color-divider: #e8edf3;
   --ui-color-accent: #1d4ed8;
@@ -19,7 +19,7 @@
   --ui-color-warning-surface: #fff7ed;
   --ui-color-error: #b42318;
   --ui-color-error-surface: #fef2f2;
-  --ui-color-disabled: #94a3b8;
+  --ui-color-disabled: #667085;
   --ui-color-focus: #2563eb;
 
   --ui-space-0-5: 4px;
@@ -74,6 +74,11 @@
     box-shadow var(--ui-transition-fast);
 }
 
+.ui-input::placeholder {
+  color: var(--ui-color-text-muted);
+  opacity: 1;
+}
+
 .ui-button {
   min-height: var(--ui-control-height);
   padding: var(--ui-space-1) var(--ui-space-1-5);
@@ -126,15 +131,20 @@
 .ui-button:disabled,
 .ui-icon-button:disabled,
 .ui-input:disabled {
+  border-color: var(--ui-color-divider);
   color: var(--ui-color-disabled);
+  background: var(--ui-color-surface-subtle);
   cursor: default;
-  opacity: 0.72;
+  opacity: 1;
 }
 
 .ui-button:focus-visible,
 .ui-icon-button:focus-visible,
 .ui-input:focus-visible,
+a:focus-visible,
 summary:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
 input:focus-visible {
   outline: 2px solid var(--ui-color-focus);
   outline-offset: 2px;
@@ -154,6 +164,8 @@ input:focus-visible {
   font-size: var(--ui-font-size-caption);
   font-weight: var(--ui-font-weight-medium);
   line-height: var(--ui-line-height-tight);
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .ui-pill::before {
@@ -214,14 +226,37 @@ input:focus-visible {
     background: currentColor;
   }
 
+  .ui-button:disabled,
+  .ui-icon-button:disabled,
+  .ui-input:disabled {
+    border-color: GrayText;
+    color: GrayText;
+    background: Canvas;
+  }
+
+  .ui-button:focus-visible,
+  .ui-icon-button:focus-visible,
+  .ui-input:focus-visible,
+  a:focus-visible,
+  summary:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  input:focus-visible {
+    outline-color: Highlight;
+    box-shadow: none;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
 
-  .ui-button,
-  .ui-icon-button,
-  .ui-input {
-    transition: none;
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
   }
 
 }

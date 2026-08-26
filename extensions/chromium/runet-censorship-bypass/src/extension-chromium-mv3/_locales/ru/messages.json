@@ -1544,6 +1544,9 @@
   "optionsUpdateRoutingRules": {
     "message": "Обновить правила маршрутизации"
   },
+  "optionsUpdateRequiresSource": {
+    "message": "Перед обновлением данных маршрутизации выберите источник в разделе «Автоматическая маршрутизация»."
+  },
   "optionsUpdatingRoutingRules": {
     "message": "Обновление правил маршрутизации…"
   },
