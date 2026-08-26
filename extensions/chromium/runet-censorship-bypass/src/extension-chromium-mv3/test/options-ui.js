@@ -659,7 +659,7 @@ async function createHarness(options = {}) {
       runtime: {
         getManifest() {
 
-          return {version: '0.0.2.3', version_name: '0.0.2.03'};
+          return {version: '0.0.3.0', version_name: '0.0.3.00'};
 
         },
       },
@@ -1035,7 +1035,7 @@ describe('MV3 options UI', function() {
         ]);
         expect(harness.root.textContent).to.include('Overview');
         expect(harness.root.textContent).to.include('Automatic routing');
-        expect(harness.root.textContent).to.include('0.0.2.03');
+        expect(harness.root.textContent).to.include('0.0.3.00');
         expect(harness.root.textContent).to.include('Stable release');
         expect(harness.root.textContent).not.to.include('MV3 migration:');
         const navigation = harness.root.querySelectorAll('.options-nav a');
