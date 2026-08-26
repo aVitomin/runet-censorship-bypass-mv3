@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "RUCB Firefox native PAC feasibility fixture",
+  "version": "0.0.0.1",
+  "description": "Test-only fixture for Firefox native data-URI PAC experiments.",
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://control.qa.test/*"
+      ],
+      "js": [
+        "control-content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "permissions": [
+    "proxy"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "native-pac-feasibility@rucb.invalid",
+      "strict_min_version": "128.0"
+    }
+  }
+}
