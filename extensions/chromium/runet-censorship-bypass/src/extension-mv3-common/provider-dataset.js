@@ -16,7 +16,11 @@
   const PAYLOAD_FORMAT = 'HOST_BUCKETS_V1';
   const MAX_ARTIFACT_BYTES = 16 * 1024 * 1024;
   const MAX_RULES = 750000;
-  const MAX_BUCKETS = 36;
+  // The pinned production-scale input occupies 80 hostname-width buckets
+  // (widths 2 through 131, with gaps). A 128-bucket ceiling leaves bounded
+  // growth room without making bucket metadata or index setup unbounded.
+  const MAX_BUCKETS = 128;
+  const MAX_HOST_LENGTH = 253;
   const MAX_SOURCE_REVISIONS = 32;
   const TRUST = Object.freeze({
     PACKAGED_TRUSTED: 'PACKAGED_TRUSTED',
@@ -47,18 +51,18 @@
     'format',
   ]);
   const BUCKET_FIELDS = Object.freeze([
-    'key',
-    'rules',
-  ]);
-  const RULE_FIELDS = Object.freeze([
-    'host',
+    'hosts',
     'routeRef',
+    'width',
   ]);
   const IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,63})$/;
   const VERSION_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._+-]{0,127})$/;
   const SHA256_PATTERN = /^[a-f0-9]{64}$/;
-  const BUCKET_KEY_PATTERN = /^[a-z0-9]$/;
-  const HOST_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+  // These are provider lookup suffixes, not executable text or values passed
+  // to a URL parser. The pinned source includes underscores and a few inert
+  // non-DNS lookup characters, so the rigid grammar mirrors its comparator
+  // inputs while excluding whitespace, controls, delimiters, and code syntax.
+  const HOST_SUFFIX_PATTERN = /^[a-z0-9._&\\-]+$/;
 
   function verificationError(code) {
 
@@ -229,27 +233,63 @@
 
   function isValidHost(value) {
 
-    if (typeof value !== 'string' || value.length > 253 ||
-        value !== value.toLowerCase() || value.endsWith('.')) {
+    if (typeof value !== 'string' || !value.length ||
+        value.length > MAX_HOST_LENGTH || value !== value.toLowerCase() ||
+        !HOST_SUFFIX_PATTERN.test(value)) {
       return false;
     }
-    const labels = value.split('.');
-    return labels.length >= 2 && labels.every((label) =>
-      label.length <= 63 && HOST_LABEL_PATTERN.test(label));
+    const absolute = value.endsWith('.');
+    const labels = (absolute ? value.slice(0, -1) : value).split('.');
+    return labels.length >= 1 && labels.every((label) =>
+      label.length >= 1 && label.length <= 63);
 
   }
 
-  function validateRule(rule, bucketKey) {
+  function fixedBucketsOverlap(left, right, width) {
 
-    requireExactObject(rule, RULE_FIELDS);
-    if (!isValidHost(rule.host) || !rule.host.startsWith(bucketKey)) {
-      throw verificationError('INVALID_HOST');
+    let leftOffset = 0;
+    let rightOffset = 0;
+    while (leftOffset < left.length && rightOffset < right.length) {
+      const leftHost = left.slice(leftOffset, leftOffset + width);
+      const rightHost = right.slice(rightOffset, rightOffset + width);
+      if (leftHost === rightHost) {
+        return true;
+      }
+      if (leftHost < rightHost) {
+        leftOffset += width;
+      } else {
+        rightOffset += width;
+      }
     }
-    if (typeof rule.routeRef !== 'string' ||
-        !ROUTE_REFS.includes(rule.routeRef)) {
-      throw verificationError('INVALID_ROUTE_REFERENCE');
+    return false;
+
+  }
+
+  function validateBucketHosts(hosts, width) {
+
+    // `hosts` is one concatenated, lexicographically sorted sequence. Every
+    // entry has exactly `width` characters, matching the provider's compact
+    // fixed-width lookup representation without per-rule JSON object cost.
+    if (typeof hosts !== 'string' || !hosts.length ||
+        hosts.length % width !== 0) {
+      throw verificationError('MALFORMED_BUCKET_STRUCTURE');
     }
-    return {host: rule.host, routeRef: rule.routeRef};
+    let previousHost = '';
+    const ruleCount = hosts.length / width;
+    for (let offset = 0; offset < hosts.length; offset += width) {
+      const host = hosts.slice(offset, offset + width);
+      if (!isValidHost(host)) {
+        throw verificationError('INVALID_HOST');
+      }
+      if (previousHost && host <= previousHost) {
+        if (host === previousHost) {
+          throw verificationError('DUPLICATE_RULE');
+        }
+        throw verificationError('UNSORTED_RULES');
+      }
+      previousHost = host;
+    }
+    return ruleCount;
 
   }
 
@@ -259,47 +299,51 @@
     if (value.format !== PAYLOAD_FORMAT) {
       throw verificationError('UNSUPPORTED_PAYLOAD_FORMAT');
     }
-    if (!Array.isArray(value.buckets) || !value.buckets.length ||
-        value.buckets.length > MAX_BUCKETS) {
+    if (!Array.isArray(value.buckets) || !value.buckets.length) {
       throw verificationError('MALFORMED_BUCKET_STRUCTURE');
     }
-    const seenHosts = new Set();
-    let previousBucketKey = '';
+    if (value.buckets.length > MAX_BUCKETS) {
+      throw verificationError('TOO_MANY_BUCKETS');
+    }
+    const bucketsByWidth = new Map();
+    let previousWidth = 0;
+    let previousRouteIndex = -1;
     let actualRuleCount = 0;
     const buckets = value.buckets.map((bucket) => {
       requireExactObject(bucket, BUCKET_FIELDS);
-      if (typeof bucket.key !== 'string' ||
-          !BUCKET_KEY_PATTERN.test(bucket.key)) {
+      if (!Number.isSafeInteger(bucket.width) || bucket.width < 1 ||
+          bucket.width > MAX_HOST_LENGTH) {
         throw verificationError('MALFORMED_BUCKET_STRUCTURE');
       }
-      if (previousBucketKey && bucket.key <= previousBucketKey) {
+      const routeIndex = ROUTE_REFS.indexOf(bucket.routeRef);
+      if (routeIndex === -1) {
+        throw verificationError('INVALID_ROUTE_REFERENCE');
+      }
+      if (bucket.width < previousWidth ||
+          (bucket.width === previousWidth &&
+           routeIndex <= previousRouteIndex)) {
         throw verificationError('UNSORTED_BUCKETS');
       }
-      previousBucketKey = bucket.key;
-      if (!Array.isArray(bucket.rules) || !bucket.rules.length) {
-        throw verificationError('MALFORMED_BUCKET_STRUCTURE');
-      }
-      let previousHost = '';
-      const rules = bucket.rules.map((rule) => {
-        const normalized = validateRule(rule, bucket.key);
-        if (previousHost && normalized.host <= previousHost) {
-          if (normalized.host === previousHost) {
-            throw verificationError('DUPLICATE_RULE');
-          }
-          throw verificationError('UNSORTED_RULES');
-        }
-        previousHost = normalized.host;
-        if (seenHosts.has(normalized.host)) {
+      previousWidth = bucket.width;
+      previousRouteIndex = routeIndex;
+      const ruleCount = validateBucketHosts(bucket.hosts, bucket.width);
+      const sameWidthBuckets = bucketsByWidth.get(bucket.width) || [];
+      for (const existingHosts of sameWidthBuckets) {
+        if (fixedBucketsOverlap(existingHosts, bucket.hosts, bucket.width)) {
           throw verificationError('DUPLICATE_RULE');
         }
-        seenHosts.add(normalized.host);
-        actualRuleCount += 1;
-        if (actualRuleCount > MAX_RULES) {
-          throw verificationError('TOO_MANY_RULES');
-        }
-        return normalized;
-      });
-      return {key: bucket.key, rules};
+      }
+      sameWidthBuckets.push(bucket.hosts);
+      bucketsByWidth.set(bucket.width, sameWidthBuckets);
+      actualRuleCount += ruleCount;
+      if (actualRuleCount > MAX_RULES) {
+        throw verificationError('TOO_MANY_RULES');
+      }
+      return {
+        width: bucket.width,
+        routeRef: bucket.routeRef,
+        hosts: bucket.hosts,
+      };
     });
     if (actualRuleCount !== declaredRuleCount) {
       throw verificationError('RULE_COUNT_MISMATCH');
@@ -408,6 +452,7 @@
     LIMITS: Object.freeze({
       MAX_ARTIFACT_BYTES,
       MAX_BUCKETS,
+      MAX_HOST_LENGTH,
       MAX_RULES,
       MAX_SOURCE_REVISIONS,
     }),
