@@ -11,6 +11,13 @@ const DatasetState = require(
     '../../extension-mv3-common/provider-dataset-state',
 );
 const PROVIDER_KEY = 'synthetic-provider';
+const PROVEN_BUCKET_WIDTHS = Object.freeze([
+  2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+  21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+  37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52,
+  53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68,
+  69, 70, 71, 72, 73, 74, 75, 76, 78, 79, 81, 83, 120, 131,
+]);
 
 function sha256(bytes) {
 
@@ -24,17 +31,14 @@ function validPayload() {
     format: Dataset.PAYLOAD_FORMAT,
     buckets: [
       {
-        key: 'a',
-        rules: [
-          {host: 'alpha.example', routeRef: 'PROVIDER_PROXY'},
-          {host: 'amber.example', routeRef: 'PROVIDER_DIRECT'},
-        ],
+        width: 12,
+        routeRef: 'PROVIDER_PROXY',
+        hosts: 'beta.example',
       },
       {
-        key: 'b',
-        rules: [
-          {host: 'beta.example', routeRef: 'PROVIDER_PROXY'},
-        ],
+        width: 13,
+        routeRef: 'PROVIDER_DIRECT',
+        hosts: 'alpha.exampleamber.example',
       },
     ],
   };
@@ -47,7 +51,9 @@ function countRules(payload) {
     return 1;
   }
   return payload.buckets.reduce((total, bucket) =>
-    total + (Array.isArray(bucket.rules) ? bucket.rules.length : 0), 0);
+    total + (typeof bucket.hosts === 'string' &&
+      Number.isSafeInteger(bucket.width) && bucket.width > 0 ?
+      bucket.hosts.length / bucket.width : 0), 0);
 
 }
 
@@ -94,6 +100,56 @@ function mutatePayload(mutator) {
   const payload = validPayload();
   mutator(payload);
   return payload;
+
+}
+
+function fixedDnsTail(length) {
+
+  const labels = [];
+  let remaining = length;
+  while (remaining > 63) {
+    const labelLength = Math.min(63, remaining - 2);
+    labels.push('x'.repeat(labelLength));
+    remaining -= labelLength + 1;
+  }
+  labels.push('x'.repeat(remaining));
+  return labels.join('.');
+
+}
+
+function fixedWidthHost(width, index = null) {
+
+  if (width === 2 && index === null) {
+    return 'ua';
+  }
+  if (index === null) {
+    return `a.${fixedDnsTail(width - 2)}`;
+  }
+  const sequence = index.toString(36).padStart(6, '0');
+  return `${sequence}.${fixedDnsTail(width - sequence.length - 1)}`;
+
+}
+
+function fixedWidthPayload(bucketLayout, productionRuleCount = null) {
+
+  const widths = Array.isArray(bucketLayout) ?
+    bucketLayout :
+    Array.from({length: bucketLayout}, (_value, index) => index + 2);
+  const denseWidth = 18;
+  const denseRuleCount = productionRuleCount === null ?
+    null : productionRuleCount - widths.length + 1;
+  return {
+    format: Dataset.PAYLOAD_FORMAT,
+    buckets: widths.map((width) => {
+      const count = width === denseWidth && denseRuleCount !== null ?
+        denseRuleCount : 1;
+      const hosts = count === 1 ?
+        fixedWidthHost(width) :
+        Array.from({length: count}, (_value, index) =>
+          fixedWidthHost(width, index)).join('');
+      return {width, routeRef: 'PROVIDER_PROXY', hosts};
+    }),
+  };
 
 }
 
@@ -217,7 +273,7 @@ const REJECTION_CASES = Object.freeze([
     create() {
       return createArtifact({
         payload: mutatePayload((payload) => {
-          payload.buckets[0].rules[0].host = 'Alpha_example';
+          payload.buckets[0].hosts = 'beta/example';
         }),
       });
     },
@@ -228,7 +284,22 @@ const REJECTION_CASES = Object.freeze([
     create() {
       return createArtifact({
         payload: mutatePayload((payload) => {
-          payload.buckets[0].rules[1].host = 'alpha.example';
+          payload.buckets[1].hosts = 'alpha.examplealpha.example';
+        }),
+      });
+    },
+    code: 'DUPLICATE_RULE',
+  },
+  {
+    name: 'duplicate host across route buckets',
+    create() {
+      return createArtifact({
+        payload: mutatePayload((payload) => {
+          payload.buckets.push({
+            width: 13,
+            routeRef: 'PROVIDER_PROXY',
+            hosts: 'alpha.example',
+          });
         }),
       });
     },
@@ -250,7 +321,7 @@ const REJECTION_CASES = Object.freeze([
     create() {
       return createArtifact({
         payload: mutatePayload((payload) => {
-          payload.buckets[0].rules.reverse();
+          payload.buckets[1].hosts = 'amber.examplealpha.example';
         }),
       });
     },
@@ -261,7 +332,7 @@ const REJECTION_CASES = Object.freeze([
     create() {
       return createArtifact({
         payload: mutatePayload((payload) => {
-          payload.buckets[0].rules[0].routeRef = 'DYNAMIC_CALLBACK';
+          payload.buckets[0].routeRef = 'DYNAMIC_CALLBACK';
         }),
       });
     },
@@ -292,7 +363,7 @@ const REJECTION_CASES = Object.freeze([
     create() {
       return createArtifact({
         payload: mutatePayload((payload) => {
-          payload.buckets[0].rules = [];
+          payload.buckets[0].hosts = '';
         }),
       });
     },
@@ -308,11 +379,11 @@ const REJECTION_CASES = Object.freeze([
     code: 'INVALID_SOURCE_REVISIONS',
   },
   {
-    name: 'callback field inside a rule',
+    name: 'callback field inside a bucket',
     create() {
       return createArtifact({
         payload: mutatePayload((payload) => {
-          payload.buckets[0].rules[0].callback = 'not allowed';
+          payload.buckets[0].callback = 'not allowed';
         }),
       });
     },
@@ -345,6 +416,78 @@ Mocha.describe('declarative provider dataset', function() {
       ruleCount: 3,
     });
     Chai.expect(result.dataset.payload).to.deep.equal(validPayload());
+
+  });
+
+  Mocha.it('accepts the proven 80-bucket and 662,819-rule scale',
+      async function() {
+
+        const payload = fixedWidthPayload(PROVEN_BUCKET_WIDTHS, 662819);
+        const artifact = createArtifact({payload});
+        const result = await verify(artifact);
+
+        Chai.expect(artifact.envelope).to.include({
+          ruleCount: 662819,
+        });
+        Chai.expect(payload.buckets).to.have.length(80);
+        Chai.expect(payload.buckets.at(-1).width).to.equal(131);
+        Chai.expect(artifact.artifactBytes.byteLength).to.be.greaterThan(
+            11 * 1024 * 1024,
+        );
+        Chai.expect(artifact.artifactBytes.byteLength).to.be.at.most(
+            Dataset.LIMITS.MAX_ARTIFACT_BYTES,
+        );
+        Chai.expect(result).to.include({
+          ok: true,
+          status: 'VERIFIED',
+        });
+
+      }).timeout(20000);
+
+  Mocha.it('accepts the pinned suffix-token character shapes as inert data',
+      async function() {
+
+        const payload = {
+          format: Dataset.PAYLOAD_FORMAT,
+          buckets: [
+            {width: 2, routeRef: 'PROVIDER_PROXY', hosts: 'ua'},
+            {width: 5, routeRef: 'PROVIDER_PROXY', hosts: 'name&'},
+            {width: 13, routeRef: 'PROVIDER_PROXY', hosts: 'example.test.'},
+            {width: 14, routeRef: 'PROVIDER_PROXY', hosts: 'site.test\\path'},
+            {
+              width: 16,
+              routeRef: 'PROVIDER_PROXY',
+              hosts: '_service.example',
+            },
+          ],
+        };
+        const result = await verify(createArtifact({payload}));
+
+        Chai.expect(result).to.include({ok: true, status: 'VERIFIED'});
+
+      });
+
+  Mocha.it('accepts the maximum fixed-width bucket count', async function() {
+
+    const payload = fixedWidthPayload(Dataset.LIMITS.MAX_BUCKETS);
+    const result = await verify(createArtifact({payload}));
+
+    Chai.expect(payload.buckets).to.have.length(128);
+    Chai.expect(result).to.include({ok: true, status: 'VERIFIED'});
+
+  });
+
+  Mocha.it('rejects one bucket beyond the fixed limit', async function() {
+
+    const payload = fixedWidthPayload(Dataset.LIMITS.MAX_BUCKETS + 1);
+    const result = await verify(createArtifact({payload}));
+
+    Chai.expect(payload.buckets).to.have.length(129);
+    Chai.expect(result).to.deep.equal({
+      ok: false,
+      status: 'REJECTED',
+      code: 'TOO_MANY_BUCKETS',
+    });
 
   });
 
