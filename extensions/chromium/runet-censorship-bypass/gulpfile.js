@@ -87,7 +87,11 @@ const chromiumMv3Src = './src/extension-chromium-mv3/**/*';
 const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/manifest.json',
   './src/extension-firefox-mv3/background/off-state.js',
+  './src/extension-firefox-mv3/background/routing-adapter.js',
   './src/extension-firefox-mv3/background/event-page.js',
+];
+const firefoxMv3CommonSrc = [
+  './src/extension-mv3-common/routing-contract.js',
 ];
 const firefoxSrc = './src/extension-firefox/**/*';
 const chromiumMv3TldtsSrc = [
@@ -195,13 +199,27 @@ const copyFirefoxMv3 = function(cb) {
 
 };
 
+const copyFirefoxMv3Common = function(cb) {
+
+  gulp.src(firefoxMv3CommonSrc, {
+    base: './src/extension-mv3-common',
+    encoding: false,
+  })
+    .pipe(gulp.dest(`${firefoxMv3Dst}/background/common`))
+    .on('end', cb);
+
+};
+
 const buildAll = gulp.series(clean, gulp.parallel(copyMini, copyFull, copyBeta));
 const buildBeta = copyBeta;
 const buildChromiumMv3 = gulp.series(
     cleanChromiumMv3,
     gulp.parallel(copyChromiumMv3, copyChromiumMv3Tldts),
 );
-const buildFirefoxMv3 = gulp.series(cleanFirefoxMv3, copyFirefoxMv3);
+const buildFirefoxMv3 = gulp.series(
+    cleanFirefoxMv3,
+    gulp.parallel(copyFirefoxMv3, copyFirefoxMv3Common),
+);
 
 module.exports = {
   default: buildAll,

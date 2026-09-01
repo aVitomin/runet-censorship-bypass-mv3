@@ -13,8 +13,16 @@ function makePackage() {
   const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'firefox-skeleton-package-'));
   for (const relativePath of EXPECTED_FILES) {
     const target = Path.join(root, relativePath);
+    const source = relativePath === 'background/common/routing-contract.js' ?
+      Path.resolve(
+          sourceRoot,
+          '..',
+          'extension-mv3-common',
+          'routing-contract.js',
+      ) :
+      Path.join(sourceRoot, relativePath);
     Fs.mkdirSync(Path.dirname(target), {recursive: true});
-    Fs.copyFileSync(Path.join(sourceRoot, relativePath), target);
+    Fs.copyFileSync(source, target);
   }
   return root;
 
@@ -33,7 +41,7 @@ describe('Firefox MV3 package verifier', function() {
 
   });
 
-  it('accepts only the exact inert package', function() {
+  it('accepts only the exact OFF-only routing package', function() {
 
     packageRoot = makePackage();
     const result = verifyPackage(packageRoot, sourceRoot);
@@ -51,12 +59,13 @@ describe('Firefox MV3 package verifier', function() {
 
   });
 
-  it('rejects a routing permission in the package manifest', function() {
+  it('rejects a package missing a required routing permission', function() {
 
     packageRoot = makePackage();
     const manifestPath = Path.join(packageRoot, 'manifest.json');
     const manifest = JSON.parse(Fs.readFileSync(manifestPath, 'utf8'));
-    manifest.permissions.push('proxy');
+    manifest.permissions = manifest.permissions.filter((value) =>
+      value !== 'webRequestBlocking');
     Fs.writeFileSync(manifestPath, JSON.stringify(manifest));
 
     Assert.throws(() => verifyPackage(packageRoot, sourceRoot));

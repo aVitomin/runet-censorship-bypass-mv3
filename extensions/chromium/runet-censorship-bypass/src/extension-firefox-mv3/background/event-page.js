@@ -3,7 +3,11 @@
 (function startFirefoxEventPage(root) {
 
   const offState = root.rucbFirefoxOffState;
-  const runtimeState = offState.OFF;
+  const routing = root.rucbFirefoxRoutingAdapter;
+  const routingAdapter = routing.createAdapter({
+    initialState: routing.STATES.OFF,
+  });
+  const runtimeState = routingAdapter.runtimeState;
   const durableIntent = offState.OFF;
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
     root.crypto.randomUUID() :
@@ -42,7 +46,7 @@
           runtimeState,
           durableIntent,
           privateWindowAccess: await readPrivateWindowAccess(),
-          routingImplemented: false,
+          routingImplemented: true,
           activationSupported: false,
           providerDatasetAvailable: false,
         },
@@ -55,6 +59,23 @@
 
   }
 
+  browser.proxy.onRequest.addListener(
+      routingAdapter.onProxyRequest,
+      {urls: ['<all_urls>']},
+  );
+  browser.webRequest.onBeforeRequest.addListener(
+      routingAdapter.onBeforeRequest,
+      {urls: ['<all_urls>']},
+      ['blocking'],
+  );
+  browser.webRequest.onCompleted.addListener(
+      routingAdapter.onRequestTerminal,
+      {urls: ['<all_urls>']},
+  );
+  browser.webRequest.onErrorOccurred.addListener(
+      routingAdapter.onRequestTerminal,
+      {urls: ['<all_urls>']},
+  );
   browser.runtime.onMessage.addListener(handleMessage);
 
   const initialization = offState.initialize(browser.storage.local).catch(() =>

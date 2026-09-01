@@ -490,6 +490,19 @@ async function main() {
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
     await client.command('Addon:Install', {
       allowPrivateBrowsing: false,
+      path: packageRoot,
+      temporary: true,
+    });
+    await navigate(
+        client,
+        'http://manual-proxy-check.invalid/after-production-install',
+    );
+    Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
+    await client.command('Addon:Uninstall', {
+      id: 'firefox-mv3-skeleton@runet-censorship-bypass.invalid',
+    });
+    await client.command('Addon:Install', {
+      allowPrivateBrowsing: false,
       path: extensionDirectory,
       temporary: true,
     });
@@ -517,7 +530,12 @@ async function main() {
     await navigate(client, 'http://manual-proxy-check.invalid/after-recreation');
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
 
-    const phases = ['before-install', 'after-install', 'after-recreation'];
+    const phases = [
+      'before-install',
+      'after-production-install',
+      'after-install',
+      'after-recreation',
+    ];
     for (const phase of phases) {
       Assert.ok(proxyRequests.some((url) => url.includes(`/${phase}`)), phase);
     }
@@ -529,6 +547,7 @@ async function main() {
       durableIntent: secondRpc.capabilities.result.durableIntent,
       privateWindowAccess: secondRpc.capabilities.result.privateWindowAccess,
       manualProxyChecks: phases.length,
+      productionPackageInstalledSeparately: true,
     }, null, 2));
   } catch (error) {
     throw new Error(`${error && error.stack ? error.stack : error}\n${stderr}`);

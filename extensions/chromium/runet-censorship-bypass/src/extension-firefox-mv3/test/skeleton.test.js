@@ -15,6 +15,14 @@ const offStateSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'off-state.js'),
     'utf8',
 );
+const routingContractSource = Fs.readFileSync(
+    Path.resolve(sourceRoot, '..', 'extension-mv3-common', 'routing-contract.js'),
+    'utf8',
+);
+const routingAdapterSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'routing-adapter.js'),
+    'utf8',
+);
 const eventPageSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'event-page.js'),
     'utf8',
@@ -51,6 +59,7 @@ function startEventPage(options = {}) {
   const events = [];
   const storage = options.storage || makeStorage();
   let messageListener;
+  const networkListeners = {};
   const browser = {
     extension: {
       async isAllowedIncognitoAccess() {
@@ -75,6 +84,16 @@ function startEventPage(options = {}) {
         },
       },
     },
+    proxy: {
+      onRequest: {
+        addListener(listener, filter) {
+
+          events.push('proxy-listener-registered');
+          networkListeners.proxy = {filter, listener};
+
+        },
+      },
+    },
     storage: {
       local: {
         async get(key) {
@@ -91,16 +110,49 @@ function startEventPage(options = {}) {
         },
       },
     },
+    webRequest: {
+      onBeforeRequest: {
+        addListener(listener, filter, extraInfoSpec) {
+
+          events.push('guard-listener-registered');
+          networkListeners.before = {extraInfoSpec, filter, listener};
+
+        },
+      },
+      onCompleted: {
+        addListener(listener, filter) {
+
+          events.push('completed-listener-registered');
+          networkListeners.completed = {filter, listener};
+
+        },
+      },
+      onErrorOccurred: {
+        addListener(listener, filter) {
+
+          events.push('error-listener-registered');
+          networkListeners.error = {filter, listener};
+
+        },
+      },
+    },
   };
   const context = Vm.createContext({
     browser,
     crypto: {randomUUID: () => options.bootId || 'test-boot'},
   });
+  Vm.runInContext(routingContractSource, context, {
+    filename: 'routing-contract.js',
+  });
   Vm.runInContext(offStateSource, context, {filename: 'off-state.js'});
+  Vm.runInContext(routingAdapterSource, context, {
+    filename: 'routing-adapter.js',
+  });
   Vm.runInContext(eventPageSource, context, {filename: 'event-page.js'});
   return {
     context,
     events,
+    networkListeners,
     storage,
     async ready() {
 
@@ -124,7 +176,12 @@ describe('Firefox MV3 inert skeleton', function() {
 
     Assert.strictEqual(manifest.manifest_version, 3);
     Assert.deepStrictEqual(manifest.background, {
-      scripts: ['background/off-state.js', 'background/event-page.js'],
+      scripts: [
+        'background/common/routing-contract.js',
+        'background/off-state.js',
+        'background/routing-adapter.js',
+        'background/event-page.js',
+      ],
       persistent: false,
     });
     Assert.strictEqual(manifest.incognito, 'spanning');
@@ -140,21 +197,18 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
-  it('requests storage and no routing or broad host permissions', function() {
+  it('requests only the routing-adapter permissions and full routing scope',
+      function() {
 
-    Assert.deepStrictEqual(manifest.permissions, ['storage']);
-    Assert.strictEqual('host_permissions' in manifest, false);
-    const serialized = JSON.stringify(manifest);
-    for (const forbidden of [
-      'proxy',
-      'webRequest',
-      'webRequestBlocking',
-      '<all_urls>',
-    ]) {
-      Assert.strictEqual(serialized.includes(`"${forbidden}"`), false);
-    }
+        Assert.deepStrictEqual(manifest.permissions, [
+          'storage',
+          'proxy',
+          'webRequest',
+          'webRequestBlocking',
+        ]);
+        Assert.deepStrictEqual(manifest.host_permissions, ['<all_urls>']);
 
-  });
+      });
 
   it('normalizes every missing or malformed durable value to OFF', function() {
 
@@ -208,15 +262,43 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
-  it('registers the RPC listener before asynchronous state reading', async function() {
+  it('registers every network listener synchronously before state reading',
+      async function() {
+
+        const eventPage = startEventPage();
+        await eventPage.ready();
+
+        Assert.deepStrictEqual(eventPage.events.slice(0, 6), [
+          'proxy-listener-registered',
+          'guard-listener-registered',
+          'completed-listener-registered',
+          'error-listener-registered',
+          'listener-registered',
+          'storage-get',
+        ]);
+        Assert.deepStrictEqual(
+            JSON.parse(JSON.stringify(
+                eventPage.networkListeners.before.extraInfoSpec,
+            )),
+            ['blocking'],
+        );
+
+      });
+
+  it('keeps the registered production adapter inert while OFF', function() {
 
     const eventPage = startEventPage();
-    await eventPage.ready();
 
-    Assert.deepStrictEqual(eventPage.events.slice(0, 2), [
-      'listener-registered',
-      'storage-get',
-    ]);
+    Assert.strictEqual(
+        eventPage.networkListeners.proxy.listener({requestId: 'off'}),
+        undefined,
+    );
+    Assert.deepStrictEqual(
+        JSON.parse(JSON.stringify(
+            eventPage.networkListeners.before.listener({requestId: 'off'}),
+        )),
+        {cancel: false},
+    );
 
   });
 
@@ -235,7 +317,7 @@ describe('Firefox MV3 inert skeleton', function() {
         runtimeState: 'OFF',
         durableIntent: 'OFF',
         privateWindowAccess: 'GRANTED',
-        routingImplemented: false,
+        routingImplemented: true,
         activationSupported: false,
         providerDatasetAvailable: false,
       },
@@ -290,13 +372,15 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
-  it('contains no network-control, remote-fetch, or Chromium-state path', function() {
+  it('contains no ownership, remote-fetch, or Chromium-state path', function() {
 
-    const runtimeSource = `${offStateSource}\n${eventPageSource}`;
+    const runtimeSource = [
+      offStateSource,
+      routingAdapterSource,
+      eventPageSource,
+    ].join('\n');
     for (const forbidden of [
-      'browser.proxy',
       'proxy.settings',
-      'webRequest',
       'XMLHttpRequest',
       'fetch(',
       'extension-chromium-mv3',
