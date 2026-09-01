@@ -84,9 +84,24 @@ jobs:
       - name: Run aggregate verification
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run verify
 
+      - name: Run Firefox skeleton tests
+        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:firefox
+
+      - name: Lint Firefox skeleton
+        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run lint:firefox
+
+      - name: Build and verify Firefox skeleton
+        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run build:firefox
+
       - name: Validate exact MV3 output
         run: |
           package_dir='./extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3'
+          test -d "$package_dir"
+          test -f "$package_dir/manifest.json"
+
+      - name: Validate exact Firefox skeleton output
+        run: |
+          package_dir='./extensions/chromium/runet-censorship-bypass/build/extension-firefox-mv3'
           test -d "$package_dir"
           test -f "$package_dir/manifest.json"
 

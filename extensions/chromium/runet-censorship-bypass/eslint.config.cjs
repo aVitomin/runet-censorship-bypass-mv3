@@ -21,7 +21,10 @@ module.exports = [
   },
   {
     name: 'project/mv3',
-    files: ['src/extension-chromium-mv3/**/*.js'],
+    files: [
+      'src/extension-chromium-mv3/**/*.js',
+      'src/extension-firefox-mv3/**/*.js',
+    ],
     languageOptions: {
       ecmaVersion: 2017,
       sourceType: 'script',
@@ -71,8 +74,21 @@ module.exports = [
     },
   },
   {
+    name: 'project/firefox-runtime-compatibility',
+    files: ['src/extension-firefox-mv3/background/**/*.js'],
+    languageOptions: {
+      globals: {
+        globalThis: 'readonly',
+        module: 'readonly',
+      },
+    },
+  },
+  {
     name: 'project/mv3-node-tests',
-    files: ['src/extension-chromium-mv3/test/**/*.js'],
+    files: [
+      'src/extension-chromium-mv3/test/**/*.js',
+      'src/extension-firefox-mv3/test/**/*.js',
+    ],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -82,7 +98,10 @@ module.exports = [
   },
   {
     name: 'project/mv3-mocha-tests',
-    files: ['src/extension-chromium-mv3/test/**/*.js'],
+    files: [
+      'src/extension-chromium-mv3/test/**/*.js',
+      'src/extension-firefox-mv3/test/**/*.test.js',
+    ],
     ignores: [
       'src/extension-chromium-mv3/test/background-modules.js',
       'src/extension-chromium-mv3/test/generate-action-icons.js',
