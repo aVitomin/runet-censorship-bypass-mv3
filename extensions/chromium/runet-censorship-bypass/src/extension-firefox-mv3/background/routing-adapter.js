@@ -126,13 +126,25 @@
 
   function createAdapter(options = {}) {
 
-    const runtimeState = options.initialState || STATES.OFF;
-    if (!Object.values(STATES).includes(runtimeState)) {
+    const initialState = options.initialState || STATES.OFF;
+    if (!Object.values(STATES).includes(initialState)) {
       throw new TypeError('INVALID_FIREFOX_RUNTIME_STATE');
     }
+    const runtimeStateForRequest = options.runtimeStateForRequest ||
+      (() => initialState);
     const decideRoute = options.decideRoute || Routing.decideRoute;
     const routingInputForRequest = options.routingInputForRequest;
     let authorizations = options.authorizations || new Map();
+
+    function currentRuntimeState() {
+
+      const runtimeState = runtimeStateForRequest();
+      if (!Object.values(STATES).includes(runtimeState)) {
+        throw new TypeError('INVALID_FIREFOX_RUNTIME_STATE');
+      }
+      return runtimeState;
+
+    }
 
     function resetAuthorizations() {
 
@@ -173,16 +185,17 @@
 
     function onProxyRequest(details) {
 
-      if (runtimeState === STATES.OFF) {
-        return undefined;
-      }
       const requestId = details && details.requestId;
-      clearAuthorization(requestId);
-      if (runtimeState !== STATES.READY ||
-          typeof routingInputForRequest !== 'function') {
-        return DIRECT;
-      }
       try {
+        const runtimeState = currentRuntimeState();
+        if (runtimeState === STATES.OFF) {
+          return undefined;
+        }
+        clearAuthorization(requestId);
+        if (runtimeState !== STATES.READY ||
+            typeof routingInputForRequest !== 'function') {
+          return DIRECT;
+        }
         const decision = decideRoute(routingInputForRequest(details));
         const converted = convertDecision(decision);
         if (!converted ||
@@ -201,6 +214,7 @@
     function onBeforeRequest(details) {
 
       try {
+        const runtimeState = currentRuntimeState();
         if (runtimeState === STATES.OFF) {
           return ALLOW;
         }
@@ -244,13 +258,18 @@
 
     }
 
-    return Object.freeze({
+    const api = {
       authorizationCount,
+      currentRuntimeState,
       onBeforeRequest,
       onProxyRequest,
       onRequestTerminal,
-      runtimeState,
+    };
+    Object.defineProperty(api, 'runtimeState', {
+      enumerable: true,
+      get: currentRuntimeState,
     });
+    return Object.freeze(api);
 
   }
 

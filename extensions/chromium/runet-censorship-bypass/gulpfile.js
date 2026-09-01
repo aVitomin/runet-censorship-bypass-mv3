@@ -87,11 +87,16 @@ const chromiumMv3Src = './src/extension-chromium-mv3/**/*';
 const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/manifest.json',
   './src/extension-firefox-mv3/background/off-state.js',
+  './src/extension-firefox-mv3/background/dataset-store.js',
+  './src/extension-firefox-mv3/background/provider-lookup.js',
+  './src/extension-firefox-mv3/background/dataset-runtime.js',
   './src/extension-firefox-mv3/background/routing-adapter.js',
   './src/extension-firefox-mv3/background/event-page.js',
 ];
 const firefoxMv3CommonSrc = [
   './src/extension-mv3-common/routing-contract.js',
+  './src/extension-mv3-common/provider-dataset.js',
+  './src/extension-mv3-common/provider-dataset-state.js',
 ];
 const firefoxSrc = './src/extension-firefox/**/*';
 const chromiumMv3TldtsSrc = [

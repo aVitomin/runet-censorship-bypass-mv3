@@ -4,10 +4,14 @@
 
   const offState = root.rucbFirefoxOffState;
   const routing = root.rucbFirefoxRoutingAdapter;
-  const routingAdapter = routing.createAdapter({
-    initialState: routing.STATES.OFF,
+  const datasetRuntime = root.rucbFirefoxDatasetRuntime.createRuntime({
+    protectionIntended: false,
+    providerKey: 'anticensority',
   });
-  const runtimeState = routingAdapter.runtimeState;
+  const routingAdapter = routing.createAdapter({
+    runtimeStateForRequest: datasetRuntime.getState,
+    routingInputForRequest: datasetRuntime.routingInputForRequest,
+  });
   const durableIntent = offState.OFF;
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
     root.crypto.randomUUID() :
@@ -43,11 +47,12 @@
           browser: 'FIREFOX',
           manifestVersion: manifest.manifest_version,
           runtimeModel: 'BACKGROUND_EVENT_PAGE',
-          runtimeState,
+          runtimeState: routingAdapter.runtimeState,
           durableIntent,
           privateWindowAccess: await readPrivateWindowAccess(),
           routingImplemented: true,
           activationSupported: false,
+          providerDatasetImplemented: true,
           providerDatasetAvailable: false,
         },
       };
@@ -78,8 +83,12 @@
   );
   browser.runtime.onMessage.addListener(handleMessage);
 
-  const initialization = offState.initialize(browser.storage.local).catch(() =>
-    offState.normalizeDurableState(null));
+  const initialization = offState.initialize(browser.storage.local)
+      .catch(() => offState.normalizeDurableState(null))
+      .then(async (state) => {
+        await datasetRuntime.initialize();
+        return state;
+      });
 
   root.rucbFirefoxSkeletonRuntime = Object.freeze({
     bootId,
