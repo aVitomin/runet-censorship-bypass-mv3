@@ -5,14 +5,14 @@ const Fs = require('node:fs');
 const Path = require('node:path');
 
 const EXPECTED_FILES = Object.freeze([
+  'background/common/routing-contract.js',
   'background/event-page.js',
   'background/off-state.js',
+  'background/routing-adapter.js',
   'manifest.json',
 ]);
 const FORBIDDEN_RUNTIME_TEXT = Object.freeze([
-  'browser.proxy',
   'proxy.settings',
-  'webRequest',
   'XMLHttpRequest',
   'fetch(',
   'BEGIN PRIVATE KEY',
@@ -51,7 +51,10 @@ function verifyPackage(packageRoot, sourceRoot) {
 
   for (const relativePath of files) {
     const packaged = Fs.readFileSync(Path.join(packageRoot, relativePath));
-    const source = Fs.readFileSync(Path.join(sourceRoot, relativePath));
+    const sourcePath = relativePath === 'background/common/routing-contract.js' ?
+      Path.resolve(sourceRoot, '..', 'extension-mv3-common', 'routing-contract.js') :
+      Path.join(sourceRoot, relativePath);
+    const source = Fs.readFileSync(sourcePath);
     Assert.deepStrictEqual(packaged, source, `Changed package bytes: ${relativePath}`);
   }
 
@@ -60,14 +63,21 @@ function verifyPackage(packageRoot, sourceRoot) {
       'utf8',
   ));
   Assert.strictEqual(manifest.manifest_version, 3);
-  Assert.deepStrictEqual(manifest.permissions, ['storage']);
+  Assert.deepStrictEqual(manifest.permissions, [
+    'storage',
+    'proxy',
+    'webRequest',
+    'webRequestBlocking',
+  ]);
   Assert.strictEqual(manifest.background.persistent, false);
   Assert.deepStrictEqual(manifest.background.scripts, [
+    'background/common/routing-contract.js',
     'background/off-state.js',
+    'background/routing-adapter.js',
     'background/event-page.js',
   ]);
   Assert.strictEqual('service_worker' in manifest.background, false);
-  Assert.strictEqual('host_permissions' in manifest, false);
+  Assert.deepStrictEqual(manifest.host_permissions, ['<all_urls>']);
 
   const runtimeText = EXPECTED_FILES
       .filter((file) => file.endsWith('.js'))
@@ -87,7 +97,9 @@ if (require.main === module) {
       Path.join(projectRoot, 'build', 'extension-firefox-mv3'),
       Path.join(projectRoot, 'src', 'extension-firefox-mv3'),
   );
-  console.log(`Verified inert Firefox MV3 package: ${result.files.length} files.`);
+  console.log(
+      `Verified OFF-only Firefox MV3 routing package: ${result.files.length} files.`,
+  );
 }
 
 module.exports = Object.freeze({EXPECTED_FILES, listFiles, verifyPackage});
