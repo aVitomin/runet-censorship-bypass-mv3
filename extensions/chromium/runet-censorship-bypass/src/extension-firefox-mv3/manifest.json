@@ -15,7 +15,12 @@
   "background": {
     "scripts": [
       "background/common/routing-contract.js",
+      "background/common/provider-dataset.js",
+      "background/common/provider-dataset-state.js",
       "background/off-state.js",
+      "background/dataset-store.js",
+      "background/provider-lookup.js",
+      "background/dataset-runtime.js",
       "background/routing-adapter.js",
       "background/event-page.js"
     ],

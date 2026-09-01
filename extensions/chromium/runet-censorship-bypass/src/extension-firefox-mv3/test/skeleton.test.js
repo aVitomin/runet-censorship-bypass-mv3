@@ -19,6 +19,31 @@ const routingContractSource = Fs.readFileSync(
     Path.resolve(sourceRoot, '..', 'extension-mv3-common', 'routing-contract.js'),
     'utf8',
 );
+const providerDatasetSource = Fs.readFileSync(
+    Path.resolve(sourceRoot, '..', 'extension-mv3-common', 'provider-dataset.js'),
+    'utf8',
+);
+const providerDatasetStateSource = Fs.readFileSync(
+    Path.resolve(
+        sourceRoot,
+        '..',
+        'extension-mv3-common',
+        'provider-dataset-state.js',
+    ),
+    'utf8',
+);
+const datasetStoreSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'dataset-store.js'),
+    'utf8',
+);
+const providerLookupSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'provider-lookup.js'),
+    'utf8',
+);
+const datasetRuntimeSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'dataset-runtime.js'),
+    'utf8',
+);
 const routingAdapterSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'routing-adapter.js'),
     'utf8',
@@ -144,7 +169,20 @@ function startEventPage(options = {}) {
   Vm.runInContext(routingContractSource, context, {
     filename: 'routing-contract.js',
   });
+  Vm.runInContext(providerDatasetSource, context, {
+    filename: 'provider-dataset.js',
+  });
+  Vm.runInContext(providerDatasetStateSource, context, {
+    filename: 'provider-dataset-state.js',
+  });
   Vm.runInContext(offStateSource, context, {filename: 'off-state.js'});
+  Vm.runInContext(datasetStoreSource, context, {filename: 'dataset-store.js'});
+  Vm.runInContext(providerLookupSource, context, {
+    filename: 'provider-lookup.js',
+  });
+  Vm.runInContext(datasetRuntimeSource, context, {
+    filename: 'dataset-runtime.js',
+  });
   Vm.runInContext(routingAdapterSource, context, {
     filename: 'routing-adapter.js',
   });
@@ -178,7 +216,12 @@ describe('Firefox MV3 inert skeleton', function() {
     Assert.deepStrictEqual(manifest.background, {
       scripts: [
         'background/common/routing-contract.js',
+        'background/common/provider-dataset.js',
+        'background/common/provider-dataset-state.js',
         'background/off-state.js',
+        'background/dataset-store.js',
+        'background/provider-lookup.js',
+        'background/dataset-runtime.js',
         'background/routing-adapter.js',
         'background/event-page.js',
       ],
@@ -319,6 +362,7 @@ describe('Firefox MV3 inert skeleton', function() {
         privateWindowAccess: 'GRANTED',
         routingImplemented: true,
         activationSupported: false,
+        providerDatasetImplemented: true,
         providerDatasetAvailable: false,
       },
     });
@@ -376,6 +420,9 @@ describe('Firefox MV3 inert skeleton', function() {
 
     const runtimeSource = [
       offStateSource,
+      datasetStoreSource,
+      providerLookupSource,
+      datasetRuntimeSource,
       routingAdapterSource,
       eventPageSource,
     ].join('\n');
@@ -384,7 +431,8 @@ describe('Firefox MV3 inert skeleton', function() {
       'XMLHttpRequest',
       'fetch(',
       'extension-chromium-mv3',
-      'provider-dataset',
+      'eval(',
+      'Function(',
     ]) {
       Assert.strictEqual(runtimeSource.includes(forbidden), false, forbidden);
     }

@@ -13,12 +13,12 @@ function makePackage() {
   const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'firefox-skeleton-package-'));
   for (const relativePath of EXPECTED_FILES) {
     const target = Path.join(root, relativePath);
-    const source = relativePath === 'background/common/routing-contract.js' ?
+    const source = relativePath.startsWith('background/common/') ?
       Path.resolve(
           sourceRoot,
           '..',
           'extension-mv3-common',
-          'routing-contract.js',
+          Path.basename(relativePath),
       ) :
       Path.join(sourceRoot, relativePath);
     Fs.mkdirSync(Path.dirname(target), {recursive: true});
@@ -41,14 +41,15 @@ describe('Firefox MV3 package verifier', function() {
 
   });
 
-  it('accepts only the exact OFF-only routing package', function() {
+  it('accepts only the exact OFF-only dataset-capable routing package',
+      function() {
 
-    packageRoot = makePackage();
-    const result = verifyPackage(packageRoot, sourceRoot);
+        packageRoot = makePackage();
+        const result = verifyPackage(packageRoot, sourceRoot);
 
-    Assert.deepStrictEqual(result.files, [...EXPECTED_FILES]);
+        Assert.deepStrictEqual(result.files, [...EXPECTED_FILES]);
 
-  });
+      });
 
   it('rejects an unexpected packaged artifact', function() {
 
@@ -67,6 +68,19 @@ describe('Firefox MV3 package verifier', function() {
     manifest.permissions = manifest.permissions.filter((value) =>
       value !== 'webRequestBlocking');
     Fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    Assert.throws(() => verifyPackage(packageRoot, sourceRoot));
+
+  });
+
+  it('rejects a packaged provider artifact or synthetic fixture', function() {
+
+    packageRoot = makePackage();
+    Fs.mkdirSync(Path.join(packageRoot, 'provider'), {recursive: true});
+    Fs.writeFileSync(
+        Path.join(packageRoot, 'provider', 'synthetic-dataset.json'),
+        '{}',
+    );
 
     Assert.throws(() => verifyPackage(packageRoot, sourceRoot));
 

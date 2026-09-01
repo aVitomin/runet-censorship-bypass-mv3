@@ -5,9 +5,14 @@ const Fs = require('node:fs');
 const Path = require('node:path');
 
 const EXPECTED_FILES = Object.freeze([
+  'background/common/provider-dataset-state.js',
+  'background/common/provider-dataset.js',
   'background/common/routing-contract.js',
+  'background/dataset-runtime.js',
+  'background/dataset-store.js',
   'background/event-page.js',
   'background/off-state.js',
+  'background/provider-lookup.js',
   'background/routing-adapter.js',
   'manifest.json',
 ]);
@@ -17,7 +22,10 @@ const FORBIDDEN_RUNTIME_TEXT = Object.freeze([
   'fetch(',
   'BEGIN PRIVATE KEY',
   'extension-chromium-mv3',
-  'provider-dataset',
+  'BEGIN PAC',
+  'FindProxyForURL',
+  'eval(',
+  'Function(',
 ]);
 
 function listFiles(root) {
@@ -51,8 +59,13 @@ function verifyPackage(packageRoot, sourceRoot) {
 
   for (const relativePath of files) {
     const packaged = Fs.readFileSync(Path.join(packageRoot, relativePath));
-    const sourcePath = relativePath === 'background/common/routing-contract.js' ?
-      Path.resolve(sourceRoot, '..', 'extension-mv3-common', 'routing-contract.js') :
+    const sourcePath = relativePath.startsWith('background/common/') ?
+      Path.resolve(
+          sourceRoot,
+          '..',
+          'extension-mv3-common',
+          Path.basename(relativePath),
+      ) :
       Path.join(sourceRoot, relativePath);
     const source = Fs.readFileSync(sourcePath);
     Assert.deepStrictEqual(packaged, source, `Changed package bytes: ${relativePath}`);
@@ -72,7 +85,12 @@ function verifyPackage(packageRoot, sourceRoot) {
   Assert.strictEqual(manifest.background.persistent, false);
   Assert.deepStrictEqual(manifest.background.scripts, [
     'background/common/routing-contract.js',
+    'background/common/provider-dataset.js',
+    'background/common/provider-dataset-state.js',
     'background/off-state.js',
+    'background/dataset-store.js',
+    'background/provider-lookup.js',
+    'background/dataset-runtime.js',
     'background/routing-adapter.js',
     'background/event-page.js',
   ]);
@@ -98,7 +116,7 @@ if (require.main === module) {
       Path.join(projectRoot, 'src', 'extension-firefox-mv3'),
   );
   console.log(
-      `Verified OFF-only Firefox MV3 routing package: ${result.files.length} files.`,
+      `Verified OFF-only Firefox MV3 dataset package: ${result.files.length} files.`,
   );
 }
 
