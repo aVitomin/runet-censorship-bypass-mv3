@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Runet Censorship Bypass Firefox MV3 development skeleton",
+  "version": "0.0.0.1",
+  "description": "Inert Firefox MV3 architecture package. Routing is not implemented.",
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "scripts": [
+      "background/off-state.js",
+      "background/event-page.js"
+    ],
+    "persistent": false
+  },
+  "incognito": "spanning",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "firefox-mv3-skeleton@runet-censorship-bypass.invalid",
+      "strict_min_version": "154.0"
+    }
+  }
+}

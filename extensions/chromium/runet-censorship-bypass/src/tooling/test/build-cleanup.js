@@ -68,6 +68,28 @@ describe('Build cleanup', function() {
 
   });
 
+  it('cleans the Firefox MV3 output without changing Chromium MV3', function() {
+
+    const chromiumManifest = Path.join(
+        cleanup.paths.chromiumMv3Root,
+        'manifest.json',
+    );
+    const firefoxManifest = Path.join(
+        cleanup.paths.firefoxMv3Root,
+        'manifest.json',
+    );
+    Fs.mkdirSync(Path.dirname(chromiumManifest), {recursive: true});
+    Fs.mkdirSync(Path.dirname(firefoxManifest), {recursive: true});
+    Fs.writeFileSync(chromiumManifest, 'chromium');
+    Fs.writeFileSync(firefoxManifest, 'firefox');
+
+    cleanup.cleanFirefoxMv3();
+
+    Assert.strictEqual(Fs.readFileSync(chromiumManifest, 'utf8'), 'chromium');
+    Assert.strictEqual(Fs.existsSync(firefoxManifest), false);
+
+  });
+
   it('rejects paths outside the build root', function() {
 
     const outsideFile = Path.join(projectRoot, 'outside', 'keep.txt');

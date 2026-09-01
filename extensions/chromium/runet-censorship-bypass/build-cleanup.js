@@ -70,7 +70,11 @@ function createBuildCleanup(projectRoot) {
       buildRoot,
       'extension-chromium-mv3',
   );
-  const allowedTargets = [buildRoot, chromiumMv3Root];
+  const firefoxMv3Root = Path.resolve(
+      buildRoot,
+      'extension-firefox-mv3',
+  );
+  const allowedTargets = [buildRoot, chromiumMv3Root, firefoxMv3Root];
 
   function removeOutput(target) {
 
@@ -95,7 +99,7 @@ function createBuildCleanup(projectRoot) {
   }
 
   return Object.freeze({
-    paths: Object.freeze({buildRoot, chromiumMv3Root}),
+    paths: Object.freeze({buildRoot, chromiumMv3Root, firefoxMv3Root}),
     removeOutput,
     cleanBuild() {
 
@@ -105,6 +109,11 @@ function createBuildCleanup(projectRoot) {
     cleanChromiumMv3() {
 
       removeOutput(chromiumMv3Root);
+
+    },
+    cleanFirefoxMv3() {
+
+      removeOutput(firefoxMv3Root);
 
     },
   });
@@ -118,5 +127,6 @@ module.exports = Object.freeze({
   removeOutput: cleanup.removeOutput,
   cleanBuild: cleanup.cleanBuild,
   cleanChromiumMv3: cleanup.cleanChromiumMv3,
+  cleanFirefoxMv3: cleanup.cleanFirefoxMv3,
   createBuildCleanup,
 });

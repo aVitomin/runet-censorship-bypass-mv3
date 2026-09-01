@@ -77,12 +77,18 @@ const miniDst = './build/extension-mini';
 const fullDst = './build/extension-full';
 const betaDst = './build/extension-beta';
 const chromiumMv3Dst = './build/extension-chromium-mv3';
+const firefoxMv3Dst = './build/extension-firefox-mv3';
 const firefoxDst = './build/extension-firefox';
 
 const commonSrc = './src/extension-common/**/*';;
 const miniSrc = './src/extension-mini/**/*';
 const fullSrc = './src/extension-full/**/*';
 const chromiumMv3Src = './src/extension-chromium-mv3/**/*';
+const firefoxMv3RuntimeSrc = [
+  './src/extension-firefox-mv3/manifest.json',
+  './src/extension-firefox-mv3/background/off-state.js',
+  './src/extension-firefox-mv3/background/event-page.js',
+];
 const firefoxSrc = './src/extension-firefox/**/*';
 const chromiumMv3TldtsSrc = [
   './node_modules/tldts/dist/index.umd.min.js',
@@ -171,17 +177,37 @@ const copyChromiumMv3Tldts = function(cb) {
 
 };
 
+const cleanFirefoxMv3 = function(cb) {
+
+  buildCleanup.cleanFirefoxMv3();
+  return cb();
+
+};
+
+const copyFirefoxMv3 = function(cb) {
+
+  gulp.src(firefoxMv3RuntimeSrc, {
+    base: './src/extension-firefox-mv3',
+    encoding: false,
+  })
+    .pipe(gulp.dest(firefoxMv3Dst))
+    .on('end', cb);
+
+};
+
 const buildAll = gulp.series(clean, gulp.parallel(copyMini, copyFull, copyBeta));
 const buildBeta = copyBeta;
 const buildChromiumMv3 = gulp.series(
     cleanChromiumMv3,
     gulp.parallel(copyChromiumMv3, copyChromiumMv3Tldts),
 );
+const buildFirefoxMv3 = gulp.series(cleanFirefoxMv3, copyFirefoxMv3);
 
 module.exports = {
   default: buildAll,
   buildAll,
   buildBeta,
   buildChromiumMv3,
+  buildFirefoxMv3,
   buildMv3: buildChromiumMv3,
 };
