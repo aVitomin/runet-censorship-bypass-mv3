@@ -13,6 +13,29 @@ Adapter заранее регистрирует `proxy.onRequest` и блоки�
 `webRequest`, `webRequestBlocking` и `<all_urls>`. Пока durable intent равен
 `OFF`, proxy listener не задаёт маршрут, а guard разрешает обычный трафик.
 
+Firefox routing adapter фиксирует проверенную в Firefox 154.0.1 семантику
+результатов `proxy.onRequest`:
+
+- browser-neutral `DIRECT` преобразуется в top-level `null`; это явный Direct,
+  отличный от `OFF`, при котором listener возвращает `undefined` и не задаёт
+  маршрут;
+- `{type: 'direct'}` не является эквивалентом true Direct при наличии browser
+  или global `proxy.settings`, потому что Firefox продолжает применять эти
+  настройки;
+- `PROXY + FAIL_CLOSED` преобразуется в `[...proxyInfos, null]`, где последний
+  `null` завершает proxy fallback и не создаёт дополнительный
+  `webRequest.onBeforeRequest` callback;
+- browser-neutral `PROXY + DIRECT` пока не имеет безопасного эквивалента в
+  Firefox fail-closed architecture, поэтому adapter отклоняет его с внутренним
+  кодом `UNSUPPORTED_PROXY_DIRECT_FALLBACK`, не создаёт authorization и
+  полагается на default-cancel guard.
+
+Обычный provider Direct остаётся поддержанным, если shared routing core уже
+свёл решение к `{kind: 'DIRECT'}`. Это ограничение относится только к Proxy
+chain с Direct fallback; полная routing parity с Chromium пока не заявляется.
+Global fail-closed floor, private-access revocation и ownership/Clear остаются
+отдельной последующей архитектурной работой.
+
 Реальный provider dataset, updater, активация, proxy ownership, аутентификация
 и health-проверки ещё не реализованы. Команда активации всегда отвечает
 `ACTIVATION_NOT_IMPLEMENTED`; наличие широких сетевых разрешений не делает
