@@ -96,14 +96,22 @@ describe('Firefox fail-closed routing adapter', function() {
 
   it('does not authorize Direct after a fail-closed proxy candidate', function() {
 
-    const adapter = adapterForDecision(proxyDecision([
+    const decision = proxyDecision([
       candidate('one', 'HTTPS', 'proxy-one.test', 443),
-    ]));
-
-    Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'proxy'}), [
-      {type: 'https', host: 'proxy-one.test', port: 443},
-      null,
     ]);
+    const adapter = adapterForDecision(decision);
+
+    Assert.deepStrictEqual(Adapter.convertDecision(decision), {
+      proxyResult: [
+        {type: 'https', host: 'proxy-one.test', port: 443},
+        null,
+      ],
+      callbackBudget: 1,
+    });
+    Assert.deepStrictEqual(
+        adapter.onProxyRequest({requestId: 'proxy'}),
+        [{type: 'https', host: 'proxy-one.test', port: 443}, null],
+    );
     Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'proxy'}), {
       cancel: false,
     });
@@ -145,22 +153,78 @@ describe('Firefox fail-closed routing adapter', function() {
 
   });
 
-  it('rejects proxy-plus-Direct fallback without authorization', function() {
+  it('strips only proxy Direct fallback after validating every candidate',
+      function() {
 
-    const decision = proxyDecision([
-      candidate('one', 'HTTP', 'proxy-one.test', 8080),
-      candidate('two', 'SOCKS4', '127.0.0.1', 9150),
-    ], Routing.FALLBACKS.DIRECT);
+        const decision = proxyDecision([
+          candidate('one', 'HTTP', 'proxy-one.test', 8080),
+          candidate('two', 'SOCKS4', '127.0.0.1', 9150),
+        ], Routing.FALLBACKS.DIRECT);
+        const adapter = adapterForDecision(decision);
+
+        Assert.deepStrictEqual(Adapter.convertDecision(decision), {
+          proxyResult: [
+            {type: 'http', host: 'proxy-one.test', port: 8080},
+            {type: 'socks4', host: '127.0.0.1', port: 9150, proxyDNS: true},
+            null,
+          ],
+          callbackBudget: 2,
+          degradationCode:
+            Adapter.DEGRADATION_CODES.PROXY_DIRECT_FALLBACK_STRIPPED,
+        });
+        Assert.deepStrictEqual(
+            adapter.onProxyRequest({requestId: 'fallback'}),
+            [
+              {type: 'http', host: 'proxy-one.test', port: 8080},
+              {type: 'socks4', host: '127.0.0.1', port: 9150, proxyDNS: true},
+              null,
+            ],
+        );
+        Assert.strictEqual(adapter.authorizationCount(), 1);
+        Assert.deepStrictEqual(
+            adapter.onBeforeRequest({requestId: 'fallback'}),
+            {cancel: false},
+        );
+        Assert.deepStrictEqual(
+            adapter.onBeforeRequest({requestId: 'fallback'}),
+            {cancel: false},
+        );
+        Assert.strictEqual(adapter.authorizationCount(), 0);
+        Assert.deepStrictEqual(
+            adapter.onBeforeRequest({requestId: 'fallback'}),
+            {cancel: true},
+        );
+
+      });
+
+  it('gives one provider proxy one callback without terminal Direct', function() {
+
+    const decision = {
+      kind: Routing.KINDS.PROXY,
+      source: Routing.SOURCES.PROVIDER_DEFAULT,
+      candidates: [candidate('provider', 'HTTPS', 'provider.test', 443)],
+      fallback: Routing.FALLBACKS.DIRECT,
+    };
     const adapter = adapterForDecision(decision);
 
     Assert.deepStrictEqual(Adapter.convertDecision(decision), {
-      errorCode: Adapter.ERROR_CODES.UNSUPPORTED_PROXY_DIRECT_FALLBACK,
+      proxyResult: [
+        {type: 'https', host: 'provider.test', port: 443},
+        null,
+      ],
+      callbackBudget: 1,
+      degradationCode:
+        Adapter.DEGRADATION_CODES.PROXY_DIRECT_FALLBACK_STRIPPED,
     });
-    Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'fallback'}), {
-      type: 'direct',
+    Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'provider'}), [
+      {type: 'https', host: 'provider.test', port: 443},
+      null,
+    ]);
+    Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'provider'}), {
+      cancel: false,
     });
     Assert.strictEqual(adapter.authorizationCount(), 0);
-    Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'fallback'}), {
+    Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'provider'}), {
       cancel: true,
     });
 
@@ -229,7 +293,10 @@ describe('Firefox fail-closed routing adapter', function() {
           {password: 'x'},
       ),
     ]) {
-      const adapter = adapterForDecision(proxyDecision([invalid]));
+      const adapter = adapterForDecision(proxyDecision(
+          [invalid],
+          Routing.FALLBACKS.DIRECT,
+      ));
       Assert.deepStrictEqual(adapter.onProxyRequest({requestId: invalid.id}), {
         type: 'direct',
       });
@@ -241,26 +308,36 @@ describe('Firefox fail-closed routing adapter', function() {
 
   });
 
-  it('fails closed for empty Proxy and core FAIL_CLOSED decisions', function() {
+  it('fails closed for empty, malformed, and core FAIL_CLOSED decisions',
+      function() {
 
-    for (const decision of [
-      proxyDecision([]),
-      {
-        kind: Routing.KINDS.FAIL_CLOSED,
-        source: Routing.SOURCES.ROUTING_INPUT,
-        code: 'NO_VALID_ROUTE',
-      },
-    ]) {
-      const adapter = adapterForDecision(decision);
-      Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'closed'}), {
-        type: 'direct',
-      });
-      Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'closed'}), {
-        cancel: true,
-      });
-    }
+        for (const decision of [
+          proxyDecision([], Routing.FALLBACKS.DIRECT),
+          {
+            kind: Routing.KINDS.PROXY,
+            source: Routing.SOURCES.PROVIDER_DEFAULT,
+            candidates: 'not-an-array',
+            fallback: Routing.FALLBACKS.DIRECT,
+          },
+          {
+            kind: Routing.KINDS.FAIL_CLOSED,
+            source: Routing.SOURCES.ROUTING_INPUT,
+            code: 'NO_VALID_ROUTE',
+          },
+        ]) {
+          const adapter = adapterForDecision(decision);
+          Assert.deepStrictEqual(
+              adapter.onProxyRequest({requestId: 'closed'}),
+              {type: 'direct'},
+          );
+          Assert.deepStrictEqual(
+              adapter.onBeforeRequest({requestId: 'closed'}),
+              {cancel: true},
+          );
+          Assert.strictEqual(adapter.authorizationCount(), 0);
+        }
 
-  });
+      });
 
   it('fails closed when route selection throws or returns async state', function() {
 

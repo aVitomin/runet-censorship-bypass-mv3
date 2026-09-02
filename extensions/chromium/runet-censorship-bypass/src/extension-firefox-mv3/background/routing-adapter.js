@@ -26,8 +26,8 @@
   const ALLOW = Object.freeze({cancel: false});
   const CANCEL = Object.freeze({cancel: true});
   const DEFAULT_ROUTE = Object.freeze({type: 'direct'});
-  const ERROR_CODES = Object.freeze({
-    UNSUPPORTED_PROXY_DIRECT_FALLBACK: 'UNSUPPORTED_PROXY_DIRECT_FALLBACK',
+  const DEGRADATION_CODES = Object.freeze({
+    PROXY_DIRECT_FALLBACK_STRIPPED: 'PROXY_DIRECT_FALLBACK_STRIPPED',
   });
   const FIREFOX_TYPES = Object.freeze({
     HTTP: 'http',
@@ -114,18 +114,22 @@
       }
       proxies.push(proxyInfo);
     }
-    if (decision.fallback === Routing.FALLBACKS.DIRECT) {
-      return {
-        errorCode: ERROR_CODES.UNSUPPORTED_PROXY_DIRECT_FALLBACK,
-      };
-    }
     // A trailing null terminates Firefox proxy fallback and does not produce
     // another webRequest callback, so it is intentionally outside the budget.
     proxies.push(null);
-    return {
+    const converted = {
       proxyResult: proxies,
       callbackBudget: proxies.length - 1,
     };
+    if (decision.fallback === Routing.FALLBACKS.DIRECT) {
+      // Firefox arrays cannot express a true terminal Direct route. Preserve
+      // every validated proxy candidate but deliberately fail closed after
+      // exhaustion, and keep the availability degradation observable to the
+      // pure conversion caller without mutable global diagnostics.
+      converted.degradationCode =
+        DEGRADATION_CODES.PROXY_DIRECT_FALLBACK_STRIPPED;
+    }
+    return converted;
 
   }
 
@@ -203,8 +207,7 @@
         }
         const decision = decideRoute(routingInputForRequest(details));
         const converted = convertDecision(decision);
-        if (!converted || converted.errorCode ||
-            !authorize(requestId, converted.callbackBudget)) {
+        if (!converted || !authorize(requestId, converted.callbackBudget)) {
           clearAuthorization(requestId);
           return DEFAULT_ROUTE;
         }
@@ -281,7 +284,7 @@
   return Object.freeze({
     ALLOW,
     CANCEL,
-    ERROR_CODES,
+    DEGRADATION_CODES,
     MAX_AUTHORIZATIONS,
     MAX_CALLBACK_BUDGET,
     STATES,

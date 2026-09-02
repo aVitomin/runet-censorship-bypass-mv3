@@ -142,7 +142,7 @@ describe('Firefox declarative dataset runtime', function() {
 
       });
 
-  it('fails closed for a provider Proxy decision with Direct fallback',
+  it('routes a provider Proxy and strips only its Direct fallback',
       async function() {
 
         const {runtime, store} = createStoredRuntime();
@@ -153,7 +153,15 @@ describe('Firefox declarative dataset runtime', function() {
         Assert.deepStrictEqual(adapter.onProxyRequest({
           requestId: 'provider-proxy',
           url: 'http://proxy.test/path',
-        }), {type: 'direct'});
+        }), [
+          {type: 'http', host: '127.0.0.1', port: 8080},
+          null,
+        ]);
+        Assert.strictEqual(adapter.authorizationCount(), 1);
+        Assert.deepStrictEqual(
+            adapter.onBeforeRequest({requestId: 'provider-proxy'}),
+            {cancel: false},
+        );
         Assert.strictEqual(adapter.authorizationCount(), 0);
         Assert.deepStrictEqual(
             adapter.onBeforeRequest({requestId: 'provider-proxy'}),

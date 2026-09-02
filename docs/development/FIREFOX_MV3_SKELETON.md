@@ -25,14 +25,19 @@ Firefox routing adapter фиксирует проверенную в Firefox 154
 - `PROXY + FAIL_CLOSED` преобразуется в `[...proxyInfos, null]`, где последний
   `null` завершает proxy fallback и не создаёт дополнительный
   `webRequest.onBeforeRequest` callback;
-- browser-neutral `PROXY + DIRECT` пока не имеет безопасного эквивалента в
-  Firefox fail-closed architecture, поэтому adapter отклоняет его с внутренним
-  кодом `UNSUPPORTED_PROXY_DIRECT_FALLBACK`, не создаёт authorization и
-  полагается на default-cancel guard.
+- Chromium provider chain может заканчиваться `DIRECT`. Firefox намеренно
+  удаляет только этот terminal Direct fallback: browser-neutral
+  `PROXY + DIRECT` преобразуется в тот же упорядоченный
+  `[...proxyInfos, null]`, с budget только для proxy-кандидатов и diagnostic
+  `PROXY_DIRECT_FALLBACK_STRIPPED`;
+- успешный выбор proxy и failover между proxy-кандидатами остаются
+  эквивалентными. Если все кандидаты недоступны, Chromium может перейти к
+  Direct, а Firefox завершает запрос fail-closed. Это намеренное различие
+  safety/availability, которое не создаёт Direct route.
 
 Обычный provider Direct остаётся поддержанным, если shared routing core уже
-свёл решение к `{kind: 'DIRECT'}`. Это ограничение относится только к Proxy
-chain с Direct fallback; полная routing parity с Chromium пока не заявляется.
+свёл решение к `{kind: 'DIRECT'}`. Default provider Auto больше не блокируется
+до первой proxy-попытки, но полная routing parity с Chromium не заявляется.
 Global fail-closed floor, private-access revocation и ownership/Clear остаются
 отдельной последующей архитектурной работой.
 
