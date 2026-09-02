@@ -25,7 +25,10 @@
   const MAX_CALLBACK_BUDGET = 256;
   const ALLOW = Object.freeze({cancel: false});
   const CANCEL = Object.freeze({cancel: true});
-  const DIRECT = Object.freeze({type: 'direct'});
+  const DEFAULT_ROUTE = Object.freeze({type: 'direct'});
+  const ERROR_CODES = Object.freeze({
+    UNSUPPORTED_PROXY_DIRECT_FALLBACK: 'UNSUPPORTED_PROXY_DIRECT_FALLBACK',
+  });
   const FIREFOX_TYPES = Object.freeze({
     HTTP: 'http',
     HTTPS: 'https',
@@ -89,7 +92,9 @@
       return null;
     }
     if (decision.kind === Routing.KINDS.DIRECT) {
-      return {proxyResult: DIRECT, callbackBudget: 1};
+      // Firefox treats only top-level null as true Direct. A ProxyInfo Direct
+      // continues through browser/global proxy settings.
+      return {proxyResult: null, callbackBudget: 1};
     }
     if (decision.kind === Routing.KINDS.FAIL_CLOSED) {
       return null;
@@ -110,12 +115,12 @@
       proxies.push(proxyInfo);
     }
     if (decision.fallback === Routing.FALLBACKS.DIRECT) {
-      if (proxies.length === MAX_CALLBACK_BUDGET) {
-        return null;
-      }
-      proxies.push(DIRECT);
-      return {proxyResult: proxies, callbackBudget: proxies.length};
+      return {
+        errorCode: ERROR_CODES.UNSUPPORTED_PROXY_DIRECT_FALLBACK,
+      };
     }
+    // A trailing null terminates Firefox proxy fallback and does not produce
+    // another webRequest callback, so it is intentionally outside the budget.
     proxies.push(null);
     return {
       proxyResult: proxies,
@@ -194,19 +199,19 @@
         clearAuthorization(requestId);
         if (runtimeState !== STATES.READY ||
             typeof routingInputForRequest !== 'function') {
-          return DIRECT;
+          return DEFAULT_ROUTE;
         }
         const decision = decideRoute(routingInputForRequest(details));
         const converted = convertDecision(decision);
-        if (!converted ||
+        if (!converted || converted.errorCode ||
             !authorize(requestId, converted.callbackBudget)) {
           clearAuthorization(requestId);
-          return DIRECT;
+          return DEFAULT_ROUTE;
         }
         return converted.proxyResult;
       } catch (_error) {
         clearAuthorization(requestId);
-        return DIRECT;
+        return DEFAULT_ROUTE;
       }
 
     }
@@ -276,6 +281,7 @@
   return Object.freeze({
     ALLOW,
     CANCEL,
+    ERROR_CODES,
     MAX_AUTHORIZATIONS,
     MAX_CALLBACK_BUDGET,
     STATES,

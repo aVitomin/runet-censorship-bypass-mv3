@@ -60,19 +60,37 @@ describe('Firefox fail-closed routing adapter', function() {
 
   });
 
-  it('authorizes exactly one callback for an intentional Direct route', function() {
+  it('distinguishes OFF from a true top-level-null Direct route', function() {
 
     const adapter = adapterForDecision(DIRECT_DECISION);
 
-    Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'direct'}), {
-      type: 'direct',
-    });
+    Assert.strictEqual(adapter.onProxyRequest({requestId: 'direct'}), null);
+    Assert.strictEqual(adapter.authorizationCount(), 1);
     Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'direct'}), {
       cancel: false,
     });
+    Assert.strictEqual(adapter.authorizationCount(), 0);
     Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'direct'}), {
       cancel: true,
     });
+
+  });
+
+  it('maps an ordinary provider Direct decision to top-level null', function() {
+
+    const adapter = adapterForDecision({
+      kind: Routing.KINDS.DIRECT,
+      source: Routing.SOURCES.PROVIDER_DEFAULT,
+    });
+
+    Assert.strictEqual(
+        adapter.onProxyRequest({requestId: 'provider-direct'}),
+        null,
+    );
+    Assert.deepStrictEqual(
+        adapter.onBeforeRequest({requestId: 'provider-direct'}),
+        {cancel: false},
+    );
 
   });
 
@@ -127,24 +145,21 @@ describe('Firefox fail-closed routing adapter', function() {
 
   });
 
-  it('includes an intentional Direct fallback in the callback budget', function() {
+  it('rejects proxy-plus-Direct fallback without authorization', function() {
 
-    const adapter = adapterForDecision(proxyDecision([
+    const decision = proxyDecision([
       candidate('one', 'HTTP', 'proxy-one.test', 8080),
       candidate('two', 'SOCKS4', '127.0.0.1', 9150),
-    ], Routing.FALLBACKS.DIRECT));
+    ], Routing.FALLBACKS.DIRECT);
+    const adapter = adapterForDecision(decision);
 
-    Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'fallback'}), [
-      {type: 'http', host: 'proxy-one.test', port: 8080},
-      {type: 'socks4', host: '127.0.0.1', port: 9150, proxyDNS: true},
-      {type: 'direct'},
-    ]);
-    for (let index = 0; index < 3; index += 1) {
-      Assert.deepStrictEqual(
-          adapter.onBeforeRequest({requestId: 'fallback'}),
-          {cancel: false},
-      );
-    }
+    Assert.deepStrictEqual(Adapter.convertDecision(decision), {
+      errorCode: Adapter.ERROR_CODES.UNSUPPORTED_PROXY_DIRECT_FALLBACK,
+    });
+    Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'fallback'}), {
+      type: 'direct',
+    });
+    Assert.strictEqual(adapter.authorizationCount(), 0);
     Assert.deepStrictEqual(adapter.onBeforeRequest({requestId: 'fallback'}), {
       cancel: true,
     });

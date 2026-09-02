@@ -142,7 +142,7 @@ describe('Firefox declarative dataset runtime', function() {
 
       });
 
-  it('routes a provider match through the shared decision contract',
+  it('fails closed for a provider Proxy decision with Direct fallback',
       async function() {
 
         const {runtime, store} = createStoredRuntime();
@@ -153,10 +153,12 @@ describe('Firefox declarative dataset runtime', function() {
         Assert.deepStrictEqual(adapter.onProxyRequest({
           requestId: 'provider-proxy',
           url: 'http://proxy.test/path',
-        }), [
-          {type: 'http', host: '127.0.0.1', port: 8080},
-          {type: 'direct'},
-        ]);
+        }), {type: 'direct'});
+        Assert.strictEqual(adapter.authorizationCount(), 0);
+        Assert.deepStrictEqual(
+            adapter.onBeforeRequest({requestId: 'provider-proxy'}),
+            {cancel: true},
+        );
 
       });
 
@@ -172,9 +174,7 @@ describe('Firefox declarative dataset runtime', function() {
           ['provider-direct', 'http://alpha.test/'],
           ['provider-miss', 'http://ordinary.test/'],
         ]) {
-          Assert.deepStrictEqual(adapter.onProxyRequest({requestId, url}), {
-            type: 'direct',
-          });
+          Assert.strictEqual(adapter.onProxyRequest({requestId, url}), null);
           Assert.deepStrictEqual(adapter.onBeforeRequest({requestId}), {
             cancel: false,
           });
@@ -206,10 +206,10 @@ describe('Firefox declarative dataset runtime', function() {
         await runtime.initialize();
         const adapter = adapterForRuntime(runtime);
 
-        Assert.deepStrictEqual(adapter.onProxyRequest({
+        Assert.strictEqual(adapter.onProxyRequest({
           requestId: 'direct-rule',
           url: 'http://direct.override/',
-        }), {type: 'direct'});
+        }), null);
         Assert.deepStrictEqual(adapter.onProxyRequest({
           requestId: 'proxy-rule',
           url: 'http://proxy.test/',
