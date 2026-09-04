@@ -161,6 +161,12 @@
 
     }
 
+    function clearAllAuthorizations() {
+
+      resetAuthorizations();
+
+    }
+
     function clearAuthorization(requestId) {
 
       try {
@@ -268,6 +274,7 @@
 
     const api = {
       authorizationCount,
+      clearAllAuthorizations,
       currentRuntimeState,
       onBeforeRequest,
       onProxyRequest,

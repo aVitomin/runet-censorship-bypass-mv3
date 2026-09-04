@@ -38,11 +38,45 @@ Firefox routing adapter фиксирует проверенную в Firefox 154
 Обычный provider Direct остаётся поддержанным, если shared routing core уже
 свёл решение к `{kind: 'DIRECT'}`. Default provider Auto больше не блокируется
 до первой proxy-попытки, но полная routing parity с Chromium не заявляется.
-Global fail-closed floor, private-access revocation и ownership/Clear остаются
-отдельной последующей архитектурной работой.
+Firefox-specific control plane теперь содержит узкие primitives для global
+fail-closed floor и Clear, но не содержит production activation path. Canonical
+floor — manual SOCKS5 `127.0.0.1:<persisted-high-port>` с `proxyDNS: true`,
+пустыми HTTP/SSL/auto-config/passthrough и `httpProxyAll: false`. Port `0`,
+well-known и другие low ports невалидны. Кандидат high port создаётся только
+через `crypto.getRandomValues`, но WebExtension API не может надёжно доказать,
+что произвольный локальный процесс не владеет портом. Поэтому acquisition
+primitive требует внешне prevalidated identity и не вызывается ни startup, ни
+RPC. Остаточный риск local-port collision сохраняется.
 
-Реальный provider dataset, updater, активация, proxy ownership, аутентификация
-и health-проверки ещё не реализованы. Команда активации всегда отвечает
+Durable OFF state имеет schema v2:
+
+```json
+{"schemaVersion":2,"intent":"OFF","floorIdentity":null}
+```
+
+`floorIdentity` может содержать только точный canonical floor, нужный для
+cleanup после interruption. Schema v1 OFF мигрирует в v2 OFF; malformed и
+future state нормализуются в OFF без floor identity. Ownership признаётся
+только при одновременных exact identity match и
+`levelOfControl === "controlled_by_this_extension"`. Clear сначала сохраняет
+OFF, очищает ephemeral requestId budgets, затем освобождает только точный
+owned floor и удаляет identity лишь после подтверждения release. Mismatch не
+перезаписывается и не очищается.
+
+Firefox 154 добавляет к live `proxy.settings.get()` нормализованное
+`autoLogin: false`. Оно не хранится в durable identity, но exact live comparison
+явно требует `false`, если поле присутствует; другие дополнительные поля и
+`autoLogin: true` считаются mismatch.
+
+На каждом event-page boot OFF reconciliation никогда не приобретает floor. Если
+Firefox после disable/re-enable восстановил точный extension-owned floor,
+reconciliation очищает его даже при denied private access и оставляет runtime
+OFF. RPC `firefox.activation.clear` предоставляет только этот безопасный Clear;
+он не вызывает `proxy.settings.set`.
+
+Реальный provider dataset, updater, активация, аутентификация и health-проверки
+ещё не реализованы. Ownership primitives не делают routing доступным. Команда
+активации всегда отвечает
 `ACTIVATION_NOT_IMPLEMENTED`; наличие широких сетевых разрешений не делает
 маршрутизацию доступной пользователю.
 

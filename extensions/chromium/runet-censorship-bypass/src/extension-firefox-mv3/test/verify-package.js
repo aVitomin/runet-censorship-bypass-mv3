@@ -13,11 +13,11 @@ const EXPECTED_FILES = Object.freeze([
   'background/event-page.js',
   'background/off-state.js',
   'background/provider-lookup.js',
+  'background/proxy-control.js',
   'background/routing-adapter.js',
   'manifest.json',
 ]);
 const FORBIDDEN_RUNTIME_TEXT = Object.freeze([
-  'proxy.settings',
   'XMLHttpRequest',
   'fetch(',
   'BEGIN PRIVATE KEY',
@@ -88,6 +88,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/common/provider-dataset.js',
     'background/common/provider-dataset-state.js',
     'background/off-state.js',
+    'background/proxy-control.js',
     'background/dataset-store.js',
     'background/provider-lookup.js',
     'background/dataset-runtime.js',
@@ -104,6 +105,20 @@ function verifyPackage(packageRoot, sourceRoot) {
   for (const forbidden of FORBIDDEN_RUNTIME_TEXT) {
     Assert.strictEqual(runtimeText.includes(forbidden), false, forbidden);
   }
+  const eventPageText = Fs.readFileSync(
+      Path.join(packageRoot, 'background', 'event-page.js'),
+      'utf8',
+  );
+  Assert.strictEqual(eventPageText.includes('proxy.settings.set'), false);
+  Assert.strictEqual(eventPageText.includes('acquirePrevalidatedFloor('), false);
+  Assert.strictEqual(
+      eventPageText.includes('type === \'firefox.activation.apply\''),
+      true,
+  );
+  Assert.strictEqual(
+      eventPageText.includes('errorResponse(\'ACTIVATION_NOT_IMPLEMENTED\')'),
+      true,
+  );
 
   return Object.freeze({files});
 
@@ -116,7 +131,7 @@ if (require.main === module) {
       Path.join(projectRoot, 'src', 'extension-firefox-mv3'),
   );
   console.log(
-      `Verified OFF-only Firefox MV3 dataset package: ${result.files.length} files.`,
+      `Verified OFF-only Firefox MV3 control package: ${result.files.length} files.`,
   );
 }
 

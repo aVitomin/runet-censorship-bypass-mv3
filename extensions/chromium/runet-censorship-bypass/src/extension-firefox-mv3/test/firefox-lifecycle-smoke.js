@@ -507,7 +507,11 @@ async function main() {
       temporary: true,
     });
     const first = await waitForBoot(bootEvents, () => true, 15000);
-    Assert.deepStrictEqual(first.state, {schemaVersion: 1, intent: 'OFF'});
+    Assert.deepStrictEqual(first.state, {
+      schemaVersion: 2,
+      intent: 'OFF',
+      floorIdentity: null,
+    });
     const origin = await extensionOrigin(client);
     const firstRpc = await readCapabilities(client, origin);
     Assert.strictEqual(firstRpc.bootId, first.bootId);
@@ -522,7 +526,11 @@ async function main() {
         (event) => event.bootId !== first.bootId,
         105000,
     );
-    Assert.deepStrictEqual(second.state, {schemaVersion: 1, intent: 'OFF'});
+    Assert.deepStrictEqual(second.state, {
+      schemaVersion: 2,
+      intent: 'OFF',
+      floorIdentity: null,
+    });
     const secondRpc = await readCapabilities(client, origin);
     Assert.strictEqual(secondRpc.bootId, second.bootId);
     Assert.strictEqual(secondRpc.capabilities.result.runtimeState, 'OFF');
@@ -583,3 +591,20 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 }
+
+module.exports = Object.freeze({
+  bodyText,
+  closeServer,
+  connectMarionette,
+  delay,
+  extensionOrigin,
+  firefoxVersion,
+  listen,
+  navigate,
+  profilePreferences,
+  resolveFirefox,
+  safeRemoveTemporary,
+  unusedPort,
+  waitForExit,
+  webdriverValue,
+});
