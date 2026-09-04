@@ -18,6 +18,7 @@
       "background/common/provider-dataset.js",
       "background/common/provider-dataset-state.js",
       "background/off-state.js",
+      "background/proxy-control.js",
       "background/dataset-store.js",
       "background/provider-lookup.js",
       "background/dataset-runtime.js",

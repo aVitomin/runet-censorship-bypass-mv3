@@ -3,6 +3,7 @@
 (function startFirefoxEventPage(root) {
 
   const offState = root.rucbFirefoxOffState;
+  const proxyControlApi = root.rucbFirefoxProxyControl;
   const routing = root.rucbFirefoxRoutingAdapter;
   const datasetRuntime = root.rucbFirefoxDatasetRuntime.createRuntime({
     protectionIntended: false,
@@ -11,6 +12,13 @@
   const routingAdapter = routing.createAdapter({
     runtimeStateForRequest: datasetRuntime.getState,
     routingInputForRequest: datasetRuntime.routingInputForRequest,
+  });
+  const proxyControl = proxyControlApi.createController({
+    proxySettings: browser.proxy.settings,
+    storageArea: browser.storage.local,
+    isPrivateAccessAllowed: () =>
+      browser.extension.isAllowedIncognitoAccess(),
+    clearEphemeralState: routingAdapter.clearAllAuthorizations,
   });
   const durableIntent = offState.OFF;
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
@@ -60,6 +68,16 @@
     if (type === 'firefox.activation.apply') {
       return errorResponse('ACTIVATION_NOT_IMPLEMENTED');
     }
+    if (type === 'firefox.activation.clear') {
+      const cleared = await proxyControl.clearFloor();
+      if (!cleared.ok) {
+        return errorResponse(cleared.error.code);
+      }
+      return {
+        ok: true,
+        result: {intent: offState.OFF, status: cleared.status},
+      };
+    }
     return errorResponse('UNKNOWN_RPC');
 
   }
@@ -83,12 +101,12 @@
   );
   browser.runtime.onMessage.addListener(handleMessage);
 
-  const initialization = offState.initialize(browser.storage.local)
-      .catch(() => offState.normalizeDurableState(null))
-      .then(async (state) => {
+  const initialization = proxyControl.reconcileOffOnStartup()
+      .then(async (reconciliation) => {
         await datasetRuntime.initialize();
-        return state;
-      });
+        return reconciliation.durableState || offState.canonicalState();
+      })
+      .catch(() => offState.canonicalState());
 
   root.rucbFirefoxSkeletonRuntime = Object.freeze({
     bootId,

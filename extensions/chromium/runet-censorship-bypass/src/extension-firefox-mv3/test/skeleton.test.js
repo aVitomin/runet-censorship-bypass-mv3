@@ -15,6 +15,10 @@ const offStateSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'off-state.js'),
     'utf8',
 );
+const proxyControlSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'proxy-control.js'),
+    'utf8',
+);
 const routingContractSource = Fs.readFileSync(
     Path.resolve(sourceRoot, '..', 'extension-mv3-common', 'routing-contract.js'),
     'utf8',
@@ -83,6 +87,11 @@ function startEventPage(options = {}) {
 
   const events = [];
   const storage = options.storage || makeStorage();
+  const proxySettingsCalls = {clear: 0, get: 0, set: 0};
+  let liveProxySettings = options.liveProxySettings || {
+    levelOfControl: 'controllable_by_this_extension',
+    value: {proxyType: 'none'},
+  };
   let messageListener;
   const networkListeners = {};
   const browser = {
@@ -115,6 +124,35 @@ function startEventPage(options = {}) {
 
           events.push('proxy-listener-registered');
           networkListeners.proxy = {filter, listener};
+
+        },
+      },
+      settings: {
+        async clear() {
+
+          proxySettingsCalls.clear += 1;
+          events.push('proxy-settings-clear');
+          liveProxySettings = options.afterClearProxySettings || {
+            levelOfControl: 'controllable_by_this_extension',
+            value: {proxyType: 'none'},
+          };
+
+        },
+        async get() {
+
+          proxySettingsCalls.get += 1;
+          events.push('proxy-settings-get');
+          return liveProxySettings;
+
+        },
+        async set(update) {
+
+          proxySettingsCalls.set += 1;
+          events.push('proxy-settings-set');
+          liveProxySettings = {
+            levelOfControl: 'controlled_by_this_extension',
+            value: update.value,
+          };
 
         },
       },
@@ -176,6 +214,7 @@ function startEventPage(options = {}) {
     filename: 'provider-dataset-state.js',
   });
   Vm.runInContext(offStateSource, context, {filename: 'off-state.js'});
+  Vm.runInContext(proxyControlSource, context, {filename: 'proxy-control.js'});
   Vm.runInContext(datasetStoreSource, context, {filename: 'dataset-store.js'});
   Vm.runInContext(providerLookupSource, context, {
     filename: 'provider-lookup.js',
@@ -191,6 +230,7 @@ function startEventPage(options = {}) {
     context,
     events,
     networkListeners,
+    proxySettingsCalls,
     storage,
     async ready() {
 
@@ -219,6 +259,7 @@ describe('Firefox MV3 inert skeleton', function() {
         'background/common/provider-dataset.js',
         'background/common/provider-dataset-state.js',
         'background/off-state.js',
+        'background/proxy-control.js',
         'background/dataset-store.js',
         'background/provider-lookup.js',
         'background/dataset-runtime.js',
@@ -261,11 +302,14 @@ describe('Firefox MV3 inert skeleton', function() {
       'OFF',
       {schemaVersion: 1, intent: 'ON'},
       {schemaVersion: 2, intent: 'OFF'},
+      {schemaVersion: 2, intent: 'OFF', floorIdentity: {invalid: true}},
+      {schemaVersion: 2, intent: 'OFF', floorIdentity: null, extra: true},
       {schemaVersion: 1, intent: 'OFF', extra: true},
     ]) {
       Assert.deepStrictEqual(OffState.normalizeDurableState(value), {
-        schemaVersion: 1,
+        schemaVersion: 2,
         intent: 'OFF',
+        floorIdentity: null,
       });
     }
 
@@ -276,9 +320,17 @@ describe('Firefox MV3 inert skeleton', function() {
     const storage = makeStorage();
     const state = await OffState.initialize(storage.area);
 
-    Assert.deepStrictEqual(state, {schemaVersion: 1, intent: 'OFF'});
+    Assert.deepStrictEqual(state, {
+      schemaVersion: 2,
+      intent: 'OFF',
+      floorIdentity: null,
+    });
     Assert.deepStrictEqual(storage.writes, [{
-      [OffState.STORAGE_KEY]: {schemaVersion: 1, intent: 'OFF'},
+      [OffState.STORAGE_KEY]: {
+        schemaVersion: 2,
+        intent: 'OFF',
+        floorIdentity: null,
+      },
     }]);
 
   });
@@ -290,15 +342,35 @@ describe('Firefox MV3 inert skeleton', function() {
 
     Assert.deepStrictEqual(
         JSON.parse(JSON.stringify(storage.values[OffState.STORAGE_KEY])), {
-          schemaVersion: 1,
+          schemaVersion: 2,
           intent: 'OFF',
+          floorIdentity: null,
         });
 
   });
 
-  it('does not rewrite canonical durable OFF', async function() {
+  it('migrates schema v1 OFF to schema v2 OFF', async function() {
 
     const storage = makeStorage({schemaVersion: 1, intent: 'OFF'});
+    await OffState.initialize(storage.area);
+
+    Assert.deepStrictEqual(storage.writes, [{
+      [OffState.STORAGE_KEY]: {
+        schemaVersion: 2,
+        intent: 'OFF',
+        floorIdentity: null,
+      },
+    }]);
+
+  });
+
+  it('does not rewrite canonical schema v2 durable OFF', async function() {
+
+    const storage = makeStorage({
+      schemaVersion: 2,
+      intent: 'OFF',
+      floorIdentity: null,
+    });
     await OffState.initialize(storage.area);
 
     Assert.deepStrictEqual(storage.writes, []);
@@ -396,6 +468,20 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
+  it('exposes exact-match Clear but never acquisition through RPC', async function() {
+
+    const eventPage = startEventPage();
+    const cleared = await eventPage.send({type: 'firefox.activation.clear'});
+
+    Assert.deepStrictEqual(cleared, {
+      ok: true,
+      result: {intent: 'OFF', status: 'ALREADY_CLEAR'},
+    });
+    Assert.strictEqual(eventPage.proxySettingsCalls.set, 0);
+    Assert.strictEqual(eventPage.proxySettingsCalls.clear, 0);
+
+  });
+
   it('recreates an event page with a fresh boot and the same OFF intent', async function() {
 
     const storage = makeStorage();
@@ -410,16 +496,18 @@ describe('Firefox MV3 inert skeleton', function() {
     Assert.strictEqual(capabilities.result.runtimeState, 'OFF');
     Assert.deepStrictEqual(
         JSON.parse(JSON.stringify(storage.values[OffState.STORAGE_KEY])), {
-          schemaVersion: 1,
+          schemaVersion: 2,
           intent: 'OFF',
+          floorIdentity: null,
         });
 
   });
 
-  it('contains no ownership, remote-fetch, or Chromium-state path', function() {
+  it('contains no activation, remote-fetch, or Chromium-state path', function() {
 
     const runtimeSource = [
       offStateSource,
+      proxyControlSource,
       datasetStoreSource,
       providerLookupSource,
       datasetRuntimeSource,
@@ -427,7 +515,6 @@ describe('Firefox MV3 inert skeleton', function() {
       eventPageSource,
     ].join('\n');
     for (const forbidden of [
-      'proxy.settings',
       'XMLHttpRequest',
       'fetch(',
       'extension-chromium-mv3',
@@ -436,6 +523,11 @@ describe('Firefox MV3 inert skeleton', function() {
     ]) {
       Assert.strictEqual(runtimeSource.includes(forbidden), false, forbidden);
     }
+    Assert.strictEqual(
+        eventPageSource.includes('acquirePrevalidatedFloor('),
+        false,
+    );
+    Assert.strictEqual(eventPageSource.includes('proxy.settings.set'), false);
 
   });
 

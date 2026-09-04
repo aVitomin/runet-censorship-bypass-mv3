@@ -475,4 +475,22 @@ describe('Firefox fail-closed routing adapter', function() {
 
   });
 
+  it('clears every ephemeral authorization for OFF/Clear reconciliation',
+      function() {
+
+        const adapter = adapterForDecision(DIRECT_DECISION);
+        adapter.onProxyRequest({requestId: 'first'});
+        adapter.onProxyRequest({requestId: 'second'});
+        Assert.strictEqual(adapter.authorizationCount(), 2);
+
+        adapter.clearAllAuthorizations();
+
+        Assert.strictEqual(adapter.authorizationCount(), 0);
+        Assert.deepStrictEqual(
+            adapter.onBeforeRequest({requestId: 'first'}),
+            {cancel: true},
+        );
+
+      });
+
 });
