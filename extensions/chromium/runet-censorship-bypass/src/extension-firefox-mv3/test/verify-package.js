@@ -13,6 +13,7 @@ const EXPECTED_FILES = Object.freeze([
   'background/event-page.js',
   'background/off-state.js',
   'background/provider-lookup.js',
+  'background/proxy-auth.js',
   'background/proxy-control.js',
   'background/routing-adapter.js',
   'manifest.json',
@@ -93,6 +94,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/provider-lookup.js',
     'background/dataset-runtime.js',
     'background/routing-adapter.js',
+    'background/proxy-auth.js',
     'background/event-page.js',
   ]);
   Assert.strictEqual('service_worker' in manifest.background, false);

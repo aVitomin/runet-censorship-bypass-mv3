@@ -4,6 +4,7 @@
 
   const offState = root.rucbFirefoxOffState;
   const proxyControlApi = root.rucbFirefoxProxyControl;
+  const proxyAuthApi = root.rucbFirefoxProxyAuth;
   const routing = root.rucbFirefoxRoutingAdapter;
   const datasetRuntime = root.rucbFirefoxDatasetRuntime.createRuntime({
     protectionIntended: false,
@@ -13,12 +14,23 @@
     runtimeStateForRequest: datasetRuntime.getState,
     routingInputForRequest: datasetRuntime.routingInputForRequest,
   });
+  const proxyAuth = proxyAuthApi.createHandler({
+    routingAdapter,
+    // Production credential state and activation are deliberately absent.
+    resolveCredentials: () => null,
+  });
+  function clearEphemeralState() {
+
+    routingAdapter.clearAllAuthorizations();
+    proxyAuth.clearAllAttempts();
+
+  }
   const proxyControl = proxyControlApi.createController({
     proxySettings: browser.proxy.settings,
     storageArea: browser.storage.local,
     isPrivateAccessAllowed: () =>
       browser.extension.isAllowedIncognitoAccess(),
-    clearEphemeralState: routingAdapter.clearAllAuthorizations,
+    clearEphemeralState,
   });
   const durableIntent = offState.OFF;
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
@@ -91,12 +103,23 @@
       {urls: ['<all_urls>']},
       ['blocking'],
   );
+  browser.webRequest.onAuthRequired.addListener(
+      proxyAuth.onAuthRequired,
+      {urls: ['<all_urls>']},
+      ['blocking'],
+  );
+  function onRequestTerminal(details) {
+
+    routingAdapter.onRequestTerminal(details);
+    proxyAuth.onRequestTerminal(details);
+
+  }
   browser.webRequest.onCompleted.addListener(
-      routingAdapter.onRequestTerminal,
+      onRequestTerminal,
       {urls: ['<all_urls>']},
   );
   browser.webRequest.onErrorOccurred.addListener(
-      routingAdapter.onRequestTerminal,
+      onRequestTerminal,
       {urls: ['<all_urls>']},
   );
   browser.runtime.onMessage.addListener(handleMessage);

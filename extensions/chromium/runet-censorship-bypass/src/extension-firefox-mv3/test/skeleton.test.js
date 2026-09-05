@@ -52,6 +52,10 @@ const routingAdapterSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'routing-adapter.js'),
     'utf8',
 );
+const proxyAuthSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'proxy-auth.js'),
+    'utf8',
+);
 const eventPageSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'event-page.js'),
     'utf8',
@@ -182,6 +186,14 @@ function startEventPage(options = {}) {
 
         },
       },
+      onAuthRequired: {
+        addListener(listener, filter, extraInfoSpec) {
+
+          events.push('auth-listener-registered');
+          networkListeners.auth = {extraInfoSpec, filter, listener};
+
+        },
+      },
       onCompleted: {
         addListener(listener, filter) {
 
@@ -225,6 +237,7 @@ function startEventPage(options = {}) {
   Vm.runInContext(routingAdapterSource, context, {
     filename: 'routing-adapter.js',
   });
+  Vm.runInContext(proxyAuthSource, context, {filename: 'proxy-auth.js'});
   Vm.runInContext(eventPageSource, context, {filename: 'event-page.js'});
   return {
     context,
@@ -264,6 +277,7 @@ describe('Firefox MV3 inert skeleton', function() {
         'background/provider-lookup.js',
         'background/dataset-runtime.js',
         'background/routing-adapter.js',
+        'background/proxy-auth.js',
         'background/event-page.js',
       ],
       persistent: false,
@@ -383,9 +397,10 @@ describe('Firefox MV3 inert skeleton', function() {
         const eventPage = startEventPage();
         await eventPage.ready();
 
-        Assert.deepStrictEqual(eventPage.events.slice(0, 6), [
+        Assert.deepStrictEqual(eventPage.events.slice(0, 7), [
           'proxy-listener-registered',
           'guard-listener-registered',
+          'auth-listener-registered',
           'completed-listener-registered',
           'error-listener-registered',
           'listener-registered',
@@ -394,6 +409,12 @@ describe('Firefox MV3 inert skeleton', function() {
         Assert.deepStrictEqual(
             JSON.parse(JSON.stringify(
                 eventPage.networkListeners.before.extraInfoSpec,
+            )),
+            ['blocking'],
+        );
+        Assert.deepStrictEqual(
+            JSON.parse(JSON.stringify(
+                eventPage.networkListeners.auth.extraInfoSpec,
             )),
             ['blocking'],
         );
@@ -413,6 +434,14 @@ describe('Firefox MV3 inert skeleton', function() {
             eventPage.networkListeners.before.listener({requestId: 'off'}),
         )),
         {cancel: false},
+    );
+    Assert.strictEqual(
+        eventPage.networkListeners.auth.listener({
+          requestId: 'off',
+          isProxy: true,
+          challenger: {host: 'proxy.test', port: 8080},
+        }),
+        undefined,
     );
 
   });
@@ -512,6 +541,7 @@ describe('Firefox MV3 inert skeleton', function() {
       providerLookupSource,
       datasetRuntimeSource,
       routingAdapterSource,
+      proxyAuthSource,
       eventPageSource,
     ].join('\n');
     for (const forbidden of [

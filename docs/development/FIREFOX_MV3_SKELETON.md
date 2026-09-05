@@ -74,8 +74,33 @@ reconciliation очищает его даже при denied private access и о
 OFF. RPC `firefox.activation.clear` предоставляет только этот безопасный Clear;
 он не вызывает `proxy.settings.set`.
 
-Реальный provider dataset, updater, активация, аутентификация и health-проверки
-ещё не реализованы. Ownership primitives не делают routing доступным. Команда
+Firefox-specific proxy authentication регистрируется синхронно через
+блокирующий `webRequest.onAuthRequired`, но shipped OFF-only event page
+использует пустой in-memory credential resolver. `authRef` остаётся непрозрачной
+routing metadata: он хранится только в bounded request-scoped map и никогда не
+попадает в Firefox `ProxyInfo`. Username/password не являются полями routing
+decision, не сохраняются, не логируются, не выдаются через RPC и diagnostics.
+
+Auth handler возвращает credentials только при одновременном совпадении
+активного `requestId`, выбранного в `onBeforeRequest.details.proxyInfo` proxy и
+challenger host/port с одним validated route candidate и его `authRef`. Origin
+authentication при активной защите отменяется; в `OFF` listener возвращает no
+override и не вмешивается в постороннюю browser auth. Missing credentials,
+mismatch, malformed state и внутренний failure отменяют challenge, не открывая
+Firefox proxy-auth prompt.
+
+Firefox 154 повторно вызывает `onBeforeRequest` с тем же `requestId` после
+каждого credential response. Поэтому routing и auth используют раздельные
+budgets: непосредственно перед возвратом credentials auth разрешает ровно один
+дополнительный guard callback. На request/challenger допускается максимум два
+credential response. Terminal event, Clear и event-page recreation очищают как
+route-auth, так и attempt state. Отмена исчерпанного auth challenge завершает
+request вместо перехода к следующему proxy candidate; это известное Firefox
+availability-отличие, а не Direct fallback или утечка.
+
+Реальный provider dataset, updater, активация, production credential
+configuration/UI и health-проверки ещё не реализованы. Ownership/auth
+primitives не делают routing доступным. Команда
 активации всегда отвечает
 `ACTIVATION_NOT_IMPLEMENTED`; наличие широких сетевых разрешений не делает
 маршрутизацию доступной пользователю.

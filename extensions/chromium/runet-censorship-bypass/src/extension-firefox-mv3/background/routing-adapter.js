@@ -23,6 +23,7 @@
   });
   const MAX_AUTHORIZATIONS = 256;
   const MAX_CALLBACK_BUDGET = 256;
+  const AUTH_REF_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
   const ALLOW = Object.freeze({cancel: false});
   const CANCEL = Object.freeze({cancel: true});
   const DEFAULT_ROUTE = Object.freeze({type: 'direct'});
@@ -51,6 +52,40 @@
 
   }
 
+  function normalizeHost(value) {
+
+    return String(value || '').trim().replace(/^\[|\]$/g, '').toLowerCase();
+
+  }
+
+  function normalizeProxyType(value) {
+
+    const type = String(value || '').trim().toLowerCase();
+    if (type === 'socks5') {
+      return 'socks';
+    }
+    return Object.values(FIREFOX_TYPES).includes(type) ? type : null;
+
+  }
+
+  function validAuthRef(value) {
+
+    return value === null ||
+      (typeof value === 'string' && AUTH_REF_PATTERN.test(value));
+
+  }
+
+  function endpointKey(host, port) {
+
+    const normalizedHost = normalizeHost(host);
+    const normalizedPort = Number(port);
+    return normalizedHost && Number.isSafeInteger(normalizedPort) &&
+      normalizedPort >= 1 && normalizedPort <= 65535 ?
+      `${normalizedHost}:${normalizedPort}` :
+      null;
+
+  }
+
   function candidateToProxyInfo(candidate) {
 
     if (!candidate || typeof candidate !== 'object' ||
@@ -62,7 +97,7 @@
         !Number.isSafeInteger(candidate.port) ||
         candidate.port < 1 || candidate.port > 65535 ||
         typeof candidate.proxyDNS !== 'boolean' ||
-        candidate.authRef !== null ||
+        !validAuthRef(candidate.authRef) ||
         typeof candidate.id !== 'string' || !candidate.id) {
       return null;
     }
@@ -86,15 +121,13 @@
 
   }
 
-  function convertDecision(decision) {
+  function convertDecisionDetails(decision) {
 
     if (!decision || typeof decision !== 'object' || Array.isArray(decision)) {
       return null;
     }
     if (decision.kind === Routing.KINDS.DIRECT) {
-      // Firefox treats only top-level null as true Direct. A ProxyInfo Direct
-      // continues through browser/global proxy settings.
-      return {proxyResult: null, callbackBudget: 1};
+      return {proxyResult: null, callbackBudget: 1, authCandidates: []};
     }
     if (decision.kind === Routing.KINDS.FAIL_CLOSED) {
       return null;
@@ -107,12 +140,27 @@
       return null;
     }
     const proxies = [];
+    const authCandidates = [];
+    const authRefsByEndpoint = new Map();
     for (const candidate of decision.candidates) {
       const proxyInfo = candidateToProxyInfo(candidate);
-      if (!proxyInfo) {
+      const key = endpointKey(candidate && candidate.host, candidate && candidate.port);
+      if (!proxyInfo || !key) {
         return null;
       }
+      if (authRefsByEndpoint.has(key) &&
+          authRefsByEndpoint.get(key) !== candidate.authRef) {
+        return null;
+      }
+      authRefsByEndpoint.set(key, candidate.authRef);
       proxies.push(proxyInfo);
+      authCandidates.push(Object.freeze({
+        type: proxyInfo.type,
+        host: normalizeHost(proxyInfo.host),
+        port: proxyInfo.port,
+        endpointKey: key,
+        authRef: candidate.authRef,
+      }));
     }
     // A trailing null terminates Firefox proxy fallback and does not produce
     // another webRequest callback, so it is intentionally outside the budget.
@@ -120,6 +168,7 @@
     const converted = {
       proxyResult: proxies,
       callbackBudget: proxies.length - 1,
+      authCandidates: Object.freeze(authCandidates),
     };
     if (decision.fallback === Routing.FALLBACKS.DIRECT) {
       // Firefox arrays cannot express a true terminal Direct route. Preserve
@@ -130,6 +179,23 @@
         DEGRADATION_CODES.PROXY_DIRECT_FALLBACK_STRIPPED;
     }
     return converted;
+
+  }
+
+  function convertDecision(decision) {
+
+    const converted = convertDecisionDetails(decision);
+    if (!converted) {
+      return null;
+    }
+    const result = {
+      proxyResult: converted.proxyResult,
+      callbackBudget: converted.callbackBudget,
+    };
+    if (converted.degradationCode) {
+      result.degradationCode = converted.degradationCode;
+    }
+    return result;
 
   }
 
@@ -144,6 +210,7 @@
     const decideRoute = options.decideRoute || Routing.decideRoute;
     const routingInputForRequest = options.routingInputForRequest;
     let authorizations = options.authorizations || new Map();
+    let requestAuthContexts = options.requestAuthContexts || new Map();
 
     function currentRuntimeState() {
 
@@ -155,15 +222,16 @@
 
     }
 
-    function resetAuthorizations() {
+    function resetEphemeralState() {
 
       authorizations = new Map();
+      requestAuthContexts = new Map();
 
     }
 
     function clearAllAuthorizations() {
 
-      resetAuthorizations();
+      resetEphemeralState();
 
     }
 
@@ -171,28 +239,39 @@
 
       try {
         authorizations.delete(requestId);
+        requestAuthContexts.delete(requestId);
       } catch (_error) {
-        resetAuthorizations();
+        resetEphemeralState();
       }
 
     }
 
-    function authorize(requestId, callbackBudget) {
+    function authorize(requestId, callbackBudget, authCandidates) {
 
       if (!isRequestId(requestId) ||
           !Number.isSafeInteger(callbackBudget) || callbackBudget < 1 ||
-          callbackBudget > MAX_CALLBACK_BUDGET) {
+          callbackBudget > MAX_CALLBACK_BUDGET ||
+          !Array.isArray(authCandidates)) {
         return false;
       }
       try {
         authorizations.delete(requestId);
-        if (authorizations.size >= MAX_AUTHORIZATIONS) {
+        requestAuthContexts.delete(requestId);
+        if (authorizations.size >= MAX_AUTHORIZATIONS ||
+            requestAuthContexts.size >= MAX_AUTHORIZATIONS) {
           return false;
         }
         authorizations.set(requestId, callbackBudget);
-        return authorizations.size <= MAX_AUTHORIZATIONS;
+        if (authCandidates.length) {
+          requestAuthContexts.set(requestId, {
+            candidates: authCandidates,
+            selected: null,
+          });
+        }
+        return authorizations.size <= MAX_AUTHORIZATIONS &&
+          requestAuthContexts.size <= MAX_AUTHORIZATIONS;
       } catch (_error) {
-        resetAuthorizations();
+        resetEphemeralState();
         return false;
       }
 
@@ -212,8 +291,12 @@
           return DEFAULT_ROUTE;
         }
         const decision = decideRoute(routingInputForRequest(details));
-        const converted = convertDecision(decision);
-        if (!converted || !authorize(requestId, converted.callbackBudget)) {
+        const converted = convertDecisionDetails(decision);
+        if (!converted || !authorize(
+            requestId,
+            converted.callbackBudget,
+            converted.authCandidates,
+        )) {
           clearAuthorization(requestId);
           return DEFAULT_ROUTE;
         }
@@ -222,6 +305,27 @@
         clearAuthorization(requestId);
         return DEFAULT_ROUTE;
       }
+
+    }
+
+    function observeSelectedProxy(details) {
+
+      const requestId = details && details.requestId;
+      const context = requestAuthContexts.get(requestId);
+      if (!context) {
+        return;
+      }
+      const proxyInfo = details && details.proxyInfo;
+      const key = endpointKey(
+          proxyInfo && proxyInfo.host,
+          proxyInfo && proxyInfo.port,
+      );
+      const type = normalizeProxyType(proxyInfo && proxyInfo.type);
+      context.selected = key && type ?
+        context.candidates.find((candidate) =>
+          candidate.endpointKey === key && candidate.type === type,
+        ) || null :
+        null;
 
     }
 
@@ -236,6 +340,7 @@
           return CANCEL;
         }
         const requestId = details.requestId;
+        observeSelectedProxy(details);
         const remaining = authorizations.get(requestId);
         if (!Number.isSafeInteger(remaining) || remaining < 1 ||
             remaining > MAX_CALLBACK_BUDGET) {
@@ -249,8 +354,64 @@
         }
         return ALLOW;
       } catch (_error) {
-        resetAuthorizations();
+        resetEphemeralState();
         return CANCEL;
+      }
+
+    }
+
+    function authenticationForChallenge(details) {
+
+      try {
+        if (currentRuntimeState() !== STATES.READY ||
+            !details || details.isProxy !== true ||
+            !isRequestId(details.requestId)) {
+          return null;
+        }
+        const context = requestAuthContexts.get(details.requestId);
+        const selected = context && context.selected;
+        const challenger = details.challenger;
+        const key = endpointKey(
+            challenger && challenger.host,
+            challenger && challenger.port,
+        );
+        if (!selected || !Array.isArray(context.candidates) ||
+            !context.candidates.includes(selected) ||
+            !validAuthRef(selected.authRef) || selected.authRef === null ||
+            typeof selected.endpointKey !== 'string' ||
+            key !== selected.endpointKey) {
+          return null;
+        }
+        return Object.freeze({
+          authRef: selected.authRef,
+          endpointKey: selected.endpointKey,
+        });
+      } catch (_error) {
+        resetEphemeralState();
+        return null;
+      }
+
+    }
+
+    function authorizeAuthenticationRetry(details, expectedAuthRef) {
+
+      try {
+        const authentication = authenticationForChallenge(details);
+        if (!authentication || authentication.authRef !== expectedAuthRef) {
+          return false;
+        }
+        const current = authorizations.get(details.requestId);
+        const remaining = current === undefined ? 0 : current;
+        if (!Number.isSafeInteger(remaining) || remaining < 0 ||
+            remaining >= MAX_CALLBACK_BUDGET) {
+          resetEphemeralState();
+          return false;
+        }
+        authorizations.set(details.requestId, remaining + 1);
+        return true;
+      } catch (_error) {
+        resetEphemeralState();
+        return false;
       }
 
     }
@@ -266,14 +427,28 @@
       try {
         return authorizations.size;
       } catch (_error) {
-        resetAuthorizations();
+        resetEphemeralState();
+        return 0;
+      }
+
+    }
+
+    function authContextCount() {
+
+      try {
+        return requestAuthContexts.size;
+      } catch (_error) {
+        resetEphemeralState();
         return 0;
       }
 
     }
 
     const api = {
+      authenticationForChallenge,
+      authorizeAuthenticationRetry,
       authorizationCount,
+      authContextCount,
       clearAllAuthorizations,
       currentRuntimeState,
       onBeforeRequest,
@@ -298,6 +473,7 @@
     candidateToProxyInfo,
     convertDecision,
     createAdapter,
+    validAuthRef,
   });
 
 });

@@ -41,6 +41,7 @@ function adapterForDecision(decision, options = {}) {
     decideRoute: options.decideRoute || ((value) => value),
     routingInputForRequest: options.routingInputForRequest || (() => decision),
     authorizations: options.authorizations,
+    requestAuthContexts: options.requestAuthContexts,
   });
 
 }
@@ -282,12 +283,151 @@ describe('Firefox fail-closed routing adapter', function() {
 
   });
 
-  it('fails closed before authorization for invalid or auth-dependent candidates', function() {
+  it('strips opaque authRef while preserving a valid proxy candidate', function() {
+
+    const authenticated = candidate(
+        'authenticated',
+        'HTTPS',
+        'proxy.test',
+        443,
+        {authRef: 'fixture-auth'},
+    );
+    const proxyInfo = Adapter.candidateToProxyInfo(authenticated);
+
+    Assert.deepStrictEqual(proxyInfo, {
+      type: 'https',
+      host: 'proxy.test',
+      port: 443,
+    });
+    Assert.strictEqual(
+        Object.prototype.hasOwnProperty.call(proxyInfo, 'authRef'),
+        false,
+    );
+
+  });
+
+  it('tracks the selected authenticated proxy by request and challenger',
+      function() {
+
+        const adapter = adapterForDecision(proxyDecision([
+          candidate('auth', 'HTTP', 'Proxy.Test', 8080, {
+            authRef: 'fixture-auth',
+          }),
+        ]));
+        const challenge = {
+          requestId: 'authenticated',
+          isProxy: true,
+          challenger: {host: 'proxy.test', port: 8080},
+        };
+
+        adapter.onProxyRequest({requestId: 'authenticated'});
+        Assert.strictEqual(adapter.authContextCount(), 1);
+        Assert.deepStrictEqual(adapter.onBeforeRequest({
+          requestId: 'authenticated',
+          proxyInfo: {type: 'http', host: 'PROXY.TEST', port: 8080},
+        }), {cancel: false});
+        Assert.deepStrictEqual(adapter.authenticationForChallenge(challenge), {
+          authRef: 'fixture-auth',
+          endpointKey: 'proxy.test:8080',
+        });
+        Assert.strictEqual(
+            adapter.authorizeAuthenticationRetry(challenge, 'fixture-auth'),
+            true,
+        );
+        Assert.deepStrictEqual(adapter.onBeforeRequest({
+          requestId: 'authenticated',
+          proxyInfo: {type: 'http', host: 'proxy.test', port: 8080},
+        }), {cancel: false});
+        Assert.strictEqual(adapter.authorizationCount(), 0);
+        Assert.strictEqual(adapter.authContextCount(), 1);
+
+      });
+
+  it('does not extend a callback budget for a mismatched endpoint or request',
+      function() {
+
+        const adapter = adapterForDecision(proxyDecision([
+          candidate('auth', 'HTTP', 'proxy.test', 8080, {
+            authRef: 'fixture-auth',
+          }),
+        ]));
+        adapter.onProxyRequest({requestId: 'known'});
+        adapter.onBeforeRequest({
+          requestId: 'known',
+          proxyInfo: {type: 'http', host: 'proxy.test', port: 8080},
+        });
+
+        for (const details of [
+          {
+            requestId: 'unknown',
+            isProxy: true,
+            challenger: {host: 'proxy.test', port: 8080},
+          },
+          {
+            requestId: 'known',
+            isProxy: true,
+            challenger: {host: 'proxy.test', port: 8081},
+          },
+          {
+            requestId: 'known',
+            isProxy: false,
+            challenger: {host: 'proxy.test', port: 8080},
+          },
+        ]) {
+          Assert.strictEqual(
+              adapter.authorizeAuthenticationRetry(details, 'fixture-auth'),
+              false,
+          );
+        }
+        Assert.strictEqual(adapter.authorizationCount(), 0);
+
+      });
+
+  it('rejects ambiguous authRefs for the same proxy endpoint', function() {
+
+    const decision = proxyDecision([
+      candidate('first', 'HTTP', 'proxy.test', 8080, {authRef: 'first'}),
+      candidate('second', 'HTTPS', 'PROXY.TEST', 8080, {authRef: 'second'}),
+    ]);
+    const adapter = adapterForDecision(decision);
+
+    Assert.strictEqual(Adapter.convertDecision(decision), null);
+    Assert.deepStrictEqual(adapter.onProxyRequest({requestId: 'ambiguous'}), {
+      type: 'direct',
+    });
+    Assert.strictEqual(adapter.authorizationCount(), 0);
+    Assert.strictEqual(adapter.authContextCount(), 0);
+
+  });
+
+  it('fails closed for malformed injected route-auth state', function() {
+
+    const requestAuthContexts = new Map([['malformed', {
+      candidates: [],
+      selected: {
+        authRef: 'fixture-auth',
+        endpointKey: 'proxy.test:8080',
+      },
+    }]]);
+    const adapter = adapterForDecision(null, {requestAuthContexts});
+
+    Assert.strictEqual(adapter.authenticationForChallenge({
+      requestId: 'malformed',
+      isProxy: true,
+      challenger: {host: 'proxy.test', port: 8080},
+    }), null);
+    Assert.strictEqual(adapter.authorizationCount(), 0);
+
+  });
+
+  it('fails closed before authorization for invalid candidates', function() {
 
     for (const invalid of [
       candidate('bad-host', 'HTTP', 'https://proxy.test', 8080),
       candidate('bad-port', 'HTTP', 'proxy.test', 0),
-      candidate('needs-auth', 'HTTPS', 'proxy.test', 443, {authRef: 'secret'}),
+      candidate('bad-auth-ref', 'HTTPS', 'proxy.test', 443, {
+        authRef: 'not valid',
+      }),
       Object.assign(
           candidate('credential', 'HTTP', 'proxy.test', 8080),
           {password: 'x'},
@@ -304,6 +444,7 @@ describe('Firefox fail-closed routing adapter', function() {
         cancel: true,
       });
       Assert.strictEqual(adapter.authorizationCount(), 0);
+      Assert.strictEqual(adapter.authContextCount(), 0);
     }
 
   });
@@ -486,6 +627,7 @@ describe('Firefox fail-closed routing adapter', function() {
         adapter.clearAllAuthorizations();
 
         Assert.strictEqual(adapter.authorizationCount(), 0);
+        Assert.strictEqual(adapter.authContextCount(), 0);
         Assert.deepStrictEqual(
             adapter.onBeforeRequest({requestId: 'first'}),
             {cancel: true},
