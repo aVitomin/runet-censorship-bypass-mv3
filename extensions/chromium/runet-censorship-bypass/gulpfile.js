@@ -93,6 +93,7 @@ const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/background/dataset-runtime.js',
   './src/extension-firefox-mv3/background/routing-adapter.js',
   './src/extension-firefox-mv3/background/proxy-auth.js',
+  './src/extension-firefox-mv3/background/activation-controller.js',
   './src/extension-firefox-mv3/background/event-page.js',
 ];
 const firefoxMv3CommonSrc = [

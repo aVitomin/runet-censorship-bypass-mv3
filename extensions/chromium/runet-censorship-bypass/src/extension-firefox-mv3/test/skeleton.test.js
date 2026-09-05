@@ -56,6 +56,10 @@ const proxyAuthSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'proxy-auth.js'),
     'utf8',
 );
+const activationControllerSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'activation-controller.js'),
+    'utf8',
+);
 const eventPageSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'event-page.js'),
     'utf8',
@@ -238,6 +242,9 @@ function startEventPage(options = {}) {
     filename: 'routing-adapter.js',
   });
   Vm.runInContext(proxyAuthSource, context, {filename: 'proxy-auth.js'});
+  Vm.runInContext(activationControllerSource, context, {
+    filename: 'activation-controller.js',
+  });
   Vm.runInContext(eventPageSource, context, {filename: 'event-page.js'});
   return {
     context,
@@ -278,6 +285,7 @@ describe('Firefox MV3 inert skeleton', function() {
         'background/dataset-runtime.js',
         'background/routing-adapter.js',
         'background/proxy-auth.js',
+        'background/activation-controller.js',
         'background/event-page.js',
       ],
       persistent: false,
@@ -532,33 +540,36 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
-  it('contains no activation, remote-fetch, or Chromium-state path', function() {
+  it('contains no production activation call or remote execution path',
+      function() {
 
-    const runtimeSource = [
-      offStateSource,
-      proxyControlSource,
-      datasetStoreSource,
-      providerLookupSource,
-      datasetRuntimeSource,
-      routingAdapterSource,
-      proxyAuthSource,
-      eventPageSource,
-    ].join('\n');
-    for (const forbidden of [
-      'XMLHttpRequest',
-      'fetch(',
-      'extension-chromium-mv3',
-      'eval(',
-      'Function(',
-    ]) {
-      Assert.strictEqual(runtimeSource.includes(forbidden), false, forbidden);
-    }
-    Assert.strictEqual(
-        eventPageSource.includes('acquirePrevalidatedFloor('),
-        false,
-    );
-    Assert.strictEqual(eventPageSource.includes('proxy.settings.set'), false);
+        const runtimeSource = [
+          offStateSource,
+          proxyControlSource,
+          datasetStoreSource,
+          providerLookupSource,
+          datasetRuntimeSource,
+          routingAdapterSource,
+          proxyAuthSource,
+          activationControllerSource,
+          eventPageSource,
+        ].join('\n');
+        for (const forbidden of [
+          'XMLHttpRequest',
+          'fetch(',
+          'extension-chromium-mv3',
+          'eval(',
+          'Function(',
+        ]) {
+          Assert.strictEqual(runtimeSource.includes(forbidden), false, forbidden);
+        }
+        Assert.strictEqual(
+            eventPageSource.includes('acquirePrevalidatedFloor('),
+            false,
+        );
+        Assert.strictEqual(eventPageSource.includes('activatePrepared('), false);
+        Assert.strictEqual(eventPageSource.includes('proxy.settings.set'), false);
 
-  });
+      });
 
 });

@@ -6,18 +6,18 @@
   const proxyControlApi = root.rucbFirefoxProxyControl;
   const proxyAuthApi = root.rucbFirefoxProxyAuth;
   const routing = root.rucbFirefoxRoutingAdapter;
-  const datasetRuntime = root.rucbFirefoxDatasetRuntime.createRuntime({
-    protectionIntended: false,
-    providerKey: 'anticensority',
-  });
+  const activationApi = root.rucbFirefoxActivationController;
+  let activationController = null;
   const routingAdapter = routing.createAdapter({
-    runtimeStateForRequest: datasetRuntime.getState,
-    routingInputForRequest: datasetRuntime.routingInputForRequest,
+    runtimeStateForRequest: () => activationController ?
+      activationController.currentRuntimeState() : routing.STATES.OFF,
+    routingInputForRequest: (details) =>
+      activationController.routingInputForRequest(details),
   });
   const proxyAuth = proxyAuthApi.createHandler({
     routingAdapter,
-    // Production credential state and activation are deliberately absent.
-    resolveCredentials: () => null,
+    resolveCredentials: (authRef) => activationController ?
+      activationController.resolveCredentials(authRef) : null,
   });
   function clearEphemeralState() {
 
@@ -31,6 +31,11 @@
     isPrivateAccessAllowed: () =>
       browser.extension.isAllowedIncognitoAccess(),
     clearEphemeralState,
+  });
+  activationController = activationApi.createController({
+    proxyControl,
+    routingAdapter,
+    proxyAuth,
   });
   const durableIntent = offState.OFF;
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
@@ -67,7 +72,7 @@
           browser: 'FIREFOX',
           manifestVersion: manifest.manifest_version,
           runtimeModel: 'BACKGROUND_EVENT_PAGE',
-          runtimeState: routingAdapter.runtimeState,
+          runtimeState: activationController.currentRuntimeState(),
           durableIntent,
           privateWindowAccess: await readPrivateWindowAccess(),
           routingImplemented: true,
@@ -81,7 +86,7 @@
       return errorResponse('ACTIVATION_NOT_IMPLEMENTED');
     }
     if (type === 'firefox.activation.clear') {
-      const cleared = await proxyControl.clearFloor();
+      const cleared = await activationController.clear();
       if (!cleared.ok) {
         return errorResponse(cleared.error.code);
       }
@@ -125,10 +130,8 @@
   browser.runtime.onMessage.addListener(handleMessage);
 
   const initialization = proxyControl.reconcileOffOnStartup()
-      .then(async (reconciliation) => {
-        await datasetRuntime.initialize();
-        return reconciliation.durableState || offState.canonicalState();
-      })
+      .then((reconciliation) =>
+        reconciliation.durableState || offState.canonicalState())
       .catch(() => offState.canonicalState());
 
   root.rucbFirefoxSkeletonRuntime = Object.freeze({

@@ -24,6 +24,7 @@
       "background/dataset-runtime.js",
       "background/routing-adapter.js",
       "background/proxy-auth.js",
+      "background/activation-controller.js",
       "background/event-page.js"
     ],
     "persistent": false

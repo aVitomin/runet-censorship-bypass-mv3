@@ -105,6 +105,31 @@ primitives не делают routing доступным. Команда
 `ACTIVATION_NOT_IMPLEMENTED`; наличие широких сетевых разрешений не делает
 маршрутизацию доступной пользователю.
 
+В package присутствует inert activation controller для отдельного тестирования
+полностью подготовленной synthetic session. Его production event page создаёт,
+но не вызывает: RPC, startup и storage не имеют пути к `activatePrepared`, а
+capability `activationSupported` остаётся `false`. Prepared input имеет строгую
+форму и содержит только exact prevalidated floor identity, подтверждение
+внешней проверки порта, provider key, dataset store, synchronous routing-input
+factory и synchronous in-memory credential resolver. Credentials не
+сохраняются.
+
+Транзакция сначала полностью проверяет dataset и строит lookup index, затем
+требует `READY`, приобретает и подтверждает exact fail-closed floor, очищает
+старое request/auth ephemeral state и только последним синхронным присваиванием
+публикует immutable active session. До floor acquisition controller остаётся
+`OFF`; между acquisition и publication обычный listener не задаёт route, а
+global floor закрывает сетевой путь. Clear сначала скрывает session и очищает
+request/auth state, только затем освобождает exact floor. Ошибка после
+acquisition запускает тот же exact-match rollback; если release невозможен,
+session остаётся `OFF`, floor и durable cleanup identity остаются fail-closed
+для следующего startup reconciliation.
+
+Активная prepared session намеренно только ephemeral. После уничтожения event
+page новая production instance всегда начинает с `OFF`, не восстанавливает
+session или credentials и очищает сохранённый exact floor через существующий
+OFF reconciliation. Durable `ON` всё ещё не существует и не принимается.
+
 Для каркаса используется development-only Gecko ID
 `firefox-mv3-skeleton@runet-censorship-bypass.invalid`. Production Gecko/AMO ID
 и возможная связь с legacy-идентичностями пока не определены; этот ID нельзя
