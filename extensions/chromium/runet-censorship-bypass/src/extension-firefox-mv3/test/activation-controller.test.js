@@ -4,6 +4,7 @@ const Assert = require('node:assert');
 const Activation = require('../background/activation-controller');
 const DatasetRuntime = require('../background/dataset-runtime');
 const DatasetStore = require('../background/dataset-store');
+const OffState = require('../background/off-state');
 const ProxyAuth = require('../background/proxy-auth');
 const ProxyControl = require('../background/proxy-control');
 const Routing = require('../../extension-mv3-common/routing-contract');
@@ -72,13 +73,25 @@ function baseInputForRequest(proxyCandidate = candidate()) {
 
 function prepared(datasetStore, overrides = {}) {
 
+  const envelope = Helpers.artifact().envelope;
   return Object.assign({
+    datasetIdentity: {
+      providerKey: envelope.providerKey,
+      datasetVersion: envelope.datasetVersion,
+      artifactSha256: envelope.artifactSha256,
+    },
     datasetStore,
     floorIdentity: floor(),
     portPrevalidated: true,
     providerKey: Helpers.PROVIDER_KEY,
     resolveCredentials: () => null,
     routingBaseInputForRequest: baseInputForRequest(),
+    routingDescriptor: {
+      schemaVersion: 1,
+      configurationKey: 'synthetic-routing',
+      configurationVersion: '1',
+      configurationSha256: 'a'.repeat(64),
+    },
   }, overrides);
 
 }
@@ -86,26 +99,68 @@ function prepared(datasetStore, overrides = {}) {
 function createHarness(options = {}) {
 
   const events = [];
-  const floorControl = options.proxyControl || {
+  const values = {
+    [OffState.STORAGE_KEY]: options.durableState ||
+      OffState.canonicalOffState(),
+  };
+  const storageArea = options.storageArea || {
+    async get(key) {
+
+      return {[key]: values[key]};
+
+    },
+    async set(update) {
+
+      Object.assign(values, JSON.parse(JSON.stringify(update)));
+
+    },
+  };
+  const floorControl = Object.assign({
     async acquirePrevalidatedFloor(request) {
 
       events.push(['floor-acquire', request]);
+      const durableState = await OffState.writeOffState(
+          storageArea,
+          request.floorIdentity,
+      );
       return options.acquireResult || {
         ok: true,
         status: ProxyControl.RESULTS.ACQUIRED,
+        durableState,
       };
 
     },
     async clearFloor() {
 
       events.push(['floor-clear']);
+      const durableState = await OffState.writeOffState(storageArea, null);
       return options.clearResult || {
         ok: true,
         status: ProxyControl.RESULTS.CLEARED,
+        durableState,
       };
 
     },
-  };
+    async checkPrivateAccess() {
+
+      return {ok: true};
+
+    },
+    async inspectOwnedFloor() {
+
+      return {ok: true, status: ProxyControl.RESULTS.OWNED};
+
+    },
+    async reconcileOffOnStartup() {
+
+      return {
+        ok: true,
+        status: ProxyControl.RESULTS.ALREADY_CLEAR,
+        durableState: await OffState.writeOffState(storageArea, null),
+      };
+
+    },
+  }, options.proxyControl || {});
   let controller = null;
   const routingAdapter = RoutingAdapter.createAdapter({
     runtimeStateForRequest: () => controller ?
@@ -122,10 +177,24 @@ function createHarness(options = {}) {
     proxyControl: floorControl,
     routingAdapter,
     proxyAuth,
+    storageArea,
     createDatasetRuntime: options.createDatasetRuntime,
     afterFloorAcquired: options.afterFloorAcquired,
+    afterDurableOnPersisted: options.afterDurableOnPersisted,
+    recoveryFactory: options.recoveryFactory,
   });
-  return {controller, events, floorControl, proxyAuth, routingAdapter};
+  const ready = options.autoInitialize === false ? null :
+    controller.initializeFromDurable();
+  return {
+    controller,
+    events,
+    floorControl,
+    proxyAuth,
+    ready,
+    routingAdapter,
+    storageArea,
+    values,
+  };
 
 }
 
@@ -174,6 +243,9 @@ describe('Firefox inert activation transaction', function() {
     Assert.deepStrictEqual(harness.controller.snapshot(), {
       runtimeState: DatasetRuntime.STATES.OFF,
       active: false,
+      durableIntent: OffState.OFF,
+      recoveryStatus: Activation.RECOVERY_STATUS.OFF,
+      failureCode: null,
     });
 
   });
@@ -215,6 +287,7 @@ describe('Firefox inert activation transaction', function() {
           },
         });
 
+        await harness.ready;
         Assert.strictEqual(harness.controller.currentRuntimeState(), 'OFF');
         const result = await harness.controller.activatePrepared(
             prepared(wrappedStore),
@@ -231,6 +304,9 @@ describe('Firefox inert activation transaction', function() {
         Assert.deepStrictEqual(harness.controller.snapshot(), {
           runtimeState: DatasetRuntime.STATES.READY,
           active: true,
+          durableIntent: OffState.ON,
+          recoveryStatus: Activation.RECOVERY_STATUS.ACTIVE,
+          failureCode: null,
         });
 
       });
@@ -308,7 +384,7 @@ describe('Firefox inert activation transaction', function() {
 
       });
 
-  it('keeps listeners OFF while paused after the floor is acquired', async function() {
+  it('fails closed while paused after the floor is acquired', async function() {
 
     const store = await verifiedStore();
     let releasePause;
@@ -329,14 +405,14 @@ describe('Firefox inert activation transaction', function() {
     const activation = harness.controller.activatePrepared(prepared(store));
     await floorReached;
 
-    Assert.strictEqual(harness.controller.currentRuntimeState(), 'OFF');
-    Assert.strictEqual(
+    Assert.strictEqual(harness.controller.currentRuntimeState(), 'INITIALIZING');
+    Assert.deepStrictEqual(
         harness.routingAdapter.onProxyRequest({requestId: 'paused'}),
-        undefined,
+        {type: 'direct'},
     );
     Assert.deepStrictEqual(
         harness.routingAdapter.onBeforeRequest({requestId: 'paused'}),
-        {cancel: false},
+        {cancel: true},
     );
 
     releasePause();
@@ -395,7 +471,7 @@ describe('Firefox inert activation transaction', function() {
           cause: {code: Activation.ERRORS.ACTIVATION_INTERRUPTED},
           floorRetained: true,
         });
-        Assert.strictEqual(harness.controller.currentRuntimeState(), 'OFF');
+        Assert.strictEqual(harness.controller.currentRuntimeState(), 'FAILED');
 
       });
 
@@ -437,7 +513,7 @@ describe('Firefox inert activation transaction', function() {
           ok: true,
           status: ProxyControl.RESULTS.CLEARED,
         });
-        Assert.deepStrictEqual(observations, ['OFF', 0, 0]);
+        Assert.deepStrictEqual(observations, ['INITIALIZING', 0, 0]);
         Assert.strictEqual(harness.routingAdapter.authorizationCount(), 0);
         Assert.strictEqual(harness.controller.currentRuntimeState(), 'OFF');
 
@@ -484,6 +560,25 @@ describe('Firefox inert activation transaction', function() {
               return {ok: true, status: ProxyControl.RESULTS.ALREADY_CLEAR};
 
             },
+            async checkPrivateAccess() {
+
+              return {ok: true};
+
+            },
+            async inspectOwnedFloor() {
+
+              return {ok: true};
+
+            },
+            async reconcileOffOnStartup() {
+
+              return {
+                ok: true,
+                status: ProxyControl.RESULTS.ALREADY_CLEAR,
+                durableState: OffState.canonicalOffState(),
+              };
+
+            },
           },
           routingAdapter: {
             clearAllAuthorizations() {
@@ -499,13 +594,22 @@ describe('Firefox inert activation transaction', function() {
 
             },
           },
+          storageArea: {
+            async get(key) {
+
+              return {[key]: OffState.canonicalOffState()};
+
+            },
+            async set() {},
+          },
         });
 
+        await controller.initializeFromDurable();
         Assert.deepStrictEqual(await controller.clear(), {
           ok: false,
           error: {code: Activation.ERRORS.EPHEMERAL_CLEAR_FAILED},
         });
-        Assert.strictEqual(authClears, 1);
+        Assert.strictEqual(authClears, 2);
         Assert.strictEqual(floorClears, 1);
         Assert.strictEqual(controller.currentRuntimeState(), 'OFF');
 
@@ -628,6 +732,7 @@ describe('Firefox inert activation transaction', function() {
         });
         const recreated = createHarness();
 
+        await recreated.ready;
         Assert.strictEqual(recreated.controller.currentRuntimeState(), 'OFF');
         Assert.strictEqual(recreated.routingAdapter.authorizationCount(), 0);
         Assert.strictEqual(recreated.routingAdapter.authContextCount(), 0);

@@ -119,12 +119,18 @@ function makeInstrumentedExtension(collectorPort) {
     'browser.alarms.onAlarm.addListener(() => {});',
     'browser.alarms.create(\'lifecycle-wake\', {delayInMinutes: 1});',
     '(async () => {',
-    '  const state = await globalThis.rucbFirefoxSkeletonRuntime.whenReady();',
+    '  const initialization = await',
+    '    globalThis.rucbFirefoxSkeletonRuntime.whenReady();',
+    '  const stored = await browser.storage.local.get(',
+    '    globalThis.rucbFirefoxOffState.STORAGE_KEY,',
+    '  );',
+    '  const state = stored[globalThis.rucbFirefoxOffState.STORAGE_KEY];',
     `  await fetch(${JSON.stringify(collectorUrl)}, {`,
     '    method: \'POST\',',
     '    headers: {\'content-type\': \'application/json\'},',
     '    body: JSON.stringify({',
     '      bootId: globalThis.rucbFirefoxSkeletonRuntime.bootId,',
+    '      initialization,',
     '      state,',
     '    }),',
     '  });',
@@ -493,6 +499,7 @@ async function main() {
       path: packageRoot,
       temporary: true,
     });
+    await delay(500);
     await navigate(
         client,
         'http://manual-proxy-check.invalid/after-production-install',
@@ -508,7 +515,7 @@ async function main() {
     });
     const first = await waitForBoot(bootEvents, () => true, 15000);
     Assert.deepStrictEqual(first.state, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       intent: 'OFF',
       floorIdentity: null,
     });
@@ -527,7 +534,7 @@ async function main() {
         105000,
     );
     Assert.deepStrictEqual(second.state, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       intent: 'OFF',
       floorIdentity: null,
     });
