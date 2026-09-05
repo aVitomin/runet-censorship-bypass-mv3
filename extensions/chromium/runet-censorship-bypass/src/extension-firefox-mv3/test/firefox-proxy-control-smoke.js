@@ -128,9 +128,7 @@ function makeInstrumentedExtension() {
     '      portPrevalidated: true,',
     '    });',
     '  } else if (action === \'clear-rpc\') {',
-    '    result = await browser.runtime.sendMessage({',
-    '      type: \'firefox.activation.clear\',',
-    '    });',
+    '    result = await controller.clearFloor();',
     '  } else if (action === \'set-unrelated\') {',
     '    await proxySettings.set({value: {',
     '      proxyType: \'manual\',',
@@ -337,7 +335,11 @@ async function expectManualProxy(client, handle, targetUrl, proxyRequests,
 
   const beforeOrigin = originRequests.length;
   await client.command('WebDriver:SwitchToWindow', {handle});
-  await Smoke.navigate(client, `${targetUrl}/${phase}?nonce=${Date.now()}`);
+  try {
+    await Smoke.navigate(client, `${targetUrl}/${phase}?nonce=${Date.now()}`);
+  } catch (error) {
+    throw new Error(`${phase}: ${error && error.message ? error.message : error}`);
+  }
   Assert.strictEqual(await Smoke.bodyText(client), MANUAL_PROXY_MARKER);
   Assert.ok(
       proxyRequests.some((url) => url.includes(`/${phase}?`)),
@@ -454,6 +456,7 @@ async function main() {
       path: packageRoot,
       temporary: true,
     });
+    await Smoke.delay(500);
     await expectManualProxy(
         client, handle, targetUrl, proxyRequests, originRequests,
         'production-off',
@@ -473,11 +476,11 @@ async function main() {
     await setAddonEnabled(client, handle, true);
     let status = await control(client, handle, extension, 'status');
     Assert.deepStrictEqual(status.result.durable, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       intent: 'OFF',
       floorIdentity: null,
     });
-    checked('schema v1 OFF migrates to schema v2 OFF');
+    checked('schema v1 OFF migrates to schema v3 OFF');
 
     const denied = await control(client, handle, extension, 'acquire', {port});
     Assert.strictEqual(denied.result.error.code, 'PRIVATE_ACCESS_REQUIRED');
@@ -528,7 +531,7 @@ async function main() {
     const restoredClear = await control(
         client, handle, extension, 'clear-rpc', {port},
     );
-    Assert.strictEqual(restoredClear.result.result.status, 'CLEARED');
+    Assert.strictEqual(restoredClear.result.status, 'CLEARED');
     await expectManualProxy(
         client, handle, targetUrl, proxyRequests, originRequests,
         'exact-clear',
@@ -544,9 +547,7 @@ async function main() {
         client, handle, extension, 'clear-rpc', {port},
     );
     Assert.ok(
-        ['CLEARED', 'ALREADY_CLEAR'].includes(
-            revokedClear.result.result.status,
-        ),
+        ['CLEARED', 'ALREADY_CLEAR'].includes(revokedClear.result.status),
         JSON.stringify(revokedClear),
     );
     await expectManualProxy(
@@ -570,7 +571,7 @@ async function main() {
     await setAddonEnabled(client, handle, true);
     status = await control(client, handle, extension, 'status');
     Assert.deepStrictEqual(status.result.durable, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       intent: 'OFF',
       floorIdentity: null,
     });
