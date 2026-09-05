@@ -41,7 +41,7 @@ describe('Firefox MV3 package verifier', function() {
 
   });
 
-  it('accepts only the exact OFF-only dataset-capable routing package',
+  it('accepts only the exact OFF-only activation-capable package',
       function() {
 
         packageRoot = makePackage();

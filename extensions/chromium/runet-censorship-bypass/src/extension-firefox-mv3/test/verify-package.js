@@ -5,6 +5,7 @@ const Fs = require('node:fs');
 const Path = require('node:path');
 
 const EXPECTED_FILES = Object.freeze([
+  'background/activation-controller.js',
   'background/common/provider-dataset-state.js',
   'background/common/provider-dataset.js',
   'background/common/routing-contract.js',
@@ -95,6 +96,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/dataset-runtime.js',
     'background/routing-adapter.js',
     'background/proxy-auth.js',
+    'background/activation-controller.js',
     'background/event-page.js',
   ]);
   Assert.strictEqual('service_worker' in manifest.background, false);
@@ -113,6 +115,7 @@ function verifyPackage(packageRoot, sourceRoot) {
   );
   Assert.strictEqual(eventPageText.includes('proxy.settings.set'), false);
   Assert.strictEqual(eventPageText.includes('acquirePrevalidatedFloor('), false);
+  Assert.strictEqual(eventPageText.includes('activatePrepared('), false);
   Assert.strictEqual(
       eventPageText.includes('type === \'firefox.activation.apply\''),
       true,
