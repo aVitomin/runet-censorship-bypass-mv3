@@ -20,6 +20,7 @@
         ACQUIRED: 'ACQUIRED',
         ALREADY_CLEAR: 'ALREADY_CLEAR',
         CLEARED: 'CLEARED',
+        OWNED: 'OWNED',
       });
       const ERRORS = Object.freeze({
         EPHEMERAL_CLEAR_FAILED: 'EPHEMERAL_CLEAR_FAILED',
@@ -193,6 +194,43 @@
 
         }
 
+        async function checkPrivateAccessNow() {
+
+          if (typeof isPrivateAccessAllowed !== 'function') {
+            return errorResult(ERRORS.PRIVATE_ACCESS_CHECK_FAILED);
+          }
+          try {
+            if (await isPrivateAccessAllowed() !== true) {
+              return errorResult(ERRORS.PRIVATE_ACCESS_REQUIRED);
+            }
+          } catch (_error) {
+            return errorResult(ERRORS.PRIVATE_ACCESS_CHECK_FAILED);
+          }
+          return {ok: true};
+
+        }
+
+        async function inspectOwnedFloorNow(value) {
+
+          const floorIdentity = canonicalizeFloorIdentity(value);
+          if (!floorIdentity) {
+            return errorResult(ERRORS.INVALID_FLOOR_IDENTITY);
+          }
+          const liveResult = await readLiveSettings();
+          if (!liveResult.ok) {
+            return liveResult;
+          }
+          if (!isExactOwnedFloor(liveResult.live, floorIdentity)) {
+            return errorResult(ERRORS.OWNERSHIP_MISMATCH);
+          }
+          return {
+            ok: true,
+            status: RESULTS.OWNED,
+            floorIdentity,
+          };
+
+        }
+
         async function acquirePrevalidatedFloorNow(request) {
 
           const floorIdentity = canonicalizeFloorIdentity(
@@ -204,17 +242,9 @@
           if (!request || request.portPrevalidated !== true) {
             return errorResult(ERRORS.PORT_PREVALIDATION_REQUIRED);
           }
-          if (typeof isPrivateAccessAllowed !== 'function') {
-            return errorResult(ERRORS.PRIVATE_ACCESS_CHECK_FAILED);
-          }
-          let privateAccess;
-          try {
-            privateAccess = await isPrivateAccessAllowed();
-          } catch (_error) {
-            return errorResult(ERRORS.PRIVATE_ACCESS_CHECK_FAILED);
-          }
-          if (privateAccess !== true) {
-            return errorResult(ERRORS.PRIVATE_ACCESS_REQUIRED);
+          const privateAccess = await checkPrivateAccessNow();
+          if (!privateAccess.ok) {
+            return privateAccess;
           }
           const durableState = await persistFloorIdentity(floorIdentity);
           if (!durableState) {
@@ -296,6 +326,16 @@
           clearFloor() {
 
             return enqueue(clearFloorNow);
+
+          },
+          checkPrivateAccess() {
+
+            return enqueue(checkPrivateAccessNow);
+
+          },
+          inspectOwnedFloor(floorIdentity) {
+
+            return enqueue(() => inspectOwnedFloorNow(floorIdentity));
 
           },
           reconcileOffOnStartup() {

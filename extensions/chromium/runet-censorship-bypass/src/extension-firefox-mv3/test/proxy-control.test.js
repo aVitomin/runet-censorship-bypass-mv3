@@ -22,7 +22,7 @@ function floor(port = 55001) {
 
 function durable(floorIdentity = null) {
 
-  return {schemaVersion: 2, intent: 'OFF', floorIdentity};
+  return {schemaVersion: OffState.SCHEMA_VERSION, intent: 'OFF', floorIdentity};
 
 }
 
@@ -215,6 +215,48 @@ describe('Firefox fail-closed proxy control', function() {
           levelOfControl: 'controlled_by_this_extension',
           value: Object.assign({autoLogin: true}, identity),
         }, identity), false);
+
+      });
+
+  it('checks private access and live exact ownership without proxy writes',
+      async function() {
+
+        const identity = floor();
+        const proxy = makeProxySettings({
+          levelOfControl: 'controlled_by_this_extension',
+          value: identity,
+        });
+        const fixture = makeController({proxy});
+
+        Assert.deepStrictEqual(
+            await fixture.controller.checkPrivateAccess(),
+            {ok: true},
+        );
+        Assert.deepStrictEqual(
+            await fixture.controller.inspectOwnedFloor(identity),
+            {ok: true, status: 'OWNED', floorIdentity: identity},
+        );
+        Assert.strictEqual(proxy.calls.get, 1);
+        Assert.strictEqual(proxy.calls.set, 0);
+        Assert.strictEqual(proxy.calls.clear, 0);
+
+      });
+
+  it('reports denied private access and mismatched recovery ownership',
+      async function() {
+
+        const fixture = makeController({privateAccess: false});
+
+        Assert.deepStrictEqual(await fixture.controller.checkPrivateAccess(), {
+          ok: false,
+          error: {code: 'PRIVATE_ACCESS_REQUIRED'},
+        });
+        Assert.deepStrictEqual(
+            await fixture.controller.inspectOwnedFloor(floor()),
+            {ok: false, error: {code: 'OWNERSHIP_MISMATCH'}},
+        );
+        Assert.strictEqual(fixture.proxy.calls.set, 0);
+        Assert.strictEqual(fixture.proxy.calls.clear, 0);
 
       });
 

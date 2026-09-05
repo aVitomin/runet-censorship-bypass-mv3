@@ -10,7 +10,7 @@
   let activationController = null;
   const routingAdapter = routing.createAdapter({
     runtimeStateForRequest: () => activationController ?
-      activationController.currentRuntimeState() : routing.STATES.OFF,
+      activationController.currentRuntimeState() : routing.STATES.INITIALIZING,
     routingInputForRequest: (details) =>
       activationController.routingInputForRequest(details),
   });
@@ -36,8 +36,8 @@
     proxyControl,
     routingAdapter,
     proxyAuth,
+    storageArea: browser.storage.local,
   });
-  const durableIntent = offState.OFF;
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
     root.crypto.randomUUID() :
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -65,15 +65,18 @@
     const type = message && typeof message === 'object' ? message.type : null;
     if (type === 'firefox.capabilities.get') {
       const manifest = browser.runtime.getManifest();
+      const activation = activationController.snapshot();
       return {
         ok: true,
         result: {
-          apiVersion: 1,
+          apiVersion: 2,
           browser: 'FIREFOX',
           manifestVersion: manifest.manifest_version,
           runtimeModel: 'BACKGROUND_EVENT_PAGE',
-          runtimeState: activationController.currentRuntimeState(),
-          durableIntent,
+          runtimeState: activation.runtimeState,
+          durableIntent: activation.durableIntent,
+          recoveryStatus: activation.recoveryStatus,
+          recoveryFailureCode: activation.failureCode,
           privateWindowAccess: await readPrivateWindowAccess(),
           routingImplemented: true,
           activationSupported: false,
@@ -129,10 +132,7 @@
   );
   browser.runtime.onMessage.addListener(handleMessage);
 
-  const initialization = proxyControl.reconcileOffOnStartup()
-      .then((reconciliation) =>
-        reconciliation.durableState || offState.canonicalState())
-      .catch(() => offState.canonicalState());
+  const initialization = activationController.initializeFromDurable();
 
   root.rucbFirefoxSkeletonRuntime = Object.freeze({
     bootId,

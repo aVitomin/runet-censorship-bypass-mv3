@@ -48,15 +48,16 @@ well-known и другие low ports невалидны. Кандидат high p
 primitive требует внешне prevalidated identity и не вызывается ни startup, ни
 RPC. Остаточный риск local-port collision сохраняется.
 
-Durable OFF state имеет schema v2:
+Durable state имеет schema v3; канонический `OFF` имеет форму:
 
 ```json
-{"schemaVersion":2,"intent":"OFF","floorIdentity":null}
+{"schemaVersion":3,"intent":"OFF","floorIdentity":null}
 ```
 
 `floorIdentity` может содержать только точный canonical floor, нужный для
-cleanup после interruption. Schema v1 OFF мигрирует в v2 OFF; malformed и
-future state нормализуются в OFF без floor identity. Ownership признаётся
+cleanup после interruption. Schema v1/v2 OFF мигрирует в v3 OFF; malformed и
+future state нормализуются в OFF и могут сохранить только отдельно валидную
+floor identity для безопасного cleanup. Ownership признаётся
 только при одновременных exact identity match и
 `levelOfControl === "controlled_by_this_extension"`. Clear сначала сохраняет
 OFF, очищает ephemeral requestId budgets, затем освобождает только точный
@@ -110,25 +111,56 @@ primitives не делают routing доступным. Команда
 но не вызывает: RPC, startup и storage не имеют пути к `activatePrepared`, а
 capability `activationSupported` остаётся `false`. Prepared input имеет строгую
 форму и содержит только exact prevalidated floor identity, подтверждение
-внешней проверки порта, provider key, dataset store, synchronous routing-input
-factory и synchronous in-memory credential resolver. Credentials не
-сохраняются.
+внешней проверки порта, provider key, exact dataset identity, строгий routing
+descriptor, dataset store, synchronous routing-input factory и synchronous
+in-memory credential resolver. Credentials не сохраняются.
 
-Транзакция сначала полностью проверяет dataset и строит lookup index, затем
-требует `READY`, приобретает и подтверждает exact fail-closed floor, очищает
-старое request/auth ephemeral state и только последним синхронным присваиванием
-публикует immutable active session. До floor acquisition controller остаётся
-`OFF`; между acquisition и publication обычный listener не задаёт route, а
-global floor закрывает сетевой путь. Clear сначала скрывает session и очищает
-request/auth state, только затем освобождает exact floor. Ошибка после
+Транзакция сначала полностью проверяет exact dataset и строит lookup index,
+затем требует `READY`, приобретает и подтверждает exact fail-closed floor,
+записывает строгий durable `ON`, очищает старое request/auth ephemeral state и
+только последним синхронным присваиванием публикует immutable active session.
+До floor acquisition controller остаётся `OFF`; между acquisition и publication
+обычный listener не задаёт route, а global floor закрывает сетевой путь. Clear
+сначала записывает `OFF` с cleanup identity, затем скрывает session и очищает
+request/auth state, и только после этого освобождает exact floor. Ошибка после
 acquisition запускает тот же exact-match rollback; если release невозможен,
-session остаётся `OFF`, floor и durable cleanup identity остаются fail-closed
-для следующего startup reconciliation.
+session остаётся недоступной, floor и durable cleanup identity остаются
+fail-closed для следующего startup reconciliation.
 
-Активная prepared session намеренно только ephemeral. После уничтожения event
-page новая production instance всегда начинает с `OFF`, не восстанавливает
-session или credentials и очищает сохранённый exact floor через существующий
-OFF reconciliation. Durable `ON` всё ещё не существует и не принимается.
+Durable state schema v3 различает `OFF` и строгий `ON`. `ON` содержит только
+canonical floor identity, provider key, exact dataset identity
+(`datasetVersion` + SHA-256) и routing descriptor, который ссылается на
+отдельную версионированную конфигурацию по key/version/SHA-256. Functions,
+credentials, request IDs, auth attempts и session state не сохраняются.
+Malformed или future `ON` никогда не активируется; допустимая cleanup floor
+identity сохраняется только для безопасного exact-match освобождения.
+
+Новый event page начинает с `INITIALIZING`, поэтому blocking guard отменяет
+запросы, пока storage intent неизвестен. `OFF` выполняет cleanup reconciliation
+и только затем разрешает обычный browser routing. Для `ON` recovery сначала
+требует private access и уже существующий exact extension-owned floor; старый
+random port никогда не считается заново prevalidated и floor не переустанавливается.
+Затем recovery factory должен восстановить dataset store, routing-input factory,
+тот же exact routing descriptor и in-memory credential resolver. Controller
+принимает только exact сохранённые dataset hash и routing descriptor, строит
+index, очищает ephemeral maps и публикует session последним присваиванием.
+Missing/mismatched floor переводит durable intent в `OFF`, не
+перезаписывая чужие settings. Missing configuration/dataset/credentials или
+revoked private access оставляет session недоступной, а exact floor —
+fail-closed до Clear.
+
+Prepared activation теперь фиксирует `ON` после floor confirmation, но до
+session publication. Crash до записи `ON` оставляет `OFF` + cleanup identity;
+startup очищает floor. Crash после записи `ON` восстанавливает exact session.
+Clear сначала записывает `OFF` с cleanup identity, затем скрывает session,
+очищает request/auth state и освобождает exact floor. Ошибка release сохраняет
+durable `OFF` и floor identity для следующего reconciliation.
+
+Production event page намеренно не передаёт recovery factory и по-прежнему не
+имеет пути создания `ON`: `firefox.activation.apply` возвращает
+`ACTIVATION_NOT_IMPLEMENTED`, а capability `activationSupported` равен `false`.
+Synthetic recovery factory используется только в tests/browser QA; реальная
+конфигурация, provider artifact и persistent credentials в package отсутствуют.
 
 Для каркаса используется development-only Gecko ID
 `firefox-mv3-skeleton@runet-censorship-bypass.invalid`. Production Gecko/AMO ID

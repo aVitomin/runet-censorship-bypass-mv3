@@ -329,7 +329,7 @@ describe('Firefox MV3 inert skeleton', function() {
       {schemaVersion: 1, intent: 'OFF', extra: true},
     ]) {
       Assert.deepStrictEqual(OffState.normalizeDurableState(value), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         intent: 'OFF',
         floorIdentity: null,
       });
@@ -343,13 +343,13 @@ describe('Firefox MV3 inert skeleton', function() {
     const state = await OffState.initialize(storage.area);
 
     Assert.deepStrictEqual(state, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       intent: 'OFF',
       floorIdentity: null,
     });
     Assert.deepStrictEqual(storage.writes, [{
       [OffState.STORAGE_KEY]: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         intent: 'OFF',
         floorIdentity: null,
       },
@@ -364,21 +364,21 @@ describe('Firefox MV3 inert skeleton', function() {
 
     Assert.deepStrictEqual(
         JSON.parse(JSON.stringify(storage.values[OffState.STORAGE_KEY])), {
-          schemaVersion: 2,
+          schemaVersion: 3,
           intent: 'OFF',
           floorIdentity: null,
         });
 
   });
 
-  it('migrates schema v1 OFF to schema v2 OFF', async function() {
+  it('migrates schema v1 OFF to schema v3 OFF', async function() {
 
     const storage = makeStorage({schemaVersion: 1, intent: 'OFF'});
     await OffState.initialize(storage.area);
 
     Assert.deepStrictEqual(storage.writes, [{
       [OffState.STORAGE_KEY]: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         intent: 'OFF',
         floorIdentity: null,
       },
@@ -386,10 +386,41 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
-  it('does not rewrite canonical schema v2 durable OFF', async function() {
+  it('migrates schema v2 OFF and preserves its exact cleanup floor',
+      async function() {
+
+        const cleanupFloor = {
+          proxyType: 'manual',
+          http: '',
+          httpProxyAll: false,
+          ssl: '',
+          socks: '127.0.0.1:55001',
+          socksVersion: 5,
+          proxyDNS: true,
+          passthrough: '',
+          autoConfigUrl: '',
+        };
+        const storage = makeStorage({
+          schemaVersion: 2,
+          intent: 'OFF',
+          floorIdentity: cleanupFloor,
+        });
+        await OffState.initialize(storage.area);
+
+        Assert.deepStrictEqual(storage.writes, [{
+          [OffState.STORAGE_KEY]: {
+            schemaVersion: 3,
+            intent: 'OFF',
+            floorIdentity: cleanupFloor,
+          },
+        }]);
+
+      });
+
+  it('does not rewrite canonical schema v3 durable OFF', async function() {
 
     const storage = makeStorage({
-      schemaVersion: 2,
+      schemaVersion: 3,
       intent: 'OFF',
       floorIdentity: null,
     });
@@ -429,30 +460,41 @@ describe('Firefox MV3 inert skeleton', function() {
 
       });
 
-  it('keeps the registered production adapter inert while OFF', function() {
+  it('keeps startup fail closed, then leaves traffic inert while OFF',
+      async function() {
 
-    const eventPage = startEventPage();
+        const eventPage = startEventPage();
 
-    Assert.strictEqual(
-        eventPage.networkListeners.proxy.listener({requestId: 'off'}),
-        undefined,
-    );
-    Assert.deepStrictEqual(
-        JSON.parse(JSON.stringify(
-            eventPage.networkListeners.before.listener({requestId: 'off'}),
-        )),
-        {cancel: false},
-    );
-    Assert.strictEqual(
-        eventPage.networkListeners.auth.listener({
-          requestId: 'off',
-          isProxy: true,
-          challenger: {host: 'proxy.test', port: 8080},
-        }),
-        undefined,
-    );
+        Assert.deepStrictEqual(
+            JSON.parse(JSON.stringify(
+                eventPage.networkListeners.before.listener({
+                  requestId: 'initializing',
+                }),
+            )),
+            {cancel: true},
+        );
+        await eventPage.ready();
 
-  });
+        Assert.strictEqual(
+            eventPage.networkListeners.proxy.listener({requestId: 'off'}),
+            undefined,
+        );
+        Assert.deepStrictEqual(
+            JSON.parse(JSON.stringify(
+                eventPage.networkListeners.before.listener({requestId: 'off'}),
+            )),
+            {cancel: false},
+        );
+        Assert.strictEqual(
+            eventPage.networkListeners.auth.listener({
+              requestId: 'off',
+              isProxy: true,
+              challenger: {host: 'proxy.test', port: 8080},
+            }),
+            undefined,
+        );
+
+      });
 
   it('reports stable OFF-only capabilities', async function() {
 
@@ -462,12 +504,14 @@ describe('Firefox MV3 inert skeleton', function() {
     Assert.deepStrictEqual(response, {
       ok: true,
       result: {
-        apiVersion: 1,
+        apiVersion: 2,
         browser: 'FIREFOX',
         manifestVersion: 3,
         runtimeModel: 'BACKGROUND_EVENT_PAGE',
         runtimeState: 'OFF',
         durableIntent: 'OFF',
+        recoveryStatus: 'OFF',
+        recoveryFailureCode: null,
         privateWindowAccess: 'GRANTED',
         routingImplemented: true,
         activationSupported: false,
@@ -489,6 +533,60 @@ describe('Firefox MV3 inert skeleton', function() {
     Assert.strictEqual(response.result.durableIntent, 'OFF');
 
   });
+
+  it('does not recover durable ON without a production recovery factory',
+      async function() {
+
+        const floorIdentity = {
+          proxyType: 'manual',
+          http: '',
+          httpProxyAll: false,
+          ssl: '',
+          socks: '127.0.0.1:55001',
+          socksVersion: 5,
+          proxyDNS: true,
+          passthrough: '',
+          autoConfigUrl: '',
+        };
+        const durableOn = OffState.canonicalOnState({
+          floorIdentity,
+          providerKey: 'synthetic-provider',
+          datasetIdentity: {
+            providerKey: 'synthetic-provider',
+            datasetVersion: 'synthetic.1',
+            artifactSha256: 'a'.repeat(64),
+          },
+          routingDescriptor: {
+            schemaVersion: 1,
+            configurationKey: 'synthetic-routing',
+            configurationVersion: '1',
+            configurationSha256: 'b'.repeat(64),
+          },
+        });
+        const eventPage = startEventPage({
+          storage: makeStorage(durableOn),
+          privateWindowAccess: true,
+          liveProxySettings: {
+            levelOfControl: 'controlled_by_this_extension',
+            value: floorIdentity,
+          },
+        });
+        await eventPage.ready();
+        const response = await eventPage.send({
+          type: 'firefox.capabilities.get',
+        });
+
+        Assert.strictEqual(response.result.durableIntent, 'ON');
+        Assert.strictEqual(response.result.runtimeState, 'FAILED');
+        Assert.strictEqual(response.result.recoveryStatus, 'FAILED');
+        Assert.strictEqual(
+            response.result.recoveryFailureCode,
+            'RECOVERY_UNAVAILABLE',
+        );
+        Assert.strictEqual(eventPage.proxySettingsCalls.set, 0);
+        Assert.strictEqual(eventPage.proxySettingsCalls.clear, 0);
+
+      });
 
   it('rejects activation without changing OFF state', async function() {
 
@@ -533,7 +631,7 @@ describe('Firefox MV3 inert skeleton', function() {
     Assert.strictEqual(capabilities.result.runtimeState, 'OFF');
     Assert.deepStrictEqual(
         JSON.parse(JSON.stringify(storage.values[OffState.STORAGE_KEY])), {
-          schemaVersion: 2,
+          schemaVersion: 3,
           intent: 'OFF',
           floorIdentity: null,
         });
@@ -568,6 +666,7 @@ describe('Firefox MV3 inert skeleton', function() {
             false,
         );
         Assert.strictEqual(eventPageSource.includes('activatePrepared('), false);
+        Assert.strictEqual(eventPageSource.includes('recoveryFactory:'), false);
         Assert.strictEqual(eventPageSource.includes('proxy.settings.set'), false);
 
       });
