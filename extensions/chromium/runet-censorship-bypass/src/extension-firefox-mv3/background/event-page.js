@@ -7,7 +7,34 @@
   const proxyAuthApi = root.rucbFirefoxProxyAuth;
   const routing = root.rucbFirefoxRoutingAdapter;
   const activationApi = root.rucbFirefoxActivationController;
+  const datasetStoreApi = root.rucbFirefoxDatasetStore;
+  const productConfigApi = root.rucbFirefoxProductConfig;
   let activationController = null;
+  let productionDatasetStore = null;
+
+  async function sha256(bytes) {
+
+    const digest = await root.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), (value) =>
+      value.toString(16).padStart(2, '0')).join('');
+
+  }
+
+  function createProductionDatasetStore() {
+
+    if (!productionDatasetStore) {
+      const backend = datasetStoreApi.createIndexedDbBackend(root.indexedDB);
+      productionDatasetStore = datasetStoreApi.createStore({backend, sha256});
+    }
+    return productionDatasetStore;
+
+  }
+
+  const recoveryFactory = productConfigApi.createRecoveryFactory({
+    storageArea: browser.storage.local,
+    createDatasetStore: createProductionDatasetStore,
+    sha256,
+  });
   const routingAdapter = routing.createAdapter({
     runtimeStateForRequest: () => activationController ?
       activationController.currentRuntimeState() : routing.STATES.INITIALIZING,
@@ -34,6 +61,7 @@
   });
   activationController = activationApi.createController({
     proxyControl,
+    recoveryFactory,
     routingAdapter,
     proxyAuth,
     storageArea: browser.storage.local,

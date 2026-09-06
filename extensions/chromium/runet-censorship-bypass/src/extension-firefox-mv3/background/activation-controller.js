@@ -73,6 +73,22 @@
         RECOVERY_UNAVAILABLE: 'RECOVERY_UNAVAILABLE',
         ROUTING_DESCRIPTOR_MISMATCH: 'ROUTING_DESCRIPTOR_MISMATCH',
       });
+      const RECOVERY_FACTORY_ERROR_CODES = Object.freeze([
+        'CREDENTIAL_CONFIG_DESCRIPTOR_MISMATCH',
+        'CREDENTIAL_CONFIG_MALFORMED',
+        'CREDENTIAL_CONFIG_VERSION_UNSUPPORTED',
+        'DATASET_STORE_UNAVAILABLE',
+        'PRODUCT_CONFIG_DATASET_MISMATCH',
+        'PRODUCT_CONFIG_DESCRIPTOR_MISMATCH',
+        'PRODUCT_CONFIG_HASH_MISMATCH',
+        'PRODUCT_CONFIG_MALFORMED',
+        'PRODUCT_CONFIG_MISSING',
+        'PRODUCT_CONFIG_PROVIDER_MISMATCH',
+        'PRODUCT_CONFIG_STORAGE_UNAVAILABLE',
+        'PRODUCT_CONFIG_VERSION_UNSUPPORTED',
+        'REQUIRED_CREDENTIAL_MISSING',
+        'ROUTING_CONFIG_TOO_LARGE',
+      ]);
 
       function hasExactKeys(value, expected) {
 
@@ -96,6 +112,13 @@
 
         return typeof value === 'function' &&
           Object.prototype.toString.call(value) !== '[object AsyncFunction]';
+
+      }
+
+      function recoveryFactoryErrorCode(error) {
+
+        return error && RECOVERY_FACTORY_ERROR_CODES.includes(error.code) ?
+          error.code : ERRORS.RECOVERY_FACTORY_FAILED;
 
       }
 
@@ -568,9 +591,10 @@
             recovered = validateRecoveryResult(await recoveryFactory(
                 OffState.canonicalOnState(state),
             ));
-          } catch (_error) {
-            setUnavailable(ERRORS.RECOVERY_FACTORY_FAILED);
-            return errorResult(ERRORS.RECOVERY_FACTORY_FAILED, {
+          } catch (error) {
+            const code = recoveryFactoryErrorCode(error);
+            setUnavailable(code);
+            return errorResult(code, {
               floorRetained: true,
             });
           }
@@ -899,6 +923,7 @@
 
       return Object.freeze({
         ERRORS,
+        RECOVERY_FACTORY_ERROR_CODES,
         PREPARED_KEYS,
         RECOVERY_KEYS,
         RECOVERY_STATUS,

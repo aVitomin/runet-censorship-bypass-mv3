@@ -13,6 +13,7 @@ const EXPECTED_FILES = Object.freeze([
   'background/dataset-store.js',
   'background/event-page.js',
   'background/off-state.js',
+  'background/product-config.js',
   'background/provider-lookup.js',
   'background/provider-updater.js',
   'background/proxy-auth.js',
@@ -98,6 +99,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/dataset-runtime.js',
     'background/routing-adapter.js',
     'background/proxy-auth.js',
+    'background/product-config.js',
     'background/activation-controller.js',
     'background/event-page.js',
   ]);
