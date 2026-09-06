@@ -40,6 +40,10 @@ const datasetStoreSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'dataset-store.js'),
     'utf8',
 );
+const providerUpdaterSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'provider-updater.js'),
+    'utf8',
+);
 const providerLookupSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'provider-lookup.js'),
     'utf8',
@@ -241,6 +245,9 @@ function startEventPage(options = {}) {
   Vm.runInContext(offStateSource, context, {filename: 'off-state.js'});
   Vm.runInContext(proxyControlSource, context, {filename: 'proxy-control.js'});
   Vm.runInContext(datasetStoreSource, context, {filename: 'dataset-store.js'});
+  Vm.runInContext(providerUpdaterSource, context, {
+    filename: 'provider-updater.js',
+  });
   Vm.runInContext(providerLookupSource, context, {
     filename: 'provider-lookup.js',
   });
@@ -296,6 +303,7 @@ describe('Firefox MV3 inert skeleton', function() {
         'background/off-state.js',
         'background/proxy-control.js',
         'background/dataset-store.js',
+        'background/provider-updater.js',
         'background/provider-lookup.js',
         'background/dataset-runtime.js',
         'background/routing-adapter.js',
@@ -661,6 +669,7 @@ describe('Firefox MV3 inert skeleton', function() {
           offStateSource,
           proxyControlSource,
           datasetStoreSource,
+          providerUpdaterSource,
           providerLookupSource,
           datasetRuntimeSource,
           routingAdapterSource,
@@ -682,6 +691,8 @@ describe('Firefox MV3 inert skeleton', function() {
             false,
         );
         Assert.strictEqual(eventPageSource.includes('activatePrepared('), false);
+        Assert.strictEqual(eventPageSource.includes('fetchAndStage'), false);
+        Assert.strictEqual(eventPageSource.includes('promoteStaged'), false);
         Assert.strictEqual(eventPageSource.includes('recoveryFactory:'), false);
         Assert.strictEqual(eventPageSource.includes('proxy.settings.set'), false);
 

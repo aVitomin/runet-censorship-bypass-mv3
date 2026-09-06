@@ -21,7 +21,8 @@
 
       const DATABASE_NAME = 'rucb-firefox-provider-datasets-v1';
       const DATABASE_VERSION = 1;
-      const POINTER_SCHEMA_VERSION = 1;
+      const LEGACY_POINTER_SCHEMA_VERSION = 1;
+      const POINTER_SCHEMA_VERSION = 2;
       const ARTIFACT_STORE = 'artifacts';
       const POINTER_STORE = 'providerPointers';
       const SHA256_PATTERN = /^[a-f0-9]{64}$/;
@@ -31,13 +32,25 @@
         'activeArtifactSha256',
         'packagedBaselineArtifactSha256',
         'previousLkgArtifactSha256',
+        'stagedArtifactSha256',
       ]);
-      const POINTER_RECORD_FIELDS = Object.freeze([
+      const LEGACY_POINTER_RECORD_FIELDS = Object.freeze([
         'activeArtifactSha256',
         'packagedBaselineArtifactSha256',
         'previousLkgArtifactSha256',
         'providerKey',
         'schemaVersion',
+      ]);
+      const POINTER_RECORD_FIELDS = Object.freeze([
+        'activeArtifactSha256',
+        'highestAuthenticatedArtifactSha256',
+        'highestAuthenticatedSequence',
+        'packagedBaselineArtifactSha256',
+        'previousLkgArtifactSha256',
+        'providerKey',
+        'schemaVersion',
+        'stagedArtifactSha256',
+        'stagedSequence',
       ]);
       const ARTIFACT_RECORD_FIELDS = Object.freeze([
         'artifactBytes',
@@ -88,6 +101,10 @@
           activeArtifactSha256: null,
           previousLkgArtifactSha256: null,
           packagedBaselineArtifactSha256: null,
+          stagedArtifactSha256: null,
+          stagedSequence: null,
+          highestAuthenticatedSequence: null,
+          highestAuthenticatedArtifactSha256: null,
         };
 
       }
@@ -96,18 +113,34 @@
 
         const normalized = emptyPointers(providerKey);
         const corruptions = {};
-        if (!value || typeof value !== 'object' || Array.isArray(value) ||
-            Object.keys(value).length !== POINTER_RECORD_FIELDS.length ||
-            Object.keys(value).some((key) =>
-              !POINTER_RECORD_FIELDS.includes(key)) ||
-            value.schemaVersion !== POINTER_SCHEMA_VERSION ||
-            value.providerKey !== providerKey) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
           POINTER_FIELDS.forEach((field) => {
             corruptions[field] = value !== null && value !== undefined;
           });
           return {pointers: normalized, corruptions};
         }
+        const keys = Object.keys(value);
+        const isLegacy =
+          value.schemaVersion === LEGACY_POINTER_SCHEMA_VERSION &&
+          value.providerKey === providerKey &&
+          keys.length === LEGACY_POINTER_RECORD_FIELDS.length &&
+          keys.every((key) => LEGACY_POINTER_RECORD_FIELDS.includes(key));
+        const isCurrent =
+          value.schemaVersion === POINTER_SCHEMA_VERSION &&
+          value.providerKey === providerKey &&
+          keys.length === POINTER_RECORD_FIELDS.length &&
+          keys.every((key) => POINTER_RECORD_FIELDS.includes(key));
+        if (!isLegacy && !isCurrent) {
+          POINTER_FIELDS.forEach((field) => {
+            corruptions[field] = true;
+          });
+          corruptions.authenticatedSequenceState = true;
+          return {pointers: normalized, corruptions};
+        }
         for (const field of POINTER_FIELDS) {
+          if (isLegacy && field === 'stagedArtifactSha256') {
+            continue;
+          }
           const pointer = value[field];
           if (pointer === null || pointer === undefined) {
             normalized[field] = null;
@@ -116,6 +149,39 @@
           } else {
             corruptions[field] = true;
           }
+        }
+        if (isLegacy) {
+          return {
+            pointers: normalized,
+            corruptions,
+            migratedFromSchemaVersion: LEGACY_POINTER_SCHEMA_VERSION,
+          };
+        }
+        const validSequencePair = (sequence, artifactSha256) =>
+          (sequence === null && artifactSha256 === null) ||
+          (Number.isSafeInteger(sequence) && sequence >= 1 &&
+           isSha256(artifactSha256));
+        if (!validSequencePair(
+            value.highestAuthenticatedSequence,
+            value.highestAuthenticatedArtifactSha256,
+        ) || !validSequencePair(
+            value.stagedSequence,
+            value.stagedArtifactSha256,
+        ) || (value.stagedSequence !== null &&
+          (value.stagedSequence !== value.highestAuthenticatedSequence ||
+           value.stagedArtifactSha256 !==
+             value.highestAuthenticatedArtifactSha256))) {
+          normalized.stagedArtifactSha256 = null;
+          normalized.stagedSequence = null;
+          normalized.highestAuthenticatedSequence = null;
+          normalized.highestAuthenticatedArtifactSha256 = null;
+          corruptions.authenticatedSequenceState = true;
+        } else {
+          normalized.stagedSequence = value.stagedSequence;
+          normalized.highestAuthenticatedSequence =
+            value.highestAuthenticatedSequence;
+          normalized.highestAuthenticatedArtifactSha256 =
+            value.highestAuthenticatedArtifactSha256;
         }
         return {pointers: normalized, corruptions};
 
@@ -246,9 +312,16 @@
             const artifacts = transaction.objectStore(ARTIFACT_STORE);
             const pointers = transaction.objectStore(POINTER_STORE);
             let failure = null;
-            const existingRequest = artifacts.get(
-                nextArtifact.artifactSha256,
-            );
+            if (!nextArtifact) {
+              pointers.put(nextPointers);
+              transaction.oncomplete = () => resolve();
+              transaction.onerror = () => {};
+              transaction.onabort = () => reject(
+                  transaction.error || storeError('INDEXED_DB_COMMIT_ABORTED'),
+              );
+              return;
+            }
+            const existingRequest = artifacts.get(nextArtifact.artifactSha256);
             existingRequest.onsuccess = () => {
               try {
                 const existing = existingRequest.result;
@@ -307,6 +380,15 @@
         if (typeof sha256 !== 'function') {
           throw storeError('SHA256_IMPLEMENTATION_REQUIRED');
         }
+        let mutationQueue = Promise.resolve();
+
+        function enqueueMutation(operation) {
+
+          const result = mutationQueue.then(operation, operation);
+          mutationQueue = result.catch(() => {});
+          return result;
+
+        }
 
         async function verifyInput(input) {
 
@@ -328,6 +410,7 @@
             POINTER_FIELDS.forEach((field) => {
               normalized.corruptions[field] = true;
             });
+            normalized.corruptions.authenticatedSequenceState = true;
             return normalized;
           }
 
@@ -475,10 +558,147 @@
 
         }
 
+        async function stageAuthenticatedCandidate({
+          envelope,
+          artifactBytes,
+          sequence,
+        } = {}) {
+
+          if (!Number.isSafeInteger(sequence) || sequence < 1) {
+            return rejection('INVALID_AUTHENTICATED_SEQUENCE');
+          }
+          const candidate = await verifyInput({
+            envelope,
+            artifactBytes,
+            trust: Dataset.TRUST.REMOTE_AUTHENTICATED,
+          });
+          if (!candidate.ok) {
+            return candidate;
+          }
+          const providerKey = candidate.dataset.identity.providerKey;
+          const current = await readPointerState(providerKey);
+          if (current.corruptions.authenticatedSequenceState) {
+            return rejection('AUTHENTICATED_SEQUENCE_STATE_CORRUPT');
+          }
+          const pointers = current.pointers;
+          const artifactSha256 = candidate.dataset.identity.artifactSha256;
+          if (pointers.highestAuthenticatedSequence !== null) {
+            if (sequence < pointers.highestAuthenticatedSequence) {
+              return rejection('ROLLBACK_REJECTED');
+            }
+            if (sequence === pointers.highestAuthenticatedSequence) {
+              if (artifactSha256 !==
+                  pointers.highestAuthenticatedArtifactSha256) {
+                return rejection('SEQUENCE_CONFLICT');
+              }
+              return Object.freeze({
+                ok: true,
+                status: 'UNCHANGED',
+                verification: candidate,
+                sequence,
+              });
+            }
+          }
+          pointers.stagedArtifactSha256 = artifactSha256;
+          pointers.stagedSequence = sequence;
+          pointers.highestAuthenticatedSequence = sequence;
+          pointers.highestAuthenticatedArtifactSha256 = artifactSha256;
+          await backend.commit(
+              artifactRecord(candidate, artifactBytes),
+              pointers,
+          );
+          return Object.freeze({
+            ok: true,
+            status: 'STAGED',
+            verification: candidate,
+            sequence,
+          });
+
+        }
+
+        async function loadStaged(providerKey) {
+
+          if (!isProviderKey(providerKey)) {
+            throw storeError('INVALID_PROVIDER_KEY');
+          }
+          const current = await readPointerState(providerKey);
+          if (current.corruptions.authenticatedSequenceState ||
+              current.corruptions.stagedArtifactSha256) {
+            return rejection('STAGED_POINTER_CORRUPT');
+          }
+          if (!current.pointers.stagedArtifactSha256) {
+            return Object.freeze({
+              ok: true,
+              status: 'EMPTY',
+              pointers: current.pointers,
+              verification: null,
+            });
+          }
+          const verification = await verifyStored(
+              providerKey,
+              current.pointers.stagedArtifactSha256,
+              'STAGED_ARTIFACT',
+          );
+          return Object.freeze({
+            ok: Boolean(verification && verification.ok),
+            status: verification && verification.ok ? 'STAGED' : 'REJECTED',
+            code: verification && !verification.ok ? verification.code : null,
+            sequence: current.pointers.stagedSequence,
+            pointers: current.pointers,
+            verification,
+          });
+
+        }
+
+        async function promoteStaged(providerKey) {
+
+          const staged = await loadStaged(providerKey);
+          if (!staged.ok || staged.status !== 'STAGED' ||
+              staged.verification.trust !==
+                Dataset.TRUST.REMOTE_AUTHENTICATED) {
+            return staged.ok ? rejection('NO_STAGED_CANDIDATE') : staged;
+          }
+          const pointers = Object.assign({}, staged.pointers);
+          pointers.previousLkgArtifactSha256 =
+            pointers.activeArtifactSha256 ||
+            pointers.previousLkgArtifactSha256;
+          pointers.activeArtifactSha256 = pointers.stagedArtifactSha256;
+          pointers.stagedArtifactSha256 = null;
+          pointers.stagedSequence = null;
+          await backend.commit(null, pointers);
+          return Object.freeze({
+            ok: true,
+            status: 'PROMOTED',
+            sequence: staged.sequence,
+            verification: staged.verification,
+          });
+
+        }
+
         return Object.freeze({
-          activateCandidate,
-          commitPackagedBaseline,
+          activateCandidate(input) {
+
+            return enqueueMutation(() => activateCandidate(input));
+
+          },
+          commitPackagedBaseline(input) {
+
+            return enqueueMutation(() => commitPackagedBaseline(input));
+
+          },
           loadVerifications,
+          loadStaged,
+          promoteStaged(providerKey) {
+
+            return enqueueMutation(() => promoteStaged(providerKey));
+
+          },
+          stageAuthenticatedCandidate(input) {
+
+            return enqueueMutation(() =>
+              stageAuthenticatedCandidate(input));
+
+          },
         });
 
       }
@@ -486,6 +706,7 @@
       return Object.freeze({
         DATABASE_NAME,
         DATABASE_VERSION,
+        LEGACY_POINTER_SCHEMA_VERSION,
         POINTER_SCHEMA_VERSION,
         createIndexedDbBackend,
         createStore,

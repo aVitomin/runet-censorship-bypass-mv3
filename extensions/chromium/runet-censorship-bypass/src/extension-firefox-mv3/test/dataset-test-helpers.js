@@ -90,10 +90,12 @@ function memoryBackend() {
     },
     async commit(nextArtifact, nextPointers) {
 
-      artifacts.set(nextArtifact.artifactSha256, copy(nextArtifact));
+      if (nextArtifact) {
+        artifacts.set(nextArtifact.artifactSha256, copy(nextArtifact));
+      }
       pointers.set(nextPointers.providerKey, copy(nextPointers));
       commits.push({
-        artifactSha256: nextArtifact.artifactSha256,
+        artifactSha256: nextArtifact ? nextArtifact.artifactSha256 : null,
         pointers: copy(nextPointers),
       });
 

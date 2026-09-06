@@ -14,6 +14,7 @@ const EXPECTED_FILES = Object.freeze([
   'background/event-page.js',
   'background/off-state.js',
   'background/provider-lookup.js',
+  'background/provider-updater.js',
   'background/proxy-auth.js',
   'background/proxy-control.js',
   'background/routing-adapter.js',
@@ -92,6 +93,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/off-state.js',
     'background/proxy-control.js',
     'background/dataset-store.js',
+    'background/provider-updater.js',
     'background/provider-lookup.js',
     'background/dataset-runtime.js',
     'background/routing-adapter.js',
@@ -116,6 +118,8 @@ function verifyPackage(packageRoot, sourceRoot) {
   Assert.strictEqual(eventPageText.includes('proxy.settings.set'), false);
   Assert.strictEqual(eventPageText.includes('acquirePrevalidatedFloor('), false);
   Assert.strictEqual(eventPageText.includes('activatePrepared('), false);
+  Assert.strictEqual(eventPageText.includes('fetchAndStage'), false);
+  Assert.strictEqual(eventPageText.includes('promoteStaged'), false);
   Assert.strictEqual(
       eventPageText.includes('type === \'firefox.activation.apply\''),
       true,
