@@ -5,6 +5,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import {
+  inlineMarkdownLinkPattern,
+  stripHtmlTags,
+} from './verify-docs-parser.mjs';
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseMetadataPath = 'docs/release-current.json';
 const expectedCoreDocs = [
@@ -26,6 +31,7 @@ const expectedCoreDocs = [
   '.github/workflows/mv3.yml',
   releaseMetadataPath,
   'scripts/verify-docs.mjs',
+  'scripts/verify-docs-parser.mjs',
 ];
 const expectedReadmeNavigation = [
   'docs/README.md',
@@ -106,7 +112,7 @@ function extractLinks(text) {
   const occupied = [];
   const patterns = [
     {
-      regex: /(!?)\[[^\]\n]*\]\(\s*(?:<([^>\n]+)>|((?:\\.|[^()\s]|\([^()\n]*\))+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/gu,
+      regex: inlineMarkdownLinkPattern,
       build: (match) => ({ target: match[2] ?? match[3], image: match[1] === '!' }),
     },
     {
@@ -146,8 +152,7 @@ function extractLinks(text) {
 }
 
 function githubSlug(value) {
-  return value
-    .replace(/<[^>]*>/gu, '')
+  return stripHtmlTags(value)
     .replace(/!\[([^\]]*)\]\([^)]*\)/gu, '$1')
     .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
     .replace(/[`*_~]/gu, '')
