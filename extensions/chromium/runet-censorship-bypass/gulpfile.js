@@ -94,6 +94,7 @@ const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/background/off-state.js',
   './src/extension-firefox-mv3/background/proxy-control.js',
   './src/extension-firefox-mv3/background/dataset-store.js',
+  './src/extension-firefox-mv3/background/provider-updater.js',
   './src/extension-firefox-mv3/background/provider-lookup.js',
   './src/extension-firefox-mv3/background/dataset-runtime.js',
   './src/extension-firefox-mv3/background/routing-adapter.js',

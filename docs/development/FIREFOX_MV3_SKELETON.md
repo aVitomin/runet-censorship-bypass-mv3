@@ -99,8 +99,9 @@ route-auth, так и attempt state. Отмена исчерпанного auth 
 request вместо перехода к следующему proxy candidate; это известное Firefox
 availability-отличие, а не Direct fallback или утечка.
 
-Реальный provider dataset, updater, активация, production credential
-configuration/UI и health-проверки ещё не реализованы. Ownership/auth
+Реальный provider dataset, production updater configuration, активация,
+production credential configuration/UI и health-проверки ещё не реализованы.
+Ownership/auth
 primitives не делают routing доступным. Команда
 активации всегда отвечает
 `ACTIVATION_NOT_IMPLEMENTED`; наличие широких сетевых разрешений не делает
@@ -205,9 +206,40 @@ active -> previous LKG -> packaged baseline; parsed index хранится то�
 в отдельных object stores Firefox-specific IndexedDB; запись артефакта и
 переключение pointer выполняются одной транзакцией только после проверки точных
 bytes. Remote candidate с unauthenticated trust не может стать active. Пакет не
-содержит реального или синтетического provider
-dataset и в `OFF` не открывает dataset storage. Он не меняет Chromium build
-output. Отдельный
+содержит реального или синтетического provider dataset и в `OFF` не открывает
+dataset storage. Он не меняет Chromium build output.
+
+Пакет содержит инертный authenticated-update pipeline, но production event
+page его не создаёт и не вызывает: отсутствуют production URL, public key,
+alarm/timer, startup fetch и RPC update command. Update manifest schema v1
+содержит только `schemaVersion`, `providerKey`, monotonic `sequence`, `keyId`,
+relative `artifactPath` и строгий dataset `envelope`. Отдельная 64-byte
+Ed25519 signature проверяется native WebCrypto над точными UTF-8 bytes
+manifest до доверия его полям. `keyId` выбирает ключ только из injected pinned
+`Map`; remote JSON не может объявить `trust`. После signature, manifest,
+provider identity, exact byte count, SHA-256 и общей declarative dataset
+verification pipeline внутренне присваивает `REMOTE_AUTHENTICATED`.
+
+Fetch boundary принимает только явный HTTPS URL без credentials/query/fragment,
+использует manual redirects с максимум тремя same-origin HTTPS переходами,
+`credentials: omit`, `referrerPolicy: no-referrer`, общий deadline/AbortSignal и
+streaming size bounds. Manifest ограничен 256 KiB, signature — ровно 64 bytes,
+artifact — существующим пределом 16 MiB. Downloaded bytes никогда не
+исполняются и остаются `HOST_BUCKETS_V1` data.
+
+Provider pointer schema v2 мигрирует v1 с сохранением `active`,
+`previousLkg` и `packagedBaseline`, добавляя отдельный `staged` pointer и
+anti-rollback пару `highestAuthenticatedSequence`/artifact SHA-256. Lower
+sequence отклоняется; одинаковые sequence+SHA idempotent, а одинаковый
+sequence с другим SHA даёт conflict. Только полностью verified candidate
+атомарно записывает immutable artifact, staged pointer и sequence metadata.
+Stage не меняет active/LKG/live session/durable ON identity. Отдельный explicit
+promotion одной IndexedDB transaction переводит staged в active, прежний
+active в LKG и очищает staged; production event page promotion не вызывает.
+Storage/signature/network failure не продвигает sequence и не меняет текущий
+routing dataset.
+
+Отдельный
 локальный smoke с установленным Firefox 154.0.1 и одноразовым профилем можно
 запустить командой:
 
