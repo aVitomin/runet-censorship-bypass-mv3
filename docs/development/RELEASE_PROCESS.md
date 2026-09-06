@@ -18,10 +18,10 @@ trusted-main CI и проверки того же артефакта, котор
 4. Убедитесь, что reports, profiles, build/dist, archives, `.local`, `.tmp` и
    секреты не tracked и не staged.
 
-Если менялись shared templates, Gulp или legacy-shared inputs, отдельно
-подтвердите совместимость наследуемой сборки. Это не делает MV2 текущим
-продуктом. MV2 build выполняется до финальной MV3 build, потому что старые цели
-очищают общий `build/`.
+Если менялись shared templates или Gulp, побайтово сравните Chromium и Firefox
+MV3 package trees с trusted baseline. Исторический MV2 не является build/release
+целью текущего `main`. Chromium и Firefox build очищают только собственные
+output-каталоги и не имеют требования к взаимному порядку.
 
 ## 2. Выполнить локальные gates
 
@@ -38,13 +38,17 @@ npm --prefix $Project run test:pac
 npm --prefix $Project run test:mv3
 npm --prefix $Project run lint:mv3
 npm --prefix $Project run build:mv3
+npm --prefix $Project run test:firefox
+npm --prefix $Project run lint:firefox
+npm --prefix $Project run build:firefox
 npm --prefix $Project run verify
 git diff --check
 ```
 
-`build:mv3` включает package-integrity и runtime-icon verification. Aggregate
-`verify` включает полный test suite, MV3 lint, совместимую MV2 build и финальную
-MV3 build. После всех команд tracked tree должен остаться чистым.
+Обе build-команды включают package-integrity verification; Chromium build также
+проверяет runtime icons. Aggregate `verify` включает maintained test suite,
+lint и сборку обоих MV3 targets. После всех команд tracked tree должен остаться
+чистым.
 
 ## 3. Подтвердить trusted-main CI
 
@@ -59,8 +63,8 @@ artifact этого run. Dispatch другой ветки не является 
 
 - documentation integrity;
 - static supply-chain policy, focused verifier tests и registry signatures;
-- PAC и MV3 tests;
-- focused MV3 lint и build;
+- PAC, Chromium MV3 и Firefox deterministic tests;
+- focused Chromium/Firefox lint и builds;
 - aggregate `verify`;
 - runtime icons и package integrity внутри build;
 - exact-output и tracked-worktree checks;

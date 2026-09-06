@@ -7,7 +7,6 @@ import test from 'node:test';
 import {
   AUTHORITATIVE_PACKAGE,
   MIN_VERSION_AGE_MS,
-  QUARANTINED_PACKAGE,
   SupplyChainVerificationError,
   changedDirectSelections,
   inspectRepository,
@@ -15,6 +14,8 @@ import {
 } from './verify-supply-chain.mjs';
 
 const integrity = `sha512-${Buffer.from('fixture-integrity').toString('base64')}`;
+const retiredOptionsPackage =
+  'extensions/chromium/runet-censorship-bypass/src/extension-common/pages/options';
 
 function packageDocuments({
   directSpecifier = '1.2.3',
@@ -73,21 +74,6 @@ function fixtureRepository(authoritative = packageDocuments(), configure) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rucb-supply-chain-'));
   writeJson(root, `${AUTHORITATIVE_PACKAGE}/package.json`, authoritative.manifest);
   writeJson(root, `${AUTHORITATIVE_PACKAGE}/package-lock.json`, authoritative.lockfile);
-  writeJson(root, `${QUARANTINED_PACKAGE}/package.json`, {
-    name: 'quarantined-options',
-    version: '0.0.0',
-    dependencies: { fsevents: '^1.0.0' },
-  });
-  writeJson(root, `${QUARANTINED_PACKAGE}/package-lock.json`, {
-    name: 'quarantined-options',
-    lockfileVersion: 1,
-    dependencies: {
-      fsevents: {
-        version: '1.2.13',
-        hasInstallScript: true,
-      },
-    },
-  });
   configure?.(root);
   return root;
 }
@@ -109,12 +95,12 @@ function assertSupplyChainFailure(callback, pattern) {
   });
 }
 
-test('accepts official registry sources, integrity, the lifecycle baseline, and quarantine', () => {
+test('accepts only the authoritative package and its reviewed lifecycle baseline', () => {
   withFixture(packageDocuments(), (root) => {
     const summary = inspectRepository(root);
     assert.equal(summary.packageCount, 2);
     assert.deepEqual(summary.lifecyclePackages, ['fsevents@2.3.3']);
-    assert.deepEqual(summary.quarantinedPackages, [QUARANTINED_PACKAGE]);
+    assert.deepEqual(summary.inventory, [AUTHORITATIVE_PACKAGE]);
   });
 });
 
@@ -167,6 +153,25 @@ test('rejects an unexpected package manifest and lockfile', () => {
     writeJson(root, 'unexpected/package.json', { name: 'unexpected', version: '1.0.0' });
     writeJson(root, 'unexpected/package-lock.json', {
       name: 'unexpected',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      packages: {},
+    });
+    assertSupplyChainFailure(
+      () => inspectRepository(root),
+      /unexpected package manifest or lockfile/u,
+    );
+  });
+});
+
+test('rejects reintroducing the retired legacy Options compiler package', () => {
+  withFixture(packageDocuments(), (root) => {
+    writeJson(root, `${retiredOptionsPackage}/package.json`, {
+      name: 'retired-options-compiler',
+      version: '1.0.0',
+    });
+    writeJson(root, `${retiredOptionsPackage}/package-lock.json`, {
+      name: 'retired-options-compiler',
       version: '1.0.0',
       lockfileVersion: 3,
       packages: {},

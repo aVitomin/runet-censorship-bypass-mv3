@@ -16,6 +16,9 @@ npm --prefix $Project run test:pac
 npm --prefix $Project run test:mv3
 npm --prefix $Project run lint:mv3
 npm --prefix $Project run build:mv3
+npm --prefix $Project run test:firefox
+npm --prefix $Project run lint:firefox
+npm --prefix $Project run build:firefox
 ```
 
 ## Границы изменений
@@ -33,9 +36,11 @@ npm --prefix $Project run build:mv3
   архитектура или выпуск. Внутренняя реализация без такого эффекта сама по себе
   не требует README-правок.
 
-Наследуемые MV2/common файлы могут выглядеть неиспользуемыми, но участвовать в
-совместимой сборке или поставлять общие assets. Не удаляйте их без проверки
-ссылок, Gulp и обоих build paths.
+MV2 больше не является поддерживаемой целью текущего `main`; исторические
+исходники и сборочные инструкции доступны в Git history и frozen development
+branch. Из `extension-common` Chromium MV3 использует только явно перечисленные
+статические assets, поэтому изменения shared boundary проверяйте сборкой и
+побайтовым сравнением обоих MV3-пакетов.
 
 ## Pull request
 

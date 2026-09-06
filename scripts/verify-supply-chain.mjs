@@ -8,13 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 export const MIN_VERSION_AGE_MS = 168 * 60 * 60 * 1000;
 export const AUTHORITATIVE_PACKAGE = 'extensions/chromium/runet-censorship-bypass';
-export const QUARANTINED_PACKAGE = 'extensions/chromium/runet-censorship-bypass/src/extension-common/pages/options';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedPackageRoots = new Map([
-  [AUTHORITATIVE_PACKAGE, { quarantined: false }],
-  [QUARANTINED_PACKAGE, { quarantined: true }],
-]);
+const expectedPackageRoots = new Set([AUTHORITATIVE_PACKAGE]);
 const ignoredDirectories = new Set([
   '.git',
   '.local',
@@ -279,7 +275,7 @@ export function inspectRepository(rootDirectory = repoRoot) {
   }
 
   const documents = new Map();
-  for (const [directory, policy] of expectedPackageRoots) {
+  for (const directory of expectedPackageRoots) {
     const manifestPath = path.join(rootDirectory, directory, 'package.json');
     const lockfilePath = path.join(rootDirectory, directory, 'package-lock.json');
     if (!fs.existsSync(manifestPath) || !fs.existsSync(lockfilePath)) {
@@ -288,7 +284,7 @@ export function inspectRepository(rootDirectory = repoRoot) {
     const manifest = readJson(manifestPath, `${directory}/package.json`, errors);
     const lockfile = readJson(lockfilePath, `${directory}/package-lock.json`, errors);
     if (manifest && lockfile) {
-      documents.set(directory, { manifest, lockfile, ...policy });
+      documents.set(directory, { manifest, lockfile });
     }
   }
 
@@ -311,7 +307,6 @@ export function inspectRepository(rootDirectory = repoRoot) {
     directSelections: authoritativeSummary.selections,
     packageCount: authoritativeSummary.packageCount,
     lifecyclePackages: authoritativeSummary.lifecyclePackages,
-    quarantinedPackages: [QUARANTINED_PACKAGE],
   };
 }
 
@@ -418,7 +413,6 @@ async function main() {
   const summary = inspectRepository(repoRoot);
   console.log(`Supply-chain static verification passed: ${summary.packageCount} authoritative lock packages, ${summary.directSelections.size} exact direct pins.`);
   console.log(`Accepted authoritative lifecycle baseline: ${summary.lifecyclePackages.join(', ') || 'none present'}.`);
-  console.log(`Quarantined package root (not installed or trusted as baseline): ${QUARANTINED_PACKAGE}.`);
 
   const baseSha = (process.env.SUPPLY_CHAIN_BASE_SHA ?? '').trim();
   if (process.env.GITHUB_EVENT_NAME === 'pull_request' && !baseSha) {

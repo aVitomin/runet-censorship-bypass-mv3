@@ -1,9 +1,5 @@
 # Asset attribution
 
-## Blue Ribbon icon
-
-URL: http://www.iconsdb.com/icon-sets/cardboard-blue-icons/ribbon-12-icon.html
-
 ## Emoji icon font
 
 The shipped `src/extension-common/pages/lib/fonts/emoji.woff` and the
@@ -35,7 +31,3 @@ The upstream project licenses the font and its source under the MIT License:
 > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
-
-## Pac-Man and ghosts
-
-http://photobucket.com/gallery/user/chukiyo/media/bWVkaWFJZDoyMTA2NDcxMw==/?ref=
