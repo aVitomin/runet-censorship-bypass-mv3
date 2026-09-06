@@ -2,14 +2,14 @@
 
 ## Scope and source map
 
-This fork keeps the legacy Runet Censorship Bypass extension while developing a Chromium Manifest V3 migration. The current primary target is `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3`.
+This fork maintains Chromium Manifest V3 and Firefox Manifest V3 targets. Legacy MV2 is historical and is available through repository history and the frozen development branch, not as a build target on current `main`.
 
 - Extension tooling root: `extensions/chromium/runet-censorship-bypass`.
-- MV3 runtime: `src/extension-chromium-mv3`; `background/service-worker.js` is the entry point and `pages/` is the MV3 UI.
+- Chromium MV3 runtime: `src/extension-chromium-mv3`; `background/service-worker.js` is the entry point and `pages/` is the Chromium MV3 UI.
+- Firefox MV3 runtime: `src/extension-firefox-mv3`; `background/event-page.js` is the non-persistent Firefox background entry point. Browser-neutral contracts live in `src/extension-mv3-common`.
 - Instruction routing: before modifying files under `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3/background/`, read and follow its `AGENTS.md`; before modifying files under `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3/pages/`, read and follow its `AGENTS.md`. Do this even when Codex starts from the repository root.
-- Shared inputs: selected icons, locales, and page libraries under `src/extension-common`. Gulp deliberately excludes the legacy common background scripts and page implementations from MV3.
-- Legacy MV2: `src/extension-common` plus `src/extension-full` or `src/extension-mini`; beta also uses full sources with a separate template context.
-- Build/version authority: `src/templates-data.js`, `gulpfile.js`, and the manifest templates. The repository intentionally has no root npm package: never run `npm install`, `npm ci`, or npm scripts at the repository root; scope every package command to the authoritative `extensions/chromium/runet-censorship-bypass` package.
+- Shared inputs: Chromium MV3 copies exactly five static page-library assets under `src/extension-common/pages/lib`; Firefox MV3 uses the explicit common-module allowlist in `gulpfile.js`. Do not broaden either package glob implicitly.
+- Build/version authority: `src/templates-data.js`, `gulpfile.js`, and the maintained MV3 manifests/templates. The repository intentionally has no root npm package: never run `npm install`, `npm ci`, or npm scripts at the repository root; scope every package command to the authoritative `extensions/chromium/runet-censorship-bypass` package.
 - Generated/local-only context: any `node_modules`, `build`, `dist`, `coverage`, `.tmp`, browser profile, archive, log, or options-page `dist`. Do not broadly inspect vendored/minified Ace files.
 
 When required by the change rules below, run these commands from the repository root in PowerShell:
@@ -20,11 +20,11 @@ node .\scripts\verify-supply-chain.mjs
 node --test .\scripts\verify-supply-chain.test.mjs
 npm --prefix $Project test
 npm --prefix $Project run test:pac
-npm --prefix $Project run build:mv2
 npm --prefix $Project run verify:mv3
+npm --prefix $Project run verify:firefox
 ```
 
-Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only when extension dependencies are missing. The obsolete dependency tree under `$Project\src\extension-common\pages\options` is security-quarantined: do not install or build it during ordinary work, reuse it for Firefox, or add it to normal CI. Any task that genuinely requires that toolchain must first be scoped as dedicated dependency/toolchain remediation using `$dependency-review`. `build:mv2` deletes the complete `build` directory, so always build MV2 before the final MV3 build. Whole-tree `npm run lint` has pre-existing legacy failures; use the focused `lint:mv3` check for MV3 work and report the legacy baseline rather than reformatting it.
+Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only when extension dependencies are missing. No nested legacy Options package exists. Ordinary work must not reconstruct, install, build, test, or release MV2; use repository history or the frozen development branch for historical investigation. Chromium and Firefox builds clean only their own output roots and may run independently. Use the focused `lint:mv3` and `lint:firefox` checks.
 
 ## Coding approach
 
@@ -71,7 +71,7 @@ Use Windows PowerShell-compatible commands. Use `npm ci --prefix $Project` only 
 - Dependency manifests, lockfiles, vendored third-party libraries, dependency-manager configuration, or GitHub Action additions/updates: use `$dependency-review`, run `node .\scripts\verify-supply-chain.mjs` and its focused Node test, and run the applicable audit/build/test gates. If the change also crosses an MV3 security boundary, use `$mv3-security-review` as well.
 - PAC/routing/candidate changes: use `$pac-regression`, run `test:pac` and `test:mv3`, and add semantic cases when behavior changes.
 - MV3 permissions, service worker, downloads, storage, auth, migration, external requests, or proxy errors: use `$mv3-security-review`, run `lint:mv3`, `test:mv3`, and `build:mv3`; identify real-browser QA.
-- Shared/template/gulp/MV2 changes: run the full tests and `build:mv2`, then rebuild MV3. Report the quarantined legacy Options functional build as unavailable and describe only the copy/template scope actually validated.
+- Shared/template/Gulp changes: run the full maintained tests, build both MV3 targets, and compare both package trees against their trusted baselines. Historical MV2 code is not a verification target on current `main`.
 - MV3 UI/localization changes: update both `en` and `ru`, build MV3, and manually check affected controls. Never render stored values with HTML injection sinks.
 - Release preparation, provenance, packaging, or audit work: use `$release-candidate`.
 - Agent/docs-only changes: run `node ./scripts/verify-docs.mjs`, validate skill frontmatter/paths when relevant, and run `git diff --check`; do not claim product checks were necessary if no runtime file changed.

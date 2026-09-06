@@ -6,6 +6,6 @@ MV3 pages communicate through `pages/shared/rpc-client.js`; do not reach into ba
 - Keep popup and options routing language aligned: Auto removes the applicable override, Proxy requires a candidate, and Direct is explicit. Exact-host and domain/subdomain controls need both forms tested; current domain scope uses bundled `tldts` public-suffix data with private domains enabled, while legacy two-label wildcards are recognized only for compatibility.
 - Migration UI stays collapsed/explicit, requires field selection and confirmation, and must not imply that it applied browser proxy settings.
 - Add every normal user-facing string to both `_locales/en/messages.json` and `_locales/ru/messages.json`. Preserve keys and placeholder shapes.
-- MV3 owns these pages; the legacy Inferno options app under `extension-common/pages/options` is separate.
+- These pages are the maintained Chromium UI; historical MV2 page sources are available through repository history rather than the current source tree.
 
 After page changes, run `lint:mv3`, `test:mv3`, and `build:mv3`, then inspect the affected page in Chromium. Manually verify the behaviors the change can affect, including secret masking, keyboard/form behavior, both languages, and routing actions as applicable.

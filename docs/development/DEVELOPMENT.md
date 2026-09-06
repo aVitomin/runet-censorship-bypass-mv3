@@ -1,7 +1,8 @@
-# Разработка Chromium MV3
+# Разработка Chromium MV3 и Firefox MV3
 
-Текущая цель репозитория —
-`extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3`.
+Поддерживаемые цели текущего `main` —
+`extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3` и
+`src/extension-firefox-mv3` в том же tooling root.
 Корневого npm-пакета нет. Старый Open Collective donation package удалён как
 не связанный со сборкой и содержавший устаревший lifecycle hook. Это не меняет
 [GPL-3.0](../../LICENSE), upstream-атрибуцию или историю спонсоров в
@@ -38,6 +39,11 @@ npm --prefix $Project run test:mv3
 npm --prefix $Project run lint:mv3
 npm --prefix $Project run build:mv3
 npm --prefix $Project run verify:mv3
+npm --prefix $Project run test:firefox
+npm --prefix $Project run lint:firefox
+npm --prefix $Project run build:firefox
+npm --prefix $Project run verify:firefox
+npm --prefix $Project run verify
 ```
 
 `verify:mv3` последовательно запускает lint, весь набор MV3-тестов и сборку.
@@ -49,18 +55,22 @@ Dependency-free docs verifier запускается из корня и не т�
 
 | Назначение | Путь |
 | --- | --- |
-| MV3 runtime | `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3` |
+| Chromium MV3 runtime | `extensions/chromium/runet-censorship-bypass/src/extension-chromium-mv3` |
 | Service worker | `…/background/service-worker.js` |
 | Popup и settings | `…/pages/popup` и `…/pages/options` |
 | Manifest template | `…/manifest.tmpl.json` |
-| Версия и общие template values | `extensions/chromium/runet-censorship-bypass/src/templates-data.js` |
+| Firefox MV3 runtime | `extensions/chromium/runet-censorship-bypass/src/extension-firefox-mv3` |
+| Shared MV3 contracts | `extensions/chromium/runet-censorship-bypass/src/extension-mv3-common` |
+| Версия Chromium и template values | `extensions/chromium/runet-censorship-bypass/src/templates-data.js` |
 | Gulp orchestration | `extensions/chromium/runet-censorship-bypass/gulpfile.js` |
-| Готовая unpacked-сборка | `extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3` |
+| Chromium unpacked-сборка | `extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3` |
+| Firefox unpacked-сборка | `extensions/chromium/runet-censorship-bypass/build/extension-firefox-mv3` |
 
-Каталоги `extension-common`, `extension-full` и `extension-mini` — наследуемые
-исходники. Часть общих статических ресурсов всё ещё копируется в MV3, а старые
-цели нужны для совместимости сборки; не удаляйте их как «неиспользуемые» без
-отдельного графа зависимостей.
+MV2 удалён из maintained `main`; его исходники и сборочные инструкции доступны
+через Git history и frozen development branch. В `extension-common` остались
+только пять явно перечисленных статических page-library assets, которые входят
+в Chromium MV3. Nested legacy Options package отсутствует. Chromium и Firefox
+build очищают только собственные output-каталоги и не зависят от порядка запуска.
 
 ## Загрузка локальной сборки
 

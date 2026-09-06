@@ -29,14 +29,15 @@ node --test .\scripts\verify-supply-chain.test.mjs
 npm audit signatures --prefix $Project
 ```
 
-Статический verifier разрешает только два известных npm-root: основной tooling
-package и явно quarantined legacy Options package. Для основного lockfile он
-проверяет exact direct pins, официальный npm registry source, integrity и
-минимальный lifecycle baseline (`fsevents@2.3.3`, optional). Legacy Options
-dependency tree не устанавливается и не становится допустимым baseline. На PR
-registry publication time запрашивается только для новых выбранных direct
-versions; граница равна 168 часам и ошибка registry/metadata блокирует change.
-Эти gates дают defense in depth, но не доказывают безопасность package.
+Статический verifier разрешает единственный npm-root: основной tooling package.
+Для его lockfile он проверяет exact direct pins, официальный npm registry source,
+integrity и минимальный lifecycle baseline (`fsevents@2.3.3`, optional).
+MV2 и его nested Options compiler удалены из maintained `main`; повторное
+добавление nested package root блокируется как непроверенная dependency
+boundary. На PR registry
+publication time запрашивается только для новых выбранных direct versions;
+граница равна 168 часам и ошибка registry/metadata блокирует change. Эти gates
+дают defense in depth, но не доказывают безопасность package.
 
 Pull request дополнительно использует официальный
 `actions/dependency-review-action` v5.0.0, pinned на signed commit
@@ -171,16 +172,18 @@ npm --prefix $Project run verify:mv3
 CI дополнительно запускает `test:pac` явно и проверяет `git diff --exit-code`
 после сборки.
 
-### Aggregate verification
+### Aggregate maintained verification
 
 ```powershell
 npm --prefix $Project run verify
 ```
 
-Aggregate gate запускает полный extension test suite, focused MV3 lint,
-совместимую MV2 build и затем финальную MV3 build. Именно этот gate вместе с
-docs integrity обязан присутствовать и пройти в trusted-main release CI; набор
-отдельных зелёных команд не заменяет отсутствующий обязательный gate.
+Aggregate gate запускает maintained test suite, Chromium и Firefox lint, затем
+собирает и проверяет оба MV3-пакета. MV2 в текущем `main` не строится и не
+тестируется; историческая воспроизводимость принадлежит Git history/frozen
+development branch. Именно этот gate вместе с docs integrity обязан
+присутствовать и пройти в trusted-main release CI; набор отдельных зелёных
+команд не заменяет отсутствующий обязательный gate.
 
 ## Проверка release package
 

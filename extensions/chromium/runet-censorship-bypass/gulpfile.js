@@ -48,47 +48,17 @@ const templatePlugin = (context) => through.obj(function(file, encoding, cb) {
 });
 
 
-const clean = function(cb) {
-
-  buildCleanup.cleanBuild();
-  return cb();
-
-};
-
 const contexts = require('./src/templates-data').contexts;
-
-const excFolder = (name) => [
-  `!./src/**/${name}`,
-  `!./src/**/${name}/`,
-  `!./src/**/${name}/**/*`,
-];
-const legacyOptionsBuildInputs = [
-  '!./src/extension-common/pages/options/.flowconfig',
-  '!./src/extension-common/pages/options/README.md',
-  '!./src/extension-common/pages/options/package.json',
-  '!./src/extension-common/pages/options/package-lock.json',
-  '!./src/extension-common/pages/options/webpack.config.js',
-  '!./src/extension-common/pages/options/lib/transform-loader.js',
-];
-const excluded = [
-  ...excFolder('test'),
-  ...excFolder('node_modules'),
-  ...excFolder('src'),
-  '!./src/**/AGENTS.md',
-  ...legacyOptionsBuildInputs,
-];
-
-const miniDst = './build/extension-mini';
-const fullDst = './build/extension-full';
-const betaDst = './build/extension-beta';
 const chromiumMv3Dst = './build/extension-chromium-mv3';
 const firefoxMv3Dst = './build/extension-firefox-mv3';
-const firefoxDst = './build/extension-firefox';
-
-const commonSrc = './src/extension-common/**/*';;
-const miniSrc = './src/extension-mini/**/*';
-const fullSrc = './src/extension-full/**/*';
-const chromiumMv3Src = './src/extension-chromium-mv3/**/*';
+const chromiumMv3RuntimeSrc = [
+  './src/extension-chromium-mv3/**/*',
+  '!./src/extension-chromium-mv3/test',
+  '!./src/extension-chromium-mv3/test/',
+  '!./src/extension-chromium-mv3/test/**/*',
+  '!./src/extension-chromium-mv3/**/AGENTS.md',
+];
+const chromiumMv3CommonSrc = './src/extension-common/pages/lib/**/*';
 const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/manifest.json',
   './src/extension-firefox-mv3/background/off-state.js',
@@ -113,58 +83,6 @@ const chromiumMv3TldtsSrc = [
   './node_modules/tldts/LICENSE',
 ];
 
-const joinSrc = (...args) => [...args, ...excluded];
-
-const commonPageFolder = (name) => [
-  `!./src/extension-common/pages/${name}`,
-  `!./src/extension-common/pages/${name}/`,
-  `!./src/extension-common/pages/${name}/**/*`,
-];
-
-const chromiumMv3CommonSrc = [
-  commonSrc,
-  '!./src/extension-common/_locales/en/messages.tmpl.json',
-  '!./src/extension-common/_locales/ru/messages.tmpl.json',
-  '!./src/extension-common/manifest.tmpl.json',
-  '!./src/extension-common/*.js',
-  '!./src/extension-common/icons',
-  '!./src/extension-common/icons/**/*',
-  ...commonPageFolder('consent'),
-  ...commonPageFolder('debug'),
-  ...commonPageFolder('exceptions'),
-  ...commonPageFolder('options'),
-  ...commonPageFolder('troubleshoot'),
-];
-
-const copyMini = function(cb) {
-
-  gulp.src(joinSrc(commonSrc, miniSrc), {encoding: false})
-    //.pipe(changed(miniDst))
-    .pipe(templatePlugin(contexts.mini))
-    .pipe(gulp.dest(miniDst))
-    .on('end', cb);
-};
-
-const copyFull = function(cb) {
-
-  gulp.src(joinSrc(commonSrc, fullSrc), {encoding: false})
-    //.pipe(changed(fullDst))
-    .pipe(templatePlugin(contexts.full))
-    .pipe(gulp.dest(fullDst))
-    .on('end', cb);
-
-};
-
-const copyBeta = function(cb) {
-
-    gulp.src(joinSrc(commonSrc, fullSrc), {encoding: false})
-    //.pipe(changed(fullDst))
-    .pipe(templatePlugin(contexts.beta))
-    .pipe(gulp.dest(betaDst))
-    .on('end', cb);
-
-};
-
 const cleanChromiumMv3 = function(cb) {
 
   buildCleanup.cleanChromiumMv3();
@@ -175,10 +93,21 @@ const cleanChromiumMv3 = function(cb) {
 const copyChromiumMv3 = function(cb) {
 
   gulp.src(
-      joinSrc(chromiumMv3Src, ...chromiumMv3CommonSrc),
+      chromiumMv3RuntimeSrc,
       {encoding: false},
   )
     .pipe(templatePlugin(contexts.chromiumMv3))
+    .pipe(gulp.dest(chromiumMv3Dst))
+    .on('end', cb);
+
+};
+
+const copyChromiumMv3Common = function(cb) {
+
+  gulp.src(
+      chromiumMv3CommonSrc,
+      {base: './src/extension-common', encoding: false},
+  )
     .pipe(gulp.dest(chromiumMv3Dst))
     .on('end', cb);
 
@@ -224,11 +153,13 @@ const copyFirefoxMv3Common = function(cb) {
 
 };
 
-const buildAll = gulp.series(clean, gulp.parallel(copyMini, copyFull, copyBeta));
-const buildBeta = copyBeta;
 const buildChromiumMv3 = gulp.series(
     cleanChromiumMv3,
-    gulp.parallel(copyChromiumMv3, copyChromiumMv3Tldts),
+    gulp.parallel(
+        copyChromiumMv3,
+        copyChromiumMv3Common,
+        copyChromiumMv3Tldts,
+    ),
 );
 const buildFirefoxMv3 = gulp.series(
     cleanFirefoxMv3,
@@ -236,9 +167,6 @@ const buildFirefoxMv3 = gulp.series(
 );
 
 module.exports = {
-  default: buildAll,
-  buildAll,
-  buildBeta,
   buildChromiumMv3,
   buildFirefoxMv3,
   buildMv3: buildChromiumMv3,

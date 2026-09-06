@@ -16,11 +16,6 @@ const PACKAGED_MV3_ROOT = Path.resolve(
 );
 
 const MV3_SOURCE_ROOT = Path.resolve(__dirname, '..');
-const COMMON_SOURCE_ROOT = Path.resolve(
-    MV3_SOURCE_ROOT,
-    '..',
-    'extension-common',
-);
 const MV3_LOCALES = Object.freeze(['en', 'ru']);
 const EXPECTED_MV3_VERSION = '0.0.3.0';
 const EXPECTED_MV3_VERSION_NAME = '0.0.3.00';
@@ -313,14 +308,9 @@ if (typeof describe === 'function') {
             MV3_LOCALES.length,
         );
 
-        Fs.copyFileSync(
-            Path.join(
-                COMMON_SOURCE_ROOT,
-                '_locales',
-                'en',
-                'messages.tmpl.json',
-            ),
+        Fs.appendFileSync(
             Path.join(packageRoot, '_locales', 'en', 'messages.json'),
+            '\n',
         );
         Assert.throws(
             () => verifyPackagedLocalesMatchMv3Sources(packageRoot),

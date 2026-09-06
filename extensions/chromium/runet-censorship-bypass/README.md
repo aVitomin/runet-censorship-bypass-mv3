@@ -1,7 +1,8 @@
 # Chromium extension tooling
 
-This directory contains the current Chromium MV3 source, tests, and build
-tooling, plus legacy sources retained for compatibility.
+This directory contains the maintained Chromium MV3 and Firefox MV3 sources,
+tests, and build tooling. MV2 is historical and is not built from current
+`main`.
 
 Canonical instructions are maintained at repository level:
 
@@ -11,6 +12,8 @@ Canonical instructions are maintained at repository level:
 - [Testing](../../../docs/development/TESTING.md)
 - [Release process](../../../docs/development/RELEASE_PROCESS.md)
 
-The primary runtime is `src/extension-chromium-mv3`; its build output is
-`build/extension-chromium-mv3`. There is no supported repository-root npm
-package; scope dependency and script commands to this tooling directory.
+The Chromium runtime is `src/extension-chromium-mv3` with output
+`build/extension-chromium-mv3`. The Firefox runtime is
+`src/extension-firefox-mv3` with output `build/extension-firefox-mv3`. There is
+no root npm package; scope dependency and script commands to this tooling
+directory.

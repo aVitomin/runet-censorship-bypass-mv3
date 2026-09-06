@@ -1,8 +1,10 @@
 # Архитектура Chromium MV3
 
-MV3-реализация отделена от наследуемого MV2 runtime. Gulp переносит только
-разрешённые общие статические ресурсы и собственный каталог
-`src/extension-chromium-mv3` в готовый пакет.
+Поддерживаемый `main` содержит отдельные Chromium MV3 и Firefox MV3 runtime и
+browser-neutral `extension-mv3-common`. Исторический MV2 runtime удалён из
+maintained source tree и доступен через Git history/frozen development branch.
+Gulp переносит в Chromium только пять явно перечисленных общих статических
+ресурсов и собственный каталог `src/extension-chromium-mv3`.
 
 ## Общая схема
 

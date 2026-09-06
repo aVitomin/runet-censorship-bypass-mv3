@@ -13,9 +13,9 @@
 | Категория | Пути и назначение |
 | --- | --- |
 | Current public product documentation | `README.md`, `docs/README.md`, `docs/user/*`, `docs/assets/readme/*`, `docs/release-current.json`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md` |
-| Current maintainer/developer documentation | `docs/development/*`, `docs/maintainers/DOCUMENTATION_MAP.md`, `AGENTS.md`, `.agents/skills/*`, MV3 nested `AGENTS.md`, tooling-root и legacy-options pointer README, asset attribution README |
+| Current maintainer/developer documentation | `docs/development/*`, `docs/maintainers/DOCUMENTATION_MAP.md`, `AGENTS.md`, `.agents/skills/*`, MV3 nested `AGENTS.md`, tooling-root и asset attribution README |
 | Legacy upstream documentation | `docs/legacy/*`, включая исторический README, compatibility pointer для его исходной относительной ссылки, store description, MV2 reviewer/options notes, старые architecture/migration audits, beta RC snapshot и архив исходников icon font |
-| Runtime source | Текущий MV3 runtime/tests, common/full/mini compatibility inputs и `src/templates-data.js` |
+| Runtime source | Chromium MV3, Firefox MV3, browser-neutral MV3 common modules, пять явно разрешённых `extension-common/pages/lib` assets и Chromium `src/templates-data.js` |
 | Build and verification tooling | Extension `package.json`/lockfile, `gulpfile.js`, ESLint/Git attributes, tools, `scripts/verify-docs.mjs`, workflow и tooling `.gitignore` |
 | Required legal/license material | Корневой `LICENSE` (GPL-3.0); дополнительные vendor license копируются из установленной pinned зависимости при сборке |
 | Obsolete or unreferenced candidate | Корневой `package.json` удалён как obsolete donation tooling после отдельного решения сопровождающего |
@@ -23,10 +23,10 @@
 | Generated output | `build/`, `dist/`, `coverage/`, `.tmp/`, profiles и logs игнорируются и не tracked |
 | Internal/local reports | Локальные отчёты находятся в ignored `.local/project-reports/` |
 
-Файлы в `src/extension-common`, `src/extension-full` и `src/extension-mini`
-классифицированы как runtime/build compatibility source, а не как текущая
-публичная документация. Упоминания MV2/Firefox/MINI внутри них описывают
-наследуемое поведение и не являются заявлением о текущей поставке.
+MV2-only `extension-full`, `extension-mini` и legacy части `extension-common`
+удалены из maintained `main`. Историческое дерево сохраняется в Git history и
+frozen development branch. Текущий `extension-common` содержит только пять
+статических page-library assets, явно включаемых в Chromium MV3 package.
 
 ## Канонические публичные документы
 
@@ -46,8 +46,8 @@
 | Участие | [`CONTRIBUTING.md`](../../CONTRIBUTING.md) |
 | Security reporting | [`SECURITY.md`](../../SECURITY.md) |
 
-Tooling-root и legacy-options README теперь только направляют к этим документам
-и не дублируют команды или пользовательскую установку.
+Tooling-root README только направляет к этим документам и не дублирует команды
+или пользовательскую установку.
 
 ## Текущие инженерные материалы
 
@@ -98,10 +98,9 @@ Tooling-root и legacy-options README теперь только направля
 2. `docs/legacy/**` сохраняет исходные repository/wiki/store/community links
    как историю; архивные headers прямо запрещают использовать их как текущую
    установку или support claim.
-3. `src/extension-chromium-mv3/background/pac-providers.js` и
-   `src/templates-data.js` намеренно используют опубликованные upstream PAC
-   resources. Ссылки в `src/extension-common/**` принадлежат сохранённой legacy
-   compatibility surface и upstream resource/attribution UI.
+3. `src/extension-chromium-mv3/background/pac-providers.js` намеренно использует
+   опубликованные upstream PAC resources. `src/templates-data.js` содержит
+   только version values Chromium MV3 manifest template.
 
 Старых upstream release links в текущих installation docs нет. Это правило
 проверяет `scripts/verify-docs.mjs`; изменение runtime upstream resources требует
@@ -124,7 +123,7 @@ Git. `.tmp/` содержит QA profiles, screenshots и release checks;
 | Tooling-root README | Move content to current docs; keep pointer | Дублировал build/release/user instructions; путь полезен как вход в tooling. |
 | `description.md` | Archive under legacy | Нереференсная MV2 store copy со старым upstream release URL. |
 | `extensions/chromium/readings.txt` | Archive under legacy | Исторические upstream links, не текущая инструкция. |
-| Legacy options README | Archive body; keep source pointer | Boilerplate `yarn/npm install` неверен для текущего workflow; короткий pointer сохраняет осмысленным явное Gulp-исключение старого пути. |
+| Legacy options README | Archive body; remove maintained source pointer | Boilerplate `yarn/npm install` и весь MV2 Options tree принадлежат истории, а не текущему workflow. |
 | Старые reviewer notes | Archive under legacy | Нужны для provenance/Ace verification, но описывают MV2 packaging. |
 | Beta 1 RC notes | Archive under legacy | Point-in-time test counts и pending items не должны конкурировать с Release. |
 | Architecture audit 2026-07-17 | Archive under legacy | Четыре основные проблемы уже исправлены; audit сохраняет историческую ценность. |
@@ -136,15 +135,15 @@ Git. `.tmp/` содержит QA profiles, screenshots и release checks;
 | `grep.sh` | Remove (completed) | Нереференсный non-executable POSIX helper дублировал `rg`, не входил в docs, CI или npm scripts и требовал явного shell запуска. |
 | Пять SVG в tooling `assets/` | Move to legacy (completed) | HTML/CSS/manifest/tests/build их не используют; архив сохраняет исходники, commit provenance и MIT attribution для по-прежнему используемого `emoji.woff`. |
 | `.vscode/settings.json`, `.rgignore` | Keep in place | Активно исключают generated/vendor noise и соответствуют рабочему процессу. |
-| `extension-common/full/mini` и Ace vendor | Keep in place | Нужны legacy compatibility build, общим assets и проверяемому vendor provenance. |
+| MV2-only `extension-common/full/mini` и Ace vendor | Remove from maintained main (completed) | Текущие MV3 packages их не потребляют; история сохраняет исходники и provenance. Пять реально используемых common assets оставлены явно. |
 | MV3 placeholder pages | Remove (completed) | Четыре недоступные из manifest/UI страницы показывали только migration-era текст через отдельный `getPageStatus` RPC; страницы, shared placeholder assets и RPC удалены вместе. |
 | Локальные project reports | Keep local/ignored | Внутренние планы/reviews не являются публичной документацией и не входят в package. |
 
 В documentation refresh из tooling удалялся только `.github/FUNDING.yml`.
 Корневой donation package позже удалён отдельным maintenance-изменением;
 housekeeping удалил нереференсный `grep.sh` и перенёс пять SVG source assets в
-legacy archive без удаления attribution. Остальные неопределённые кандидаты
-сохранены согласно правилу недеструктивного аудита.
+legacy archive без удаления attribution. После отдельного file-level dependency
+audit unsupported MV2 source/build surface также удалён из maintained `main`.
 
 ## Удалённый корневой package.json
 

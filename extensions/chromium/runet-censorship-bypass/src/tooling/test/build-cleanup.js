@@ -25,34 +25,6 @@ describe('Build cleanup', function() {
 
   });
 
-  it('removes the expected build directory', function() {
-
-    Fs.mkdirSync(cleanup.paths.buildRoot);
-
-    cleanup.cleanBuild();
-
-    Assert.strictEqual(Fs.existsSync(cleanup.paths.buildRoot), false);
-
-  });
-
-  it('removes nested build contents', function() {
-
-    const nestedFile = Path.join(
-        cleanup.paths.buildRoot,
-        'extension-full',
-        'nested',
-        'output.js',
-    );
-    Fs.mkdirSync(Path.dirname(nestedFile), {recursive: true});
-    Fs.writeFileSync(nestedFile, 'generated');
-
-    cleanup.cleanBuild();
-
-    Assert.strictEqual(Fs.existsSync(nestedFile), false);
-    Assert.strictEqual(Fs.existsSync(cleanup.paths.buildRoot), false);
-
-  });
-
   it('succeeds when the output directory is missing', function() {
 
     Assert.doesNotThrow(() => cleanup.cleanChromiumMv3());
@@ -107,7 +79,7 @@ describe('Build cleanup', function() {
   it('rejects unlisted paths inside the build root', function() {
 
     const unlistedFile = Path.join(
-        cleanup.paths.buildRoot,
+        Path.dirname(cleanup.paths.chromiumMv3Root),
         'extension-full',
         'keep.txt',
     );
@@ -145,28 +117,6 @@ describe('Build cleanup', function() {
         () => cleanup.removeOutput(Path.parse(projectRoot).root),
         /cannot be a filesystem root/,
     );
-
-  });
-
-  it('preserves the normal MV2 then MV3 build sequence', function() {
-
-    cleanup.cleanBuild();
-    const mv2Output = Path.join(
-        cleanup.paths.buildRoot,
-        'extension-full',
-        'manifest.json',
-    );
-    Fs.mkdirSync(Path.dirname(mv2Output), {recursive: true});
-    Fs.writeFileSync(mv2Output, 'mv2');
-
-    Fs.mkdirSync(cleanup.paths.chromiumMv3Root, {recursive: true});
-    cleanup.cleanChromiumMv3();
-    const mv3Output = Path.join(cleanup.paths.chromiumMv3Root, 'manifest.json');
-    Fs.mkdirSync(Path.dirname(mv3Output), {recursive: true});
-    Fs.writeFileSync(mv3Output, 'mv3');
-
-    Assert.strictEqual(Fs.readFileSync(mv2Output, 'utf8'), 'mv2');
-    Assert.strictEqual(Fs.readFileSync(mv3Output, 'utf8'), 'mv3');
 
   });
 
