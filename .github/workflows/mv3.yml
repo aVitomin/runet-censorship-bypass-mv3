@@ -43,6 +43,9 @@ jobs:
       - name: Verify documentation integrity
         run: node ./scripts/verify-docs.mjs
 
+      - name: Test documentation parser safety
+        run: node --test ./scripts/verify-docs-parser.test.mjs
+
       - name: Verify supply-chain policy
         env:
           SUPPLY_CHAIN_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}

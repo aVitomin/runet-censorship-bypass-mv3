@@ -43,5 +43,10 @@
     "plugin-error": "1.0.1",
     "through2": "4.0.2",
     "tldts": "7.4.8"
+  },
+  "overrides": {
+    "mocha": {
+      "serialize-javascript": "7.0.5"
+    }
   }
 }
