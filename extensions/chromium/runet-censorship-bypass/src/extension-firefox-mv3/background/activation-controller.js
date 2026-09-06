@@ -37,11 +37,14 @@
       ]);
       const RESULTS = Object.freeze({
         ACTIVE: 'ACTIVE',
+        CONTROL_RETAINED: 'CONTROL_RETAINED',
         OFF: 'OFF',
         RECOVERED: 'RECOVERED',
+        RESURFACED_FLOOR_RECONCILED: 'RESURFACED_FLOOR_RECONCILED',
       });
       const RECOVERY_STATUS = Object.freeze({
         ACTIVE: 'ACTIVE',
+        BLOCKED_CONTROL_LOSS: 'BLOCKED_CONTROL_LOSS',
         BLOCKED_PRIVATE_ACCESS: 'BLOCKED_PRIVATE_ACCESS',
         FAILED: 'FAILED',
         INITIALIZING: 'INITIALIZING',
@@ -54,6 +57,7 @@
         ACTIVATION_INTERRUPTED: 'ACTIVATION_INTERRUPTED',
         ACTIVATION_ROLLBACK_FAILED: 'ACTIVATION_ROLLBACK_FAILED',
         BOOT_NOT_READY: 'BOOT_NOT_READY',
+        CONTROL_LOSS: 'CONTROL_LOSS',
         DATASET_IDENTITY_MISMATCH: 'DATASET_IDENTITY_MISMATCH',
         DATASET_INITIALIZATION_FAILED: 'DATASET_INITIALIZATION_FAILED',
         DATASET_NOT_READY: 'DATASET_NOT_READY',
@@ -232,6 +236,8 @@
         let recoveryStatus = RECOVERY_STATUS.INITIALIZING;
         let failureCode = null;
         let operationQueue = Promise.resolve();
+        let controlLossPersistencePending = false;
+        let resurfacedReconciliationPending = false;
 
         function enqueue(operation) {
 
@@ -499,10 +505,13 @@
 
         }
 
-        async function transitionLostFloorToOff() {
+        async function transitionLostFloorToOff(floorIdentity) {
 
           try {
-            const next = await OffState.writeOffState(storageArea, null);
+            const next = await OffState.writeOffState(
+                storageArea,
+                floorIdentity,
+            );
             clearEphemeralState();
             setOff(next);
             return true;
@@ -522,7 +531,9 @@
           if (!owned || owned.ok !== true) {
             if (owned && owned.error &&
                 owned.error.code === ProxyControl.ERRORS.OWNERSHIP_MISMATCH) {
-              const transitioned = await transitionLostFloorToOff();
+              const transitioned = await transitionLostFloorToOff(
+                  state.floorIdentity,
+              );
               return errorResult(transitioned ?
                 ERRORS.RECOVERY_FLOOR_MISMATCH :
                 ERRORS.DURABLE_OFF_PERSIST_FAILED, {
@@ -703,6 +714,152 @@
 
         }
 
+        async function persistControlLossOff(floorIdentity) {
+
+          try {
+            const next = await OffState.writeOffState(
+                storageArea,
+                floorIdentity,
+            );
+            clearEphemeralState();
+            setOff(next);
+            return errorResult(ERRORS.CONTROL_LOSS, {
+              transitionedToOff: true,
+              floorRetained: true,
+            });
+          } catch (_error) {
+            activeSession = null;
+            runtimeState = DatasetRuntime.STATES.FAILED;
+            recoveryStatus = RECOVERY_STATUS.BLOCKED_CONTROL_LOSS;
+            failureCode = ERRORS.DURABLE_OFF_PERSIST_FAILED;
+            return errorResult(ERRORS.DURABLE_OFF_PERSIST_FAILED, {
+              transitionedToOff: false,
+              floorRetained: true,
+            });
+          } finally {
+            controlLossPersistencePending = false;
+          }
+
+        }
+
+        async function reconcileResurfacedFloorNow(expectedFloorIdentity) {
+
+          if (activeSession || !durableState ||
+              durableState.intent !== OffState.OFF ||
+              !ProxyControl.sameFloorIdentity(
+                  durableState.floorIdentity,
+                  expectedFloorIdentity,
+              )) {
+            return {ok: true, status: RESULTS.OFF};
+          }
+          let reconciled;
+          try {
+            reconciled = await floorControl.clearFloor();
+          } catch (_error) {
+            reconciled = null;
+          }
+          if (!reconciled || reconciled.ok !== true) {
+            const code = reconciled && reconciled.error &&
+              reconciled.error.code ? reconciled.error.code :
+              ProxyControl.ERRORS.PROXY_CLEAR_FAILED;
+            if (reconciled && reconciled.durableState) {
+              durableState = reconciled.durableState;
+            }
+            setOff(
+                durableState,
+                RECOVERY_STATUS.OFF_RECONCILIATION_FAILED,
+                code,
+            );
+            return errorResult(code, {floorRetained: true});
+          }
+          setOff(reconciled.durableState || OffState.canonicalOffState());
+          return {
+            ok: true,
+            status: RESULTS.RESURFACED_FLOOR_RECONCILED,
+          };
+
+        }
+
+        function queueResurfacedFloorReconciliation(floorIdentity) {
+
+          if (resurfacedReconciliationPending) {
+            return operationQueue;
+          }
+          resurfacedReconciliationPending = true;
+          const reconciliation = enqueue(() =>
+            reconcileResurfacedFloorNow(floorIdentity));
+          reconciliation.then(
+              () => {
+
+                resurfacedReconciliationPending = false;
+
+              },
+              () => {
+
+                resurfacedReconciliationPending = false;
+
+              },
+          );
+          return reconciliation;
+
+        }
+
+        function handleProxySettingsChange(change) {
+
+          const state = durableState;
+          const floorIdentity = state && state.floorIdentity;
+          let exactOwnedFloor = false;
+          try {
+            exactOwnedFloor = Boolean(floorIdentity &&
+              ProxyControl.isExactOwnedFloor(change, floorIdentity));
+          } catch (_error) {
+            exactOwnedFloor = false;
+          }
+          if (activeSession &&
+              currentRuntimeState() === DatasetRuntime.STATES.READY) {
+            if (exactOwnedFloor) {
+              return {ok: true, status: RESULTS.CONTROL_RETAINED};
+            }
+
+            // This phase is intentionally synchronous: no storage, proxy API,
+            // Promise or network operation may precede session withdrawal.
+            activeSession = null;
+            runtimeState = DatasetRuntime.STATES.FAILED;
+            recoveryStatus = RECOVERY_STATUS.BLOCKED_CONTROL_LOSS;
+            failureCode = ERRORS.CONTROL_LOSS;
+            clearEphemeralState();
+            if (!floorIdentity || controlLossPersistencePending) {
+              return errorResult(ERRORS.CONTROL_LOSS, {
+                reconciliation: operationQueue,
+              });
+            }
+            controlLossPersistencePending = true;
+            return errorResult(ERRORS.CONTROL_LOSS, {
+              reconciliation: enqueue(() =>
+                persistControlLossOff(floorIdentity)),
+            });
+          }
+
+          const mayReconcileResurfacedFloor = Boolean(
+              floorIdentity &&
+              (state.intent === OffState.OFF ||
+                (recoveryStatus === RECOVERY_STATUS.BLOCKED_CONTROL_LOSS &&
+                  controlLossPersistencePending)) &&
+              exactOwnedFloor,
+          );
+          if (mayReconcileResurfacedFloor) {
+            return {
+              ok: true,
+              status: RECOVERY_STATUS.OFF,
+              reconciliation: queueResurfacedFloorReconciliation(
+                  floorIdentity,
+              ),
+            };
+          }
+          return {ok: true, status: recoveryStatus};
+
+        }
+
         function snapshot() {
 
           return Object.freeze({
@@ -732,6 +889,7 @@
             return enqueue(initializeFromDurableNow);
 
           },
+          handleProxySettingsChange,
           resolveCredentials,
           routingInputForRequest,
           snapshot,

@@ -145,9 +145,29 @@ random port никогда не считается заново prevalidated и 
 принимает только exact сохранённые dataset hash и routing descriptor, строит
 index, очищает ephemeral maps и публикует session последним присваиванием.
 Missing/mismatched floor переводит durable intent в `OFF`, не
-перезаписывая чужие settings. Missing configuration/dataset/credentials или
+перезаписывая чужие settings, но сохраняет точную старую floor identity как
+cleanup identity на случай, если Firefox позже восстановит слой расширения.
+Missing configuration/dataset/credentials или
 revoked private access оставляет session недоступной, а exact floor —
 fail-closed до Clear.
+
+`proxy.settings.onChange` регистрируется синхронно рядом с network listeners.
+Если `READY` session видит что-либо кроме exact persisted floor с
+`controlled_by_this_extension`, handler без ожидания скрывает active session,
+переводит runtime в `BLOCKED_CONTROL_LOSS` и очищает routing/auth ephemeral
+state. Асинхронная часть затем сохраняет `OFF` с retained cleanup identity;
+она никогда не вызывает `set()` и не очищает setting другого расширения или
+policy. Ошибка записи `OFF` оставляет runtime blocked/fail-closed и не
+восстанавливает session.
+
+Если Firefox после освобождения внешнего controller автоматически возвращает
+старый exact extension-owned floor, уже `OFF` controller удаляет только этот
+точно совпавший слой, восстанавливает нижележащую настройку и удаляет cleanup
+identity лишь после подтверждённого release. Resurfacing никогда не означает
+восстановление `ON` или `READY`. Безопасность на границе передачи control
+по-прежнему зависит от своевременной доставки Firefox события
+`proxy.settings.onChange`; до доставки browser может продолжать вызывать
+старые routing listeners.
 
 Prepared activation теперь фиксирует `ON` после floor confirmation, но до
 session publication. Crash до записи `ON` оставляет `OFF` + cleanup identity;

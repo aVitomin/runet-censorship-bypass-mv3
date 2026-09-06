@@ -106,6 +106,11 @@
       routingAdapter.onProxyRequest,
       {urls: ['<all_urls>']},
   );
+  browser.proxy.settings.onChange.addListener((change) => {
+
+    activationController.handleProxySettingsChange(change);
+
+  });
   browser.webRequest.onBeforeRequest.addListener(
       routingAdapter.onBeforeRequest,
       {urls: ['<all_urls>']},

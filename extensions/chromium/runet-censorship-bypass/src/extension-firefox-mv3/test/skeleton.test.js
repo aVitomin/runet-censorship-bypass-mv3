@@ -102,6 +102,7 @@ function startEventPage(options = {}) {
   };
   let messageListener;
   const networkListeners = {};
+  let proxySettingsChangeListener;
   const browser = {
     extension: {
       async isAllowedIncognitoAccess() {
@@ -136,6 +137,14 @@ function startEventPage(options = {}) {
         },
       },
       settings: {
+        onChange: {
+          addListener(listener) {
+
+            events.push('proxy-settings-change-listener-registered');
+            proxySettingsChangeListener = listener;
+
+          },
+        },
         async clear() {
 
           proxySettingsCalls.clear += 1;
@@ -251,6 +260,12 @@ function startEventPage(options = {}) {
     events,
     networkListeners,
     proxySettingsCalls,
+    proxySettingsChange(change) {
+
+      Assert.strictEqual(typeof proxySettingsChangeListener, 'function');
+      return proxySettingsChangeListener(change);
+
+    },
     storage,
     async ready() {
 
@@ -436,8 +451,9 @@ describe('Firefox MV3 inert skeleton', function() {
         const eventPage = startEventPage();
         await eventPage.ready();
 
-        Assert.deepStrictEqual(eventPage.events.slice(0, 7), [
+        Assert.deepStrictEqual(eventPage.events.slice(0, 8), [
           'proxy-listener-registered',
+          'proxy-settings-change-listener-registered',
           'guard-listener-registered',
           'auth-listener-registered',
           'completed-listener-registered',

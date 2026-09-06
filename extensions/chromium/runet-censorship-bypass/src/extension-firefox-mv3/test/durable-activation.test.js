@@ -132,7 +132,9 @@ function memoryStorage(initialState, events = [], options = {}) {
 
       const next = update[OffState.STORAGE_KEY];
       events.push(`storage-set-${next && next.intent || 'unknown'}`);
-      if (options.failOnIntent === (next && next.intent)) {
+      if (options.failOnIntent === (next && next.intent) ||
+          (typeof options.shouldFailSet === 'function' &&
+            options.shouldFailSet(next))) {
         throw new Error('synthetic storage write failure');
       }
       Object.assign(values, structuredClone(update));
@@ -240,6 +242,11 @@ function createSystem(options = {}) {
     get liveSettings() {
 
       return liveSettings;
+
+    },
+    setLiveSettings(value) {
+
+      liveSettings = structuredClone(value);
 
     },
     proxyAuth,
@@ -502,7 +509,7 @@ describe('Firefox durable activation recovery', function() {
         Assert.strictEqual(system.controller.currentRuntimeState(), 'OFF');
         Assert.deepStrictEqual(
             system.storageArea.values[OffState.STORAGE_KEY],
-            OffState.canonicalOffState(),
+            OffState.canonicalOffState(floor()),
         );
         Assert.strictEqual(system.proxyCalls.set, 0);
         Assert.strictEqual(system.proxyCalls.clear, 0);
@@ -834,5 +841,293 @@ describe('Firefox durable activation recovery', function() {
         Assert.strictEqual(system.routingAdapter.authorizationCount(), 1);
 
       });
+
+  describe('active proxy control loss', function() {
+
+    async function activeSystem(options = {}) {
+
+      const store = await verifiedStore();
+      const system = createSystem(options);
+      await system.controller.initializeFromDurable();
+      const activated = await system.controller.activatePrepared(prepared(
+          store,
+          undefined,
+          options.preparedOverrides,
+      ));
+      Assert.strictEqual(activated.ok, true);
+      return system;
+
+    }
+
+    function ownedFloorChange(identity = floor()) {
+
+      return {
+        levelOfControl: 'controlled_by_this_extension',
+        value: identity,
+      };
+
+    }
+
+    function externalChange() {
+
+      return {
+        levelOfControl: 'controlled_by_other_extensions',
+        value: {
+          proxyType: 'manual',
+          http: '127.0.0.1:58080',
+        },
+      };
+
+    }
+
+    it('keeps READY only for the exact extension-owned floor',
+        async function() {
+
+          const system = await activeSystem();
+
+          const observed = system.controller.handleProxySettingsChange(
+              ownedFloorChange(),
+          );
+
+          Assert.deepStrictEqual(observed, {
+            ok: true,
+            status: Activation.RESULTS.CONTROL_RETAINED,
+          });
+          Assert.strictEqual(system.controller.snapshot().active, true);
+          Assert.strictEqual(system.controller.currentRuntimeState(), 'READY');
+
+        });
+
+    it('withdraws synchronously and clears route/auth state before persistence',
+        async function() {
+
+          const authenticated = candidate({authRef: 'fixture-auth'});
+          const system = await activeSystem({
+            preparedOverrides: {
+              resolveCredentials: () => ({
+                username: 'fixture-user',
+                password: 'fixture-password',
+              }),
+              routingBaseInputForRequest: baseInputForRequest(authenticated),
+            },
+          });
+          const request = {
+            requestId: 'active-control-loss',
+            url: 'http://beta.example/',
+          };
+          system.routingAdapter.onProxyRequest(request);
+          system.routingAdapter.onBeforeRequest({
+            requestId: request.requestId,
+            proxyInfo: {type: 'http', host: '127.0.0.1', port: 18080},
+          });
+          system.proxyAuth.onAuthRequired({
+            requestId: request.requestId,
+            isProxy: true,
+            challenger: {host: '127.0.0.1', port: 18080},
+          });
+          Assert.ok(system.routingAdapter.authorizationCount() > 0);
+          Assert.strictEqual(system.proxyAuth.attemptCount(), 1);
+
+          const loss = system.controller.handleProxySettingsChange(
+              externalChange(),
+          );
+
+          Assert.strictEqual(loss.error.code, Activation.ERRORS.CONTROL_LOSS);
+          Assert.deepStrictEqual(system.controller.snapshot(), {
+            runtimeState: 'FAILED',
+            active: false,
+            durableIntent: 'ON',
+            recoveryStatus: Activation.RECOVERY_STATUS.BLOCKED_CONTROL_LOSS,
+            failureCode: Activation.ERRORS.CONTROL_LOSS,
+          });
+          Assert.strictEqual(system.routingAdapter.authorizationCount(), 0);
+          Assert.strictEqual(system.proxyAuth.attemptCount(), 0);
+          Assert.deepStrictEqual(system.routingAdapter.onBeforeRequest({
+            requestId: 'after-observed-loss',
+          }), {cancel: true});
+          await loss.reconciliation;
+          Assert.deepStrictEqual(
+              system.storageArea.values[OffState.STORAGE_KEY],
+              OffState.canonicalOffState(floor()),
+          );
+          Assert.strictEqual(system.controller.currentRuntimeState(), 'OFF');
+
+        });
+
+    it('never clears or overwrites the external controller setting',
+        async function() {
+
+          const system = await activeSystem();
+          const callsBefore = {
+            clear: system.proxyCalls.clear,
+            get: system.proxyCalls.get,
+            set: system.proxyCalls.set,
+          };
+          system.setLiveSettings(externalChange());
+
+          const loss = system.controller.handleProxySettingsChange(
+              externalChange(),
+          );
+          await loss.reconciliation;
+          system.controller.handleProxySettingsChange(externalChange());
+
+          Assert.strictEqual(system.proxyCalls.set, callsBefore.set);
+          Assert.strictEqual(system.proxyCalls.clear, callsBefore.clear);
+          Assert.deepStrictEqual(system.liveSettings, externalChange());
+
+        });
+
+    it('treats malformed or throwing change details as control loss',
+        async function() {
+
+          for (const change of [
+            null,
+            {levelOfControl: 'controlled_by_this_extension', value: null},
+            new Proxy({}, {
+              get() {
+
+                throw new Error('synthetic malformed change');
+
+              },
+            }),
+          ]) {
+            const system = await activeSystem();
+            const loss = system.controller.handleProxySettingsChange(change);
+
+            Assert.strictEqual(loss.error.code, Activation.ERRORS.CONTROL_LOSS);
+            Assert.strictEqual(system.controller.snapshot().active, false);
+            Assert.strictEqual(system.controller.currentRuntimeState(),
+                'FAILED');
+            await loss.reconciliation;
+          }
+
+        });
+
+    it('remains BLOCKED when durable OFF persistence fails', async function() {
+
+      let failOff = false;
+      const storageArea = memoryStorage(
+          OffState.canonicalOffState(),
+          [],
+          {shouldFailSet: (state) => failOff && state.intent === OffState.OFF},
+      );
+      const system = await activeSystem({storageArea});
+      failOff = true;
+
+      const loss = system.controller.handleProxySettingsChange(
+          externalChange(),
+      );
+      const persisted = await loss.reconciliation;
+
+      Assert.strictEqual(persisted.error.code,
+          Activation.ERRORS.DURABLE_OFF_PERSIST_FAILED);
+      Assert.deepStrictEqual(system.controller.snapshot(), {
+        runtimeState: 'FAILED',
+        active: false,
+        durableIntent: 'ON',
+        recoveryStatus: Activation.RECOVERY_STATUS.BLOCKED_CONTROL_LOSS,
+        failureCode: Activation.ERRORS.DURABLE_OFF_PERSIST_FAILED,
+      });
+
+    });
+
+    it('exact-clears a resurfaced old floor once and never resumes READY',
+        async function() {
+
+          const system = await activeSystem();
+          system.setLiveSettings(externalChange());
+          const loss = system.controller.handleProxySettingsChange(
+              externalChange(),
+          );
+          await loss.reconciliation;
+          const clearsBefore = system.proxyCalls.clear;
+          system.setLiveSettings(ownedFloorChange());
+
+          const first = system.controller.handleProxySettingsChange(
+              ownedFloorChange(),
+          );
+          const repeated = system.controller.handleProxySettingsChange(
+              ownedFloorChange(),
+          );
+          await Promise.all([first.reconciliation, repeated.reconciliation]);
+
+          Assert.strictEqual(system.proxyCalls.clear, clearsBefore + 1);
+          Assert.deepStrictEqual(system.storageArea.values[OffState.STORAGE_KEY],
+              OffState.canonicalOffState());
+          Assert.strictEqual(system.controller.currentRuntimeState(), 'OFF');
+          Assert.strictEqual(system.controller.snapshot().active, false);
+
+        });
+
+    it('leaves unrelated resurfaced settings untouched', async function() {
+
+      const system = createSystem({
+        durableState: OffState.canonicalOffState(floor()),
+        liveSettings: externalChange(),
+      });
+      await system.controller.initializeFromDurable();
+      const clearsBefore = system.proxyCalls.clear;
+
+      system.controller.handleProxySettingsChange(externalChange());
+
+      Assert.strictEqual(system.proxyCalls.clear, clearsBefore);
+      Assert.deepStrictEqual(system.liveSettings, externalChange());
+      Assert.strictEqual(system.controller.currentRuntimeState(), 'OFF');
+
+    });
+
+    it('recreation after loss stays OFF and never reacquires the floor',
+        async function() {
+
+          const original = await activeSystem();
+          original.setLiveSettings(externalChange());
+          const loss = original.controller.handleProxySettingsChange(
+              externalChange(),
+          );
+          await loss.reconciliation;
+          const recreated = createSystem({
+            storageArea: original.storageArea,
+            liveSettings: externalChange(),
+          });
+
+          const initialized = await recreated.controller.initializeFromDurable();
+
+          Assert.strictEqual(initialized.ok, false);
+          Assert.strictEqual(recreated.controller.currentRuntimeState(), 'OFF');
+          Assert.strictEqual(recreated.controller.snapshot().active, false);
+          Assert.deepStrictEqual(
+              recreated.storageArea.values[OffState.STORAGE_KEY],
+              OffState.canonicalOffState(floor()),
+          );
+          Assert.strictEqual(recreated.proxyCalls.set, 0);
+          Assert.strictEqual(recreated.proxyCalls.clear, 0);
+
+        });
+
+    it('retains cleanup identity when ON recovery sees a policy mismatch',
+        async function() {
+
+          const system = createSystem({
+            durableState: onState(),
+            liveSettings: {
+              levelOfControl: 'controlled_by_policy',
+              value: {proxyType: 'none'},
+            },
+          });
+
+          const result = await system.controller.initializeFromDurable();
+
+          Assert.strictEqual(result.error.code,
+              Activation.ERRORS.RECOVERY_FLOOR_MISMATCH);
+          Assert.deepStrictEqual(
+              system.storageArea.values[OffState.STORAGE_KEY],
+              OffState.canonicalOffState(floor()),
+          );
+          Assert.strictEqual(system.proxyCalls.set, 0);
+          Assert.strictEqual(system.proxyCalls.clear, 0);
+
+        });
+
+  });
 
 });
