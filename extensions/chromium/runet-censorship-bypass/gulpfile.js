@@ -28,9 +28,14 @@ const templatePlugin = (context) => through.obj(function(file, encoding, cb) {
 
       }, { keys: [], values: [] });
       try {
-        file.contents = Buffer.from(
-          (new Function(...keys, 'return `' + String(file.contents) + '`;'))(...values)
-        );
+        const rendered =
+          (new Function(...keys, 'return `' + String(file.contents) + '`;'))(
+              ...values,
+          );
+        file.contents = Buffer.from(rendered.replace(
+            '__ANTICENSORITY_PAC_URLS__',
+            JSON.stringify(context.anticensorityPacUrls, null, 2),
+        ));
       } catch(e) {
         e.message += '\nIN FILE: ' + originalPath;
         return cb(new PluginError(PluginName, e));

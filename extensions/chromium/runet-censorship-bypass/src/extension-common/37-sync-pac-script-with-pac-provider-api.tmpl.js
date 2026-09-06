@@ -195,19 +195,23 @@
 
       const pacMods = window.apis.pacKitchen.getPacMods();
       if (!pacMods.filteredCustomsString) {
-        addWarning(
-          ifRu
-            ? \`
-              Не найдено СВОИХ прокси. Этот PAC-скрипт
-              работает только со <a href="https://git.io/ac-own-proxy">СВОИМИ прокси</a>
-              (по умолчанию будет использоваться локальный <a href="https://git.io/ac-tor">Tor</a>).
-            \`
-            : \`
-              Couldn't find OWN proxies. This PAC-script
-              works only with <a href="https://git.io/ac-own-proxy">OWN proxies</a>
-              (by default local <a href="https://git.io/ac-tor">Tor</a> will be used).
-            \`,
-        );
+        if (ifRu) {
+          addWarning([
+            '',
+            '              Не найдено СВОИХ прокси. Этот PAC-скрипт',
+            '              работает только со <a href="https://git.io/ac-own-proxy">СВОИМИ прокси</a>',
+            '              (по умолчанию будет использоваться локальный <a href="https://git.io/ac-tor">Tor</a>).',
+            '            ',
+          ].join(String.fromCharCode(10)));
+        } else {
+          addWarning([
+            '',
+            "              Couldn't find OWN proxies. This PAC-script",
+            '              works only with <a href="https://git.io/ac-own-proxy">OWN proxies</a>',
+            '              (by default local <a href="https://git.io/ac-tor">Tor</a> will be used).',
+            '            ',
+          ].join(String.fromCharCode(10)));
+        }
       }
 
     }
@@ -263,16 +267,20 @@
         distinctKey: 'Antizapret',
         label: chrome.i18n.getMessage('Antizapret'),
         desc: ifRu
-                ? \`Основной PAC-скрипт от автора проекта «Антизапрет».
-                    Охватывет меньше сайтов.
-                    Блокировка определяется по доменному имени и при необходимости по IP.
-                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Сравнение PAC-скриптов</a>.
-                  \`
-                : \`The main PAC-script from the author of project "Antizapret"\.
-                    Covers fewer sites.
-                    Block is detected based on a domain name and, if necessary, on an IP.
-                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Comparison of PAC-scripts (ru)</a>.
-                  \`,
+                ? [
+                  'Основной PAC-скрипт от автора проекта «Антизапрет».',
+                  '                    Охватывет меньше сайтов.',
+                  '                    Блокировка определяется по доменному имени и при необходимости по IP.',
+                  '                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Сравнение PAC-скриптов</a>.',
+                  '                  ',
+                ].join(String.fromCharCode(10))
+                : [
+                  'The main PAC-script from the author of project "Antizapret".',
+                  '                    Covers fewer sites.',
+                  '                    Block is detected based on a domain name and, if necessary, on an IP.',
+                  '                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Comparison of PAC-scripts (ru)</a>.',
+                  '                  ',
+                ].join(String.fromCharCode(10)),
         order: 0,
         pacUrls: [
           'https://e.cen.rodeo:8443/proxy.pac',
@@ -285,18 +293,22 @@
         distinctKey: 'Anticensority',
         label: chrome.i18n.getMessage('Anticensority'),
         desc: ifRu
-                ? \`Альтернативный PAC-скрипт от автора расширения.
-                    Охватывает больше сайтов.
-                    Блокировка определятся по доменному имени или IP адресу.
-                    Подходит для провайдеров, блокирующих все сайты на одном IP.
-                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Сравнение PAC-скриптов</a>.
-                  \`
-                : \`Alternative PAC-script from the author of this extension.
-                    Covers more sites.
-                    Block is detected based on a domain name and on an IP address.
-                    Better fits providers that block all sites on one IP.
-                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Comparison of PAC-scripts (ru)</a>.
-                  \`,
+                ? [
+                  'Альтернативный PAC-скрипт от автора расширения.',
+                  '                    Охватывает больше сайтов.',
+                  '                    Блокировка определятся по доменному имени или IP адресу.',
+                  '                    Подходит для провайдеров, блокирующих все сайты на одном IP.',
+                  '                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Сравнение PAC-скриптов</a>.',
+                  '                  ',
+                ].join(String.fromCharCode(10))
+                : [
+                  'Alternative PAC-script from the author of this extension.',
+                  '                    Covers more sites.',
+                  '                    Block is detected based on a domain name and on an IP address.',
+                  '                    Better fits providers that block all sites on one IP.',
+                  '                    <br/> <a href="https://github.com/anticensority/runet-censorship-bypass/wiki/PAC-скрипты:-различия">Comparison of PAC-scripts (ru)</a>.',
+                  '                  ',
+                ].join(String.fromCharCode(10)),
         order: 1,
 
         /*
@@ -304,7 +316,7 @@
           Some urls are encoded to counter abuse.
           Version: 0.17
         */
-        pacUrls: ${JSON.stringify(anticensorityPacUrls, null, 2)},
+        pacUrls: __ANTICENSORITY_PAC_URLS__,
       },
       onlyOwnSites: {
         distinctKey: 'onlyOwnSites',
@@ -342,9 +354,10 @@
     setTitle() {
 
       const upDate = new Date(this.lastPacUpdateStamp).toLocaleString('ru-RU')
-        .replace(/:\\d+$/, '').replace(/\\.\\d{4}/, '');
+        .replace(/:[0-9]+$/, '').replace(/[.][0-9]{4}/, '');
       chrome.browserAction.setTitle({
-        title: \`\${chrome.i18n.getMessage('Updated')} \${upDate} | \${chrome.i18n.getMessage('Version')} \${window.apis.version.build}\`,
+        title: chrome.i18n.getMessage('Updated') + ' ' + upDate + ' | ' +
+          chrome.i18n.getMessage('Version') + ' ' + window.apis.version.build,
       });
 
     },
@@ -618,7 +631,7 @@
 
       })
     );
-    console.log('Alarm listener installed. We won\\'t miss any PAC update.');
+    console.log("Alarm listener installed. We won't miss any PAC update.");
 
     window.addEventListener('online', () => {
 
