@@ -60,6 +60,10 @@ const proxyAuthSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'proxy-auth.js'),
     'utf8',
 );
+const productConfigSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'product-config.js'),
+    'utf8',
+);
 const activationControllerSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'activation-controller.js'),
     'utf8',
@@ -81,7 +85,13 @@ function makeStorage(initialValue) {
     area: {
       async get(key) {
 
-        return key in values ? {[key]: values[key]} : {};
+        const keys = Array.isArray(key) ? key : [key];
+        return keys.reduce((result, item) => {
+          if (item in values) {
+            result[item] = values[item];
+          }
+          return result;
+        }, {});
 
       },
       async set(update) {
@@ -182,7 +192,8 @@ function startEventPage(options = {}) {
       local: {
         async get(key) {
 
-          events.push('storage-get');
+          events.push(Array.isArray(key) ?
+            'product-config-storage-get' : 'storage-get');
           return storage.area.get(key);
 
         },
@@ -258,6 +269,7 @@ function startEventPage(options = {}) {
     filename: 'routing-adapter.js',
   });
   Vm.runInContext(proxyAuthSource, context, {filename: 'proxy-auth.js'});
+  Vm.runInContext(productConfigSource, context, {filename: 'product-config.js'});
   Vm.runInContext(activationControllerSource, context, {
     filename: 'activation-controller.js',
   });
@@ -308,6 +320,7 @@ describe('Firefox MV3 inert skeleton', function() {
         'background/dataset-runtime.js',
         'background/routing-adapter.js',
         'background/proxy-auth.js',
+        'background/product-config.js',
         'background/activation-controller.js',
         'background/event-page.js',
       ],
@@ -558,7 +571,7 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
-  it('does not recover durable ON without a production recovery factory',
+  it('uses production recovery and fails closed without product config',
       async function() {
 
         const floorIdentity = {
@@ -605,10 +618,15 @@ describe('Firefox MV3 inert skeleton', function() {
         Assert.strictEqual(response.result.recoveryStatus, 'FAILED');
         Assert.strictEqual(
             response.result.recoveryFailureCode,
-            'RECOVERY_UNAVAILABLE',
+            'PRODUCT_CONFIG_MISSING',
         );
         Assert.strictEqual(eventPage.proxySettingsCalls.set, 0);
         Assert.strictEqual(eventPage.proxySettingsCalls.clear, 0);
+        Assert.strictEqual(
+            eventPage.events.filter((event) =>
+              event === 'product-config-storage-get').length,
+            1,
+        );
 
       });
 
@@ -624,6 +642,10 @@ describe('Firefox MV3 inert skeleton', function() {
     });
     Assert.strictEqual(capabilities.result.runtimeState, 'OFF');
     Assert.strictEqual(capabilities.result.durableIntent, 'OFF');
+    Assert.strictEqual(
+        eventPage.events.includes('product-config-storage-get'),
+        false,
+    );
 
   });
 
@@ -674,6 +696,7 @@ describe('Firefox MV3 inert skeleton', function() {
           datasetRuntimeSource,
           routingAdapterSource,
           proxyAuthSource,
+          productConfigSource,
           activationControllerSource,
           eventPageSource,
         ].join('\n');
@@ -693,7 +716,7 @@ describe('Firefox MV3 inert skeleton', function() {
         Assert.strictEqual(eventPageSource.includes('activatePrepared('), false);
         Assert.strictEqual(eventPageSource.includes('fetchAndStage'), false);
         Assert.strictEqual(eventPageSource.includes('promoteStaged'), false);
-        Assert.strictEqual(eventPageSource.includes('recoveryFactory:'), false);
+        Assert.strictEqual(eventPageSource.includes('recoveryFactory,'), true);
         Assert.strictEqual(eventPageSource.includes('proxy.settings.set'), false);
 
       });

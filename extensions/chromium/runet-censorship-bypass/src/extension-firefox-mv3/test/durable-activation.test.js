@@ -572,6 +572,39 @@ describe('Firefox durable activation recovery', function() {
 
       });
 
+  it('preserves only stable production recovery failure codes',
+      async function() {
+
+        for (const [factoryCode, expectedCode] of [
+          ['PRODUCT_CONFIG_MISSING', 'PRODUCT_CONFIG_MISSING'],
+          ['REQUIRED_CREDENTIAL_MISSING', 'REQUIRED_CREDENTIAL_MISSING'],
+          ['secret-value-must-not-escape', 'RECOVERY_FACTORY_FAILED'],
+        ]) {
+          const system = createSystem({
+            durableState: onState(),
+            liveSettings: {
+              levelOfControl: 'controlled_by_this_extension',
+              value: floor(),
+            },
+            recoveryFactory() {
+
+              const error = new Error('sanitized recovery failure');
+              error.code = factoryCode;
+              throw error;
+
+            },
+          });
+          const result = await system.controller.initializeFromDurable();
+
+          Assert.strictEqual(result.ok, false);
+          Assert.strictEqual(result.error.code, expectedCode);
+          Assert.strictEqual(system.controller.snapshot().failureCode,
+              expectedCode);
+          Assert.strictEqual(system.controller.currentRuntimeState(), 'FAILED');
+        }
+
+      });
+
   it('rejects missing or silently different recovery datasets', async function() {
 
     const missing = DatasetStore.createStore({

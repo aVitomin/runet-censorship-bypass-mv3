@@ -177,11 +177,38 @@ Clear сначала записывает `OFF` с cleanup identity, затем 
 очищает request/auth state и освобождает exact floor. Ошибка release сохраняет
 durable `OFF` и floor identity для следующего reconciliation.
 
-Production event page намеренно не передаёт recovery factory и по-прежнему не
-имеет пути создания `ON`: `firefox.activation.apply` возвращает
+Production event page теперь передаёт controller реальный recovery factory, но
+по-прежнему не имеет пути создания `ON`: `firefox.activation.apply` возвращает
 `ACTIVATION_NOT_IMPLEMENTED`, а capability `activationSupported` равен `false`.
-Synthetic recovery factory используется только в tests/browser QA; реальная
-конфигурация, provider artifact и persistent credentials в package отсутствуют.
+Factory используется только при уже существующем строгом durable `ON`; чистая
+установка `OFF` не открывает IndexedDB и не читает Firefox product config.
+
+Non-secret product config хранится отдельно под
+`firefoxMv3ProductRoutingConfig` в schema v1. Он содержит exact provider и
+dataset identity, тот же routing descriptor и каноническую структуру всех
+browser-neutral inputs: rules, candidate groups, flags, provider candidates и
+provider fallback. `configurationSha256` — SHA-256 от детерминированных UTF-8
+bytes этой строгой структуры. Поэтому recovery требует одновременного exact
+совпадения provider key, dataset hash/version, descriptor key/version/hash и
+уже принадлежащего расширению floor; новая active/staged/LKG версия dataset не
+подменяет durable identity.
+
+Proxy credentials находятся в отдельной schema v1 записи
+`firefoxMv3ProxyCredentials`, привязанной к тому же routing descriptor.
+Configuration содержит только `authRef`; credential record содержит только
+строгий список `authRef`/username/password. Во время boot credentials читаются
+до publication, проверяется наличие всех и только требуемых `authRef`, после
+чего READY session получает синхронный in-memory resolver. Passwords не входят
+в durable `ON`, routing descriptor, dataset metadata, RPC/status/errors/logs
+или diagnostics. Missing/malformed/future config, descriptor/provider/dataset
+mismatch, missing credential, hash failure или недоступный dataset store
+оставляют session недоступной, а exact floor — fail-closed до Clear.
+
+Recovery не выполняет network request: production dataset store открывается
+локально через IndexedDB только для durable `ON`, exact stored artifact ещё раз
+проверяется существующим dataset runtime, и session публикуется только после
+полного успеха. Реальный provider artifact, updater URL/key и persistent
+production configuration по-прежнему отсутствуют в package.
 
 Для каркаса используется development-only Gecko ID
 `firefox-mv3-skeleton@runet-censorship-bypass.invalid`. Production Gecko/AMO ID
