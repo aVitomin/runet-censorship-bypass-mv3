@@ -81,6 +81,7 @@
       const CANDIDATE_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
       const SHA256_PATTERN = /^[a-f0-9]{64}$/;
       const ERRORS = Object.freeze({
+        ACTIVATION_PREPARATION_FAILED: 'ACTIVATION_PREPARATION_FAILED',
         CREDENTIAL_CONFIG_DESCRIPTOR_MISMATCH:
           'CREDENTIAL_CONFIG_DESCRIPTOR_MISMATCH',
         CREDENTIAL_CONFIG_MALFORMED: 'CREDENTIAL_CONFIG_MALFORMED',
@@ -479,7 +480,7 @@
 
       }
 
-      function createRecoveryFactory(options = {}) {
+      function createProductSnapshotLoader(options = {}) {
 
         const storageArea = options.storageArea;
         const createDatasetStore = options.createDatasetStore;
@@ -489,7 +490,7 @@
             typeof sha256 !== 'function') {
           throw configError(ERRORS.INVALID_PRODUCT_CONFIG_DEPENDENCIES);
         }
-        return async function recoverProductConfiguration(durableState) {
+        return async function loadProductSnapshot() {
 
           let stored;
           try {
@@ -511,22 +512,6 @@
               sha256,
           );
           const config = verified.config;
-          if (config.providerKey !== durableState.providerKey) {
-            throw configError(ERRORS.PRODUCT_CONFIG_PROVIDER_MISMATCH);
-          }
-          if (!sameDatasetIdentity(
-              config.datasetIdentity,
-              durableState.datasetIdentity,
-          )) {
-            throw configError(ERRORS.PRODUCT_CONFIG_DATASET_MISMATCH);
-          }
-          if (!sameDescriptor(
-              config.routingDescriptor,
-              durableState.routingDescriptor,
-          )) {
-            throw configError(ERRORS.PRODUCT_CONFIG_DESCRIPTOR_MISMATCH);
-          }
-
           const hasCredentialConfig = Object.prototype.hasOwnProperty.call(
               stored,
               CREDENTIALS_STORAGE_KEY,
@@ -567,12 +552,64 @@
             throw configError(ERRORS.DATASET_STORE_UNAVAILABLE);
           }
           return Object.freeze({
+            datasetIdentity: config.datasetIdentity,
             datasetStore,
+            providerKey: config.providerKey,
             resolveCredentials: createCredentialResolver(entries),
             routingBaseInputForRequest: createRoutingBaseInput(
                 config.routingConfig,
             ),
             routingDescriptor: config.routingDescriptor,
+          });
+
+        };
+
+      }
+
+      function createActivationFactory(options = {}) {
+
+        const loadProductSnapshot = createProductSnapshotLoader(options);
+        return async function prepareProductActivation() {
+
+          try {
+            return await loadProductSnapshot();
+          } catch (error) {
+            if (error && Object.values(ERRORS).includes(error.code)) {
+              throw error;
+            }
+            throw configError(ERRORS.ACTIVATION_PREPARATION_FAILED);
+          }
+
+        };
+
+      }
+
+      function createRecoveryFactory(options = {}) {
+
+        const prepareProductActivation = createActivationFactory(options);
+        return async function recoverProductConfiguration(durableState) {
+
+          const prepared = await prepareProductActivation();
+          if (prepared.providerKey !== durableState.providerKey) {
+            throw configError(ERRORS.PRODUCT_CONFIG_PROVIDER_MISMATCH);
+          }
+          if (!sameDatasetIdentity(
+              prepared.datasetIdentity,
+              durableState.datasetIdentity,
+          )) {
+            throw configError(ERRORS.PRODUCT_CONFIG_DATASET_MISMATCH);
+          }
+          if (!sameDescriptor(
+              prepared.routingDescriptor,
+              durableState.routingDescriptor,
+          )) {
+            throw configError(ERRORS.PRODUCT_CONFIG_DESCRIPTOR_MISMATCH);
+          }
+          return Object.freeze({
+            datasetStore: prepared.datasetStore,
+            resolveCredentials: prepared.resolveCredentials,
+            routingBaseInputForRequest: prepared.routingBaseInputForRequest,
+            routingDescriptor: prepared.routingDescriptor,
           });
 
         };
@@ -615,6 +652,7 @@
         canonicalCredentialConfig,
         canonicalProductConfig,
         canonicalRoutingConfig,
+        createActivationFactory,
         createCredentialResolver,
         createProductConfig,
         createRecoveryFactory,

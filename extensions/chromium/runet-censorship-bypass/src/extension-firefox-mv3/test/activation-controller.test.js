@@ -211,7 +211,7 @@ function createHarness(options = {}) {
 
 }
 
-describe('Firefox inert activation transaction', function() {
+describe('Firefox activation transaction', function() {
 
   it('accepts only the exact floor-independent prepared contract', async function() {
 
@@ -735,6 +735,131 @@ describe('Firefox inert activation transaction', function() {
         );
 
       });
+
+  it('serializes Clear behind an in-progress activation transaction',
+      async function() {
+
+        const store = await verifiedStore();
+        let releasePause;
+        let reportFloor;
+        const floorReached = new Promise((resolve) => {
+          reportFloor = resolve;
+        });
+        const harness = createHarness({
+          afterFloorAcquired() {
+
+            reportFloor();
+            return new Promise((resolve) => {
+              releasePause = resolve;
+            });
+
+          },
+        });
+        const activation = harness.controller.activatePrepared(prepared(store));
+        await floorReached;
+        const clearing = harness.controller.clear();
+
+        Assert.strictEqual(harness.controller.currentRuntimeState(),
+            'INITIALIZING');
+        releasePause();
+        Assert.strictEqual((await activation).status, Activation.RESULTS.ACTIVE);
+        Assert.strictEqual((await clearing).ok, true);
+        Assert.strictEqual(harness.controller.currentRuntimeState(), 'OFF');
+        Assert.deepStrictEqual(
+            harness.events.map(([name]) => name),
+            ['floor-acquire', 'floor-clear'],
+        );
+
+      });
+
+  it('serializes Apply behind an in-progress Clear transaction',
+      async function() {
+
+        const store = await verifiedStore();
+        let releaseClear;
+        let reportClear;
+        const clearReached = new Promise((resolve) => {
+          reportClear = resolve;
+        });
+        const harness = createHarness({
+          proxyControl: {
+            async clearFloor() {
+
+              reportClear();
+              await new Promise((resolve) => {
+                releaseClear = resolve;
+              });
+              return {
+                ok: true,
+                status: ProxyControl.RESULTS.CLEARED,
+                durableState: OffState.canonicalOffState(),
+              };
+
+            },
+          },
+        });
+        Assert.strictEqual(
+            (await harness.controller.activatePrepared(prepared(store))).ok,
+            true,
+        );
+        const clearing = harness.controller.clear();
+        await clearReached;
+        const applying = harness.controller.activatePrepared(prepared(store));
+
+        releaseClear();
+        Assert.strictEqual((await clearing).ok, true);
+        Assert.strictEqual((await applying).status, Activation.RESULTS.ACTIVE);
+        Assert.strictEqual(harness.controller.currentRuntimeState(), 'READY');
+        Assert.strictEqual(
+            harness.events.filter(([name]) => name === 'floor-acquire').length,
+            2,
+        );
+
+      });
+
+  it('rejects Apply while boot is not initialized', async function() {
+
+    const store = await verifiedStore();
+    const harness = createHarness({autoInitialize: false});
+
+    Assert.deepStrictEqual(
+        await harness.controller.activatePrepared(prepared(store)),
+        {ok: false, error: {code: Activation.ERRORS.BOOT_NOT_READY}},
+    );
+    Assert.deepStrictEqual(harness.events, []);
+
+  });
+
+  it('does not reactivate after a failed rollback', async function() {
+
+    const store = await verifiedStore();
+    const harness = createHarness({
+      afterFloorAcquired() {
+
+        throw new Error('synthetic interruption');
+
+      },
+      clearResult: {
+        ok: false,
+        error: {code: ProxyControl.ERRORS.PROXY_CLEAR_FAILED},
+        durableState: OffState.canonicalOffState(floor()),
+      },
+    });
+    const failed = await harness.controller.activatePrepared(prepared(store));
+    const retry = await harness.controller.activatePrepared(prepared(store));
+
+    Assert.strictEqual(failed.error.code,
+        Activation.ERRORS.ACTIVATION_ROLLBACK_FAILED);
+    Assert.deepStrictEqual(retry, {
+      ok: false,
+      error: {code: Activation.ERRORS.BOOT_NOT_READY},
+    });
+    Assert.strictEqual(
+        harness.events.filter(([name]) => name === 'floor-acquire').length,
+        1,
+    );
+
+  });
 
   it('starts a recreated controller OFF with no authorization or auth state',
       async function() {

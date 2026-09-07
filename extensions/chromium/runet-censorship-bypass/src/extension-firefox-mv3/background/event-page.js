@@ -30,11 +30,17 @@
 
   }
 
-  const recoveryFactory = productConfigApi.createRecoveryFactory({
+  const productFactoryOptions = {
     storageArea: browser.storage.local,
     createDatasetStore: createProductionDatasetStore,
     sha256,
-  });
+  };
+  const activationFactory = productConfigApi.createActivationFactory(
+      productFactoryOptions,
+  );
+  const recoveryFactory = productConfigApi.createRecoveryFactory(
+      productFactoryOptions,
+  );
   const routingAdapter = routing.createAdapter({
     runtimeStateForRequest: () => activationController ?
       activationController.currentRuntimeState() : routing.STATES.INITIALIZING,
@@ -76,6 +82,32 @@
 
   }
 
+  const SAFE_APPLY_ERROR_CODES = new Set([
+    ...Object.values(productConfigApi.ERRORS),
+    ...Object.values(activationApi.ERRORS),
+    ...Object.values(proxyControlApi.ERRORS),
+    'DATASET_INDEX_BUILD_FAILED',
+    'NO_USABLE_PROVIDER_DATASET',
+    'SELECTED_DATASET_UNAVAILABLE',
+  ]);
+
+  function exactRpcRequest(message, type) {
+
+    return Boolean(message) && typeof message === 'object' &&
+      !Array.isArray(message) && message.type === type &&
+      Object.keys(message).length === 1;
+
+  }
+
+  function safeApplyErrorCode(value) {
+
+    const code = typeof value === 'string' ? value :
+      value && typeof value === 'object' ? value.code : null;
+    return SAFE_APPLY_ERROR_CODES.has(code) ? code :
+      activationApi.ERRORS.ACTIVATION_FAILED;
+
+  }
+
   async function readPrivateWindowAccess() {
 
     try {
@@ -84,6 +116,63 @@
     } catch (_error) {
       return 'UNKNOWN';
     }
+
+  }
+
+  let rpcControlQueue = Promise.resolve();
+
+  function enqueueRpcControlOperation(operation) {
+
+    const result = rpcControlQueue.then(operation, operation);
+    rpcControlQueue = result.catch(() => undefined);
+    return result;
+
+  }
+
+  async function applyPersistedProductConfiguration() {
+
+    const current = activationController.snapshot();
+    if (current.active) {
+      return errorResponse(activationApi.ERRORS.ACTIVATION_ALREADY_ACTIVE);
+    }
+    if (current.durableIntent !== offState.OFF ||
+        current.runtimeState !== routing.STATES.OFF) {
+      return errorResponse(activationApi.ERRORS.BOOT_NOT_READY);
+    }
+    let prepared;
+    try {
+      prepared = await activationFactory();
+    } catch (error) {
+      return errorResponse(safeApplyErrorCode(error));
+    }
+    let activated;
+    try {
+      activated = await activationController.activatePrepared(prepared);
+    } catch (_error) {
+      return errorResponse(activationApi.ERRORS.ACTIVATION_FAILED);
+    }
+    if (!activated || activated.ok !== true) {
+      return errorResponse(safeApplyErrorCode(
+          activated && activated.error,
+      ));
+    }
+    return {
+      ok: true,
+      result: {intent: offState.ON, status: activated.status},
+    };
+
+  }
+
+  async function clearProductActivation() {
+
+    const cleared = await activationController.clear();
+    if (!cleared.ok) {
+      return errorResponse(cleared.error.code);
+    }
+    return {
+      ok: true,
+      result: {intent: offState.OFF, status: cleared.status},
+    };
 
   }
 
@@ -107,24 +196,20 @@
           recoveryFailureCode: activation.failureCode,
           privateWindowAccess: await readPrivateWindowAccess(),
           routingImplemented: true,
-          activationSupported: false,
+          activationSupported: true,
           providerDatasetImplemented: true,
-          providerDatasetAvailable: false,
+          providerDatasetAvailable: activation.active,
         },
       };
     }
     if (type === 'firefox.activation.apply') {
-      return errorResponse('ACTIVATION_NOT_IMPLEMENTED');
+      if (!exactRpcRequest(message, type)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      return enqueueRpcControlOperation(applyPersistedProductConfiguration);
     }
     if (type === 'firefox.activation.clear') {
-      const cleared = await activationController.clear();
-      if (!cleared.ok) {
-        return errorResponse(cleared.error.code);
-      }
-      return {
-        ok: true,
-        result: {intent: offState.OFF, status: cleared.status},
-      };
+      return enqueueRpcControlOperation(clearProductActivation);
     }
     return errorResponse('UNKNOWN_RPC');
 

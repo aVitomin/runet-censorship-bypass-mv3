@@ -1024,6 +1024,32 @@ describe('Firefox durable activation recovery', function() {
 
         });
 
+    it('permits only a new explicit activation after persisted control loss',
+        async function() {
+
+          const store = await verifiedStore();
+          const system = createSystem();
+          await system.controller.initializeFromDurable();
+          Assert.strictEqual(
+              (await system.controller.activatePrepared(prepared(store))).ok,
+              true,
+          );
+          const loss = system.controller.handleProxySettingsChange(
+              externalChange(),
+          );
+          await loss.reconciliation;
+
+          Assert.strictEqual(system.controller.currentRuntimeState(), 'OFF');
+          Assert.strictEqual(system.controller.snapshot().active, false);
+          const reapplied = await system.controller.activatePrepared(
+              prepared(store),
+          );
+          Assert.strictEqual(reapplied.status, Activation.RESULTS.ACTIVE);
+          Assert.strictEqual(system.proxyCalls.set, 2);
+          Assert.strictEqual(system.controller.currentRuntimeState(), 'READY');
+
+        });
+
     it('treats malformed or throwing change details as control loss',
         async function() {
 

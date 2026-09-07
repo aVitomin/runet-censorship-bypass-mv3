@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Runet Censorship Bypass Firefox MV3 development skeleton",
   "version": "0.0.0.1",
-  "description": "Firefox MV3 architecture package. Routing activation is not implemented.",
+  "description": "Firefox MV3 architecture package. Starts off and activates only from verified local product state.",
   "permissions": [
     "storage",
     "proxy",
