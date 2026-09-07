@@ -119,7 +119,7 @@ function verifyPackage(packageRoot, sourceRoot) {
   );
   Assert.strictEqual(eventPageText.includes('proxy.settings.set'), false);
   Assert.strictEqual(eventPageText.includes('acquireRandomFloor('), false);
-  Assert.strictEqual(eventPageText.includes('activatePrepared('), false);
+  Assert.strictEqual(eventPageText.includes('activatePrepared('), true);
   Assert.strictEqual(eventPageText.includes('fetchAndStage'), false);
   Assert.strictEqual(eventPageText.includes('promoteStaged'), false);
   Assert.strictEqual(
@@ -127,7 +127,7 @@ function verifyPackage(packageRoot, sourceRoot) {
       true,
   );
   Assert.strictEqual(
-      eventPageText.includes('errorResponse(\'ACTIVATION_NOT_IMPLEMENTED\')'),
+      eventPageText.includes('createActivationFactory('),
       true,
   );
 
@@ -142,7 +142,7 @@ if (require.main === module) {
       Path.join(projectRoot, 'src', 'extension-firefox-mv3'),
   );
   console.log(
-      `Verified OFF-only Firefox MV3 control package: ${result.files.length} files.`,
+      `Verified OFF-default Firefox MV3 control package: ${result.files.length} files.`,
   );
 }
 

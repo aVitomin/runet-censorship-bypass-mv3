@@ -142,6 +142,18 @@ function recoveryFactory(values, options = {}) {
 
 }
 
+function activationFactory(values, options = {}) {
+
+  return Config.createActivationFactory({
+    storageArea: storage(values, options.storageError),
+    createDatasetStore: options.createDatasetStore || (() => ({
+      loadVerifications() {},
+    })),
+    sha256,
+  });
+
+}
+
 async function rejectsCode(operation, code) {
 
   await Assert.rejects(operation, (error) => error && error.code === code);
@@ -371,6 +383,110 @@ describe('Firefox production recovery configuration', function() {
             Object.prototype.toString.call(recovered.resolveCredentials),
             '[object Function]',
         );
+
+      });
+
+  it('prepares the exact immutable production activation contract',
+      async function() {
+
+        const config = await productConfig({
+          routingConfig: routingConfig({providerCandidates: [candidate({
+            authRef: 'fixture-auth',
+          })]}),
+        });
+        const values = {
+          [Config.CONFIG_STORAGE_KEY]: structuredClone(config),
+          [Config.CREDENTIALS_STORAGE_KEY]: credentialConfig(
+              config.routingDescriptor,
+              [{
+                authRef: 'fixture-auth',
+                username: 'synthetic-user',
+                password: 'synthetic-password',
+              }],
+          ),
+        };
+        const prepared = await activationFactory(values)();
+
+        Assert.deepStrictEqual(Object.keys(prepared).sort(), [
+          'datasetIdentity',
+          'datasetStore',
+          'providerKey',
+          'resolveCredentials',
+          'routingBaseInputForRequest',
+          'routingDescriptor',
+        ]);
+        Assert.deepStrictEqual(prepared.datasetIdentity, config.datasetIdentity);
+        Assert.deepStrictEqual(
+            prepared.routingBaseInputForRequest({url: 'http://ignored.test'}),
+            config.routingConfig,
+        );
+        Assert.deepStrictEqual(prepared.resolveCredentials('fixture-auth'), {
+          username: 'synthetic-user',
+          password: 'synthetic-password',
+        });
+        Assert.strictEqual(Object.isFrozen(prepared), true);
+        Assert.strictEqual(JSON.stringify(prepared).includes('password'), false);
+
+      });
+
+  it('binds one Apply attempt to one immutable storage snapshot',
+      async function() {
+
+        const config = await productConfig({
+          routingConfig: routingConfig({providerCandidates: [candidate({
+            authRef: 'fixture-auth',
+          })]}),
+        });
+        const values = {
+          [Config.CONFIG_STORAGE_KEY]: structuredClone(config),
+          [Config.CREDENTIALS_STORAGE_KEY]: credentialConfig(
+              config.routingDescriptor,
+              [{
+                authRef: 'fixture-auth',
+                username: 'before',
+                password: 'before-secret',
+              }],
+          ),
+        };
+        const prepared = await activationFactory(values)();
+        values[Config.CONFIG_STORAGE_KEY].routingConfig.flags.noDirect = true;
+        values[Config.CREDENTIALS_STORAGE_KEY].entries[0].username = 'after';
+        values[Config.CREDENTIALS_STORAGE_KEY].entries[0].password =
+          'after-secret';
+
+        Assert.strictEqual(
+            prepared.routingBaseInputForRequest({}).flags.noDirect,
+            false,
+        );
+        Assert.deepStrictEqual(prepared.resolveCredentials('fixture-auth'), {
+          username: 'before',
+          password: 'before-secret',
+        });
+
+      });
+
+  it('uses the same strict parser for activation and recovery failures',
+      async function() {
+
+        const valid = await productConfig();
+        const cases = [
+          [{}, Config.ERRORS.PRODUCT_CONFIG_MISSING],
+          [{[Config.CONFIG_STORAGE_KEY]: Object.assign({}, valid, {
+            schemaVersion: 2,
+          })}, Config.ERRORS.PRODUCT_CONFIG_VERSION_UNSUPPORTED],
+          [{[Config.CONFIG_STORAGE_KEY]: Object.assign({}, valid, {
+            routingConfig: Object.assign({}, valid.routingConfig, {
+              extra: true,
+            }),
+          })}, Config.ERRORS.PRODUCT_CONFIG_MALFORMED],
+        ];
+        for (const [values, code] of cases) {
+          await rejectsCode(() => activationFactory(values)(), code);
+          await rejectsCode(
+              () => recoveryFactory(values)(durableOn(valid)),
+              code,
+          );
+        }
 
       });
 

@@ -4,7 +4,10 @@ const Assert = require('node:assert');
 const Fs = require('node:fs');
 const Path = require('node:path');
 const Vm = require('node:vm');
+const DatasetStore = require('../background/dataset-store');
 const OffState = require('../background/off-state');
+const Routing = require('../../extension-mv3-common/routing-contract');
+const Helpers = require('./dataset-test-helpers');
 
 const sourceRoot = Path.resolve(__dirname, '..');
 const manifest = JSON.parse(Fs.readFileSync(
@@ -105,6 +108,50 @@ function makeStorage(initialValue) {
 
 }
 
+async function preparedActivation() {
+
+  const artifact = Helpers.artifact();
+  const store = DatasetStore.createStore({
+    backend: Helpers.memoryBackend(),
+    sha256: async (bytes) => Helpers.sha256(Buffer.from(bytes)),
+  });
+  const committed = await store.commitPackagedBaseline(artifact);
+  Assert.strictEqual(committed.ok, true);
+  return Object.freeze({
+    datasetIdentity: Object.freeze({
+      providerKey: artifact.envelope.providerKey,
+      datasetVersion: artifact.envelope.datasetVersion,
+      artifactSha256: artifact.envelope.artifactSha256,
+    }),
+    datasetStore: store,
+    providerKey: artifact.envelope.providerKey,
+    resolveCredentials: () => null,
+    routingBaseInputForRequest: () => ({
+      hostname: 'beta.example',
+      rules: {},
+      candidateGroups: {},
+      flags: {},
+      providerCandidates: [{
+        id: 'synthetic-proxy',
+        type: 'HTTP',
+        host: '127.0.0.1',
+        port: 18080,
+        proxyDNS: false,
+        authRef: null,
+        failoverTimeoutSeconds: null,
+      }],
+      providerFallback: Routing.FALLBACKS.DIRECT,
+    }),
+    routingDescriptor: Object.freeze({
+      schemaVersion: 1,
+      configurationKey: 'synthetic-routing',
+      configurationVersion: '1',
+      configurationSha256: 'a'.repeat(64),
+    }),
+  });
+
+}
+
 function startEventPage(options = {}) {
 
   const events = [];
@@ -163,6 +210,9 @@ function startEventPage(options = {}) {
 
           proxySettingsCalls.clear += 1;
           events.push('proxy-settings-clear');
+          if (options.proxyClearWait) {
+            await options.proxyClearWait;
+          }
           liveProxySettings = options.afterClearProxySettings || {
             levelOfControl: 'controllable_by_this_extension',
             value: {proxyType: 'none'},
@@ -180,7 +230,10 @@ function startEventPage(options = {}) {
 
           proxySettingsCalls.set += 1;
           events.push('proxy-settings-set');
-          liveProxySettings = {
+          if (options.proxySetError) {
+            throw options.proxySetError;
+          }
+          liveProxySettings = options.afterSetProxySettings || {
             levelOfControl: 'controlled_by_this_extension',
             value: update.value,
           };
@@ -242,7 +295,19 @@ function startEventPage(options = {}) {
   };
   const context = Vm.createContext({
     browser,
-    crypto: {randomUUID: () => options.bootId || 'test-boot'},
+    crypto: {
+      randomUUID: () => options.bootId || 'test-boot',
+      getRandomValues(words) {
+
+        if (options.randomError) {
+          throw options.randomError;
+        }
+        words[0] = options.randomWord === undefined ? 4096 :
+          options.randomWord;
+        return words;
+
+      },
+    },
   });
   Vm.runInContext(routingContractSource, context, {
     filename: 'routing-contract.js',
@@ -270,6 +335,13 @@ function startEventPage(options = {}) {
   });
   Vm.runInContext(proxyAuthSource, context, {filename: 'proxy-auth.js'});
   Vm.runInContext(productConfigSource, context, {filename: 'product-config.js'});
+  if (options.activationFactory) {
+    context.rucbFirefoxProductConfig = Object.freeze(Object.assign(
+        {},
+        context.rucbFirefoxProductConfig,
+        {createActivationFactory: () => options.activationFactory},
+    ));
+  }
   Vm.runInContext(activationControllerSource, context, {
     filename: 'activation-controller.js',
   });
@@ -302,7 +374,7 @@ function startEventPage(options = {}) {
 
 }
 
-describe('Firefox MV3 inert skeleton', function() {
+describe('Firefox MV3 production control package', function() {
 
   it('uses the Firefox MV3 event-page manifest model', function() {
 
@@ -533,32 +605,35 @@ describe('Firefox MV3 inert skeleton', function() {
 
       });
 
-  it('reports stable OFF-only capabilities', async function() {
+  it('reports production Apply capability without claiming absent data',
+      async function() {
 
-    const eventPage = startEventPage({privateWindowAccess: true});
-    const response = await eventPage.send({type: 'firefox.capabilities.get'});
+        const eventPage = startEventPage({privateWindowAccess: true});
+        const response = await eventPage.send({
+          type: 'firefox.capabilities.get',
+        });
 
-    Assert.deepStrictEqual(response, {
-      ok: true,
-      result: {
-        apiVersion: 2,
-        browser: 'FIREFOX',
-        manifestVersion: 3,
-        runtimeModel: 'BACKGROUND_EVENT_PAGE',
-        runtimeState: 'OFF',
-        durableIntent: 'OFF',
-        recoveryStatus: 'OFF',
-        recoveryFailureCode: null,
-        privateWindowAccess: 'GRANTED',
-        routingImplemented: true,
-        activationSupported: false,
-        providerDatasetImplemented: true,
-        providerDatasetAvailable: false,
-      },
-    });
-    Assert.strictEqual('bootId' in response.result, false);
+        Assert.deepStrictEqual(response, {
+          ok: true,
+          result: {
+            apiVersion: 2,
+            browser: 'FIREFOX',
+            manifestVersion: 3,
+            runtimeModel: 'BACKGROUND_EVENT_PAGE',
+            runtimeState: 'OFF',
+            durableIntent: 'OFF',
+            recoveryStatus: 'OFF',
+            recoveryFailureCode: null,
+            privateWindowAccess: 'GRANTED',
+            routingImplemented: true,
+            activationSupported: true,
+            providerDatasetImplemented: true,
+            providerDatasetAvailable: false,
+          },
+        });
+        Assert.strictEqual('bootId' in response.result, false);
 
-  });
+      });
 
   it('keeps private-window access informational', async function() {
 
@@ -630,24 +705,276 @@ describe('Firefox MV3 inert skeleton', function() {
 
       });
 
-  it('rejects activation without changing OFF state', async function() {
+  it('fails production Apply safely when product config is absent',
+      async function() {
 
-    const eventPage = startEventPage();
-    const activation = await eventPage.send({type: 'firefox.activation.apply'});
-    const capabilities = await eventPage.send({type: 'firefox.capabilities.get'});
+        const eventPage = startEventPage();
+        const activation = await eventPage.send({
+          type: 'firefox.activation.apply',
+        });
+        const capabilities = await eventPage.send({
+          type: 'firefox.capabilities.get',
+        });
 
-    Assert.deepStrictEqual(activation, {
-      ok: false,
-      error: {code: 'ACTIVATION_NOT_IMPLEMENTED'},
+        Assert.deepStrictEqual(activation, {
+          ok: false,
+          error: {code: 'PRODUCT_CONFIG_MISSING'},
+        });
+        Assert.strictEqual(capabilities.result.runtimeState, 'OFF');
+        Assert.strictEqual(capabilities.result.durableIntent, 'OFF');
+        Assert.strictEqual(
+            eventPage.events.includes('product-config-storage-get'),
+            true,
+        );
+
+      });
+
+  it('activates only through the exact no-input production Apply RPC',
+      async function() {
+
+        const prepared = await preparedActivation();
+        let factoryCalls = 0;
+        const eventPage = startEventPage({
+          privateWindowAccess: true,
+          activationFactory: async () => {
+
+            factoryCalls += 1;
+            return prepared;
+
+          },
+        });
+        const invalid = await eventPage.send({
+          type: 'firefox.activation.apply',
+          providerKey: prepared.providerKey,
+        });
+        Assert.deepStrictEqual(invalid, {
+          ok: false,
+          error: {code: 'INVALID_RPC_REQUEST'},
+        });
+        Assert.strictEqual(factoryCalls, 0);
+        Assert.strictEqual(eventPage.proxySettingsCalls.set, 0);
+
+        const activated = await eventPage.send({
+          type: 'firefox.activation.apply',
+        });
+        Assert.deepStrictEqual(activated, {
+          ok: true,
+          result: {intent: 'ON', status: 'ACTIVE'},
+        });
+        Assert.strictEqual(factoryCalls, 1);
+        Assert.strictEqual(eventPage.proxySettingsCalls.set, 1);
+        Assert.strictEqual(
+            eventPage.storage.values[OffState.STORAGE_KEY].intent,
+            'ON',
+        );
+        Assert.strictEqual(
+            eventPage.storage.values[OffState.STORAGE_KEY].floorIdentity.socks,
+            '127.0.0.1:53248',
+        );
+        const capabilities = await eventPage.send({
+          type: 'firefox.capabilities.get',
+        });
+        Assert.strictEqual(capabilities.result.activationSupported, true);
+        Assert.strictEqual(capabilities.result.providerDatasetAvailable, true);
+        Assert.strictEqual(capabilities.result.runtimeState, 'READY');
+
+      });
+
+  it('serializes simultaneous production Apply calls into one activation',
+      async function() {
+
+        const prepared = await preparedActivation();
+        let factoryCalls = 0;
+        const eventPage = startEventPage({
+          privateWindowAccess: true,
+          activationFactory: async () => {
+
+            factoryCalls += 1;
+            return prepared;
+
+          },
+        });
+        const results = await Promise.all([
+          eventPage.send({type: 'firefox.activation.apply'}),
+          eventPage.send({type: 'firefox.activation.apply'}),
+        ]);
+
+        Assert.strictEqual(results.filter((result) => result.ok).length, 1);
+        Assert.deepStrictEqual(
+            results.find((result) => !result.ok),
+            {ok: false, error: {code: 'ACTIVATION_ALREADY_ACTIVE'}},
+        );
+        Assert.strictEqual(factoryCalls, 1);
+        Assert.strictEqual(eventPage.proxySettingsCalls.set, 1);
+
+      });
+
+  it('orders Clear after an in-progress production Apply', async function() {
+
+    const prepared = await preparedActivation();
+    let releasePreparation;
+    const preparationWait = new Promise((resolve) => {
+
+      releasePreparation = resolve;
+
     });
-    Assert.strictEqual(capabilities.result.runtimeState, 'OFF');
-    Assert.strictEqual(capabilities.result.durableIntent, 'OFF');
+    let factoryStarted;
+    const factoryStart = new Promise((resolve) => {
+
+      factoryStarted = resolve;
+
+    });
+    const eventPage = startEventPage({
+      privateWindowAccess: true,
+      activationFactory: async () => {
+
+        factoryStarted();
+        await preparationWait;
+        return prepared;
+
+      },
+    });
+    const applying = eventPage.send({type: 'firefox.activation.apply'});
+    await factoryStart;
+    const clearing = eventPage.send({type: 'firefox.activation.clear'});
+    releasePreparation();
+
+    Assert.strictEqual((await applying).ok, true);
+    Assert.deepStrictEqual(await clearing, {
+      ok: true,
+      result: {intent: 'OFF', status: 'CLEARED'},
+    });
+    Assert.strictEqual(eventPage.proxySettingsCalls.set, 1);
+    Assert.strictEqual(eventPage.proxySettingsCalls.clear, 1);
     Assert.strictEqual(
-        eventPage.events.includes('product-config-storage-get'),
-        false,
+        (await eventPage.send({type: 'firefox.capabilities.get'}))
+            .result.runtimeState,
+        'OFF',
     );
 
   });
+
+  it('orders production Apply after an in-progress Clear', async function() {
+
+    const prepared = await preparedActivation();
+    let releaseClear;
+    const clearWait = new Promise((resolve) => {
+
+      releaseClear = resolve;
+
+    });
+    const eventPage = startEventPage({
+      privateWindowAccess: true,
+      activationFactory: async () => prepared,
+      proxyClearWait: clearWait,
+    });
+    Assert.strictEqual((await eventPage.send({
+      type: 'firefox.activation.apply',
+    })).ok, true);
+    const clearing = eventPage.send({type: 'firefox.activation.clear'});
+    while (eventPage.proxySettingsCalls.clear === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    const applying = eventPage.send({type: 'firefox.activation.apply'});
+    releaseClear();
+
+    Assert.strictEqual((await clearing).ok, true);
+    Assert.strictEqual((await applying).ok, true);
+    Assert.strictEqual(eventPage.proxySettingsCalls.set, 2);
+    Assert.strictEqual(eventPage.proxySettingsCalls.clear, 1);
+    Assert.strictEqual(
+        (await eventPage.send({type: 'firefox.capabilities.get'}))
+            .result.runtimeState,
+        'READY',
+    );
+
+  });
+
+  it('returns only allowlisted non-secret Apply preparation errors',
+      async function() {
+
+        for (const [factoryError, expectedCode] of [
+          [Object.assign(new Error('not stored'), {
+            code: 'PRODUCT_CONFIG_MISSING',
+          }), 'PRODUCT_CONFIG_MISSING'],
+          [Object.assign(new Error('future'), {
+            code: 'PRODUCT_CONFIG_VERSION_UNSUPPORTED',
+          }), 'PRODUCT_CONFIG_VERSION_UNSUPPORTED'],
+          [new Error('secret raw failure'), 'ACTIVATION_FAILED'],
+        ]) {
+          const eventPage = startEventPage({
+            activationFactory: async () => {
+
+              throw factoryError;
+
+            },
+          });
+          const result = await eventPage.send({
+            type: 'firefox.activation.apply',
+          });
+          Assert.deepStrictEqual(result, {
+            ok: false,
+            error: {code: expectedCode},
+          });
+          Assert.strictEqual(
+              JSON.stringify(result).includes('secret raw failure'),
+              false,
+          );
+        }
+
+      });
+
+  it('maps production floor prerequisites and failures without activation',
+      async function() {
+
+        const prepared = await preparedActivation();
+        const cases = [
+          [
+            {privateWindowAccess: false},
+            'PRIVATE_ACCESS_REQUIRED',
+          ],
+          [
+            {
+              privateWindowAccess: true,
+              randomError: new Error('synthetic random failure'),
+            },
+            'FLOOR_GENERATION_FAILED',
+          ],
+          [
+            {
+              privateWindowAccess: true,
+              proxySetError: new Error('synthetic proxy write failure'),
+            },
+            'ACTIVATION_ROLLBACK_FAILED',
+          ],
+          [
+            {
+              privateWindowAccess: true,
+              afterSetProxySettings: {
+                levelOfControl: 'controlled_by_other_extensions',
+                value: {proxyType: 'none'},
+              },
+            },
+            'ACTIVATION_ROLLBACK_FAILED',
+          ],
+        ];
+        for (const [options, code] of cases) {
+          const eventPage = startEventPage(Object.assign({}, options, {
+            activationFactory: async () => prepared,
+          }));
+          const result = await eventPage.send({
+            type: 'firefox.activation.apply',
+          });
+          Assert.strictEqual(result.ok, false);
+          Assert.strictEqual(result.error.code, code);
+          Assert.strictEqual(
+              (await eventPage.send({type: 'firefox.capabilities.get'}))
+                  .result.providerDatasetAvailable,
+              false,
+          );
+        }
+
+      });
 
   it('exposes exact-match Clear but never acquisition through RPC', async function() {
 
@@ -684,7 +1011,7 @@ describe('Firefox MV3 inert skeleton', function() {
 
   });
 
-  it('contains no production activation call or remote execution path',
+  it('contains no remote execution or caller-controlled activation input',
       function() {
 
         const runtimeSource = [
@@ -713,7 +1040,11 @@ describe('Firefox MV3 inert skeleton', function() {
             eventPageSource.includes('acquireRandomFloor('),
             false,
         );
-        Assert.strictEqual(eventPageSource.includes('activatePrepared('), false);
+        Assert.strictEqual(eventPageSource.includes('activatePrepared('), true);
+        Assert.strictEqual(
+            eventPageSource.includes('createActivationFactory('),
+            true,
+        );
         Assert.strictEqual(eventPageSource.includes('fetchAndStage'), false);
         Assert.strictEqual(eventPageSource.includes('promoteStaged'), false);
         Assert.strictEqual(eventPageSource.includes('recoveryFactory,'), true);

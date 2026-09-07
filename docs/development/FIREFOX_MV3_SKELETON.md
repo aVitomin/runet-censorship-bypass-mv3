@@ -84,8 +84,9 @@ OFF. RPC `firefox.activation.clear` предоставляет только эт
 он не вызывает `proxy.settings.set`.
 
 Firefox-specific proxy authentication регистрируется синхронно через
-блокирующий `webRequest.onAuthRequired`, но shipped OFF-only event page
-использует пустой in-memory credential resolver. `authRef` остаётся непрозрачной
+блокирующий `webRequest.onAuthRequired`. Пока runtime `OFF`, resolver недоступен;
+Apply/recovery публикует только синхронный resolver из exact validated storage
+snapshot. `authRef` остаётся непрозрачной
 routing metadata: он хранится только в bounded request-scoped map и никогда не
 попадает в Firefox `ProxyInfo`. Username/password не являются полями routing
 decision, не сохраняются, не логируются, не выдаются через RPC и diagnostics.
@@ -107,18 +108,16 @@ route-auth, так и attempt state. Отмена исчерпанного auth 
 request вместо перехода к следующему proxy candidate; это известное Firefox
 availability-отличие, а не Direct fallback или утечка.
 
-Реальный provider dataset, production updater configuration, активация,
-production credential configuration/UI и health-проверки ещё не реализованы.
-Ownership/auth
-primitives не делают routing доступным. Команда
-активации всегда отвечает
-`ACTIVATION_NOT_IMPLEMENTED`; наличие широких сетевых разрешений не делает
-маршрутизацию доступной пользователю.
+Реальный provider dataset, production updater configuration, config writer/UI и
+health-проверки ещё не реализованы. Чистая установка остаётся `OFF`; Apply без
+заранее сохранённых и полностью валидных local product config, credentials и
+verified dataset завершается безопасной ошибкой до proxy acquisition.
 
-В package присутствует inert activation controller для отдельного тестирования
-полностью подготовленной synthetic session. Его production event page создаёт,
-но не вызывает: RPC, startup и storage не имеют пути к `activatePrepared`, а
-capability `activationSupported` остаётся `false`. Prepared input имеет строгую
+Production event page реализует строгий no-input RPC
+`{type: "firefox.activation.apply"}`. Unexpected fields отклоняются, а caller
+не может передать routing, credentials, dataset или floor. Product activation
+factory читает одним snapshot те же записи и использует тот же parser, что и
+recovery factory. Prepared input имеет строгую
 форму и содержит provider key, exact dataset identity, строгий routing
 descriptor, dataset store, synchronous routing-input factory и synchronous
 in-memory credential resolver. Floor identity не является caller input: её
@@ -186,11 +185,23 @@ Clear сначала записывает `OFF` с cleanup identity, затем 
 очищает request/auth state и освобождает exact floor. Ошибка release сохраняет
 durable `OFF` и floor identity для следующего reconciliation.
 
-Production event page теперь передаёт controller реальный recovery factory, но
-по-прежнему не имеет пути создания `ON`: `firefox.activation.apply` возвращает
-`ACTIVATION_NOT_IMPLEMENTED`, а capability `activationSupported` равен `false`.
-Factory используется только при уже существующем строгом durable `ON`; чистая
-установка `OFF` не открывает IndexedDB и не читает Firefox product config.
+Production event page передаёт controller реальные activation и recovery
+factories. Apply сначала дожидается boot initialization, требует durable/runtime
+`OFF`, загружает immutable local configuration snapshot, открывает только
+существующий IndexedDB store и передаёт exact prepared contract в serialized
+activation controller. Успешный RPC возвращает только `ON`/`ACTIVE`; ошибки —
+только allowlisted code без raw exception или secret. Capability
+`activationSupported` равен `true`, а `providerDatasetAvailable` становится
+`true` только для уже опубликованной READY session. Чистая установка `OFF` не
+открывает IndexedDB до явного Apply и не читает product config при startup.
+
+Apply не записывает product config/credentials, не fetch-ит и не promote-ит
+dataset и не заменяет exact identity. Snapshot остаётся неизменным для всей
+попытки; concurrent storage edit может заставить последующий recovery закрыться
+fail-closed, но не меняет уже зафиксированные descriptor/dataset durable `ON`.
+Concurrent Apply/Clear сохраняют порядок RPC через control queue, а proxy/durable
+мутации дополнительно сериализуются activation-controller queue. Поэтому
+подготовка Apply не обгоняет Clear и второй floor/session не создаётся.
 
 Non-secret product config хранится отдельно под
 `firefoxMv3ProductRoutingConfig` в schema v1. Он содержит exact provider и
