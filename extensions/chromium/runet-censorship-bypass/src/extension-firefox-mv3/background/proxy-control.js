@@ -16,6 +16,7 @@
     function(OffState, defaultCrypto) {
 
       const CONTROLLED_BY_THIS_EXTENSION = 'controlled_by_this_extension';
+      const FLOOR_ASSURANCE = 'RANDOM_LOOPBACK_UNVERIFIED_V1';
       const RESULTS = Object.freeze({
         ACQUIRED: 'ACQUIRED',
         ALREADY_CLEAR: 'ALREADY_CLEAR',
@@ -27,7 +28,7 @@
         FLOOR_IDENTITY_PERSIST_FAILED: 'FLOOR_IDENTITY_PERSIST_FAILED',
         INVALID_FLOOR_IDENTITY: 'INVALID_FLOOR_IDENTITY',
         OWNERSHIP_MISMATCH: 'OWNERSHIP_MISMATCH',
-        PORT_PREVALIDATION_REQUIRED: 'PORT_PREVALIDATION_REQUIRED',
+        FLOOR_GENERATION_FAILED: 'FLOOR_GENERATION_FAILED',
         PRIVATE_ACCESS_CHECK_FAILED: 'PRIVATE_ACCESS_CHECK_FAILED',
         PRIVATE_ACCESS_REQUIRED: 'PRIVATE_ACCESS_REQUIRED',
         PROXY_CLEAR_FAILED: 'PROXY_CLEAR_FAILED',
@@ -50,6 +51,31 @@
       function successResult(status, durableState) {
 
         return {ok: true, status, durableState};
+
+      }
+
+      function randomFloorIdentity(generatePort) {
+
+        let port;
+        try {
+          port = generatePort();
+        } catch (_error) {
+          return null;
+        }
+        if (!Number.isSafeInteger(port)) {
+          return null;
+        }
+        return canonicalizeFloorIdentity({
+          proxyType: 'manual',
+          http: '',
+          httpProxyAll: false,
+          ssl: '',
+          socks: `127.0.0.1:${port}`,
+          socksVersion: 5,
+          proxyDNS: true,
+          passthrough: '',
+          autoConfigUrl: '',
+        });
 
       }
 
@@ -125,6 +151,8 @@
         const storageArea = options.storageArea;
         const isPrivateAccessAllowed = options.isPrivateAccessAllowed;
         const clearEphemeralState = options.clearEphemeralState || (() => {});
+        const generatePort = options.generateHighPortCandidate ||
+          (() => generateHighPortCandidate());
         let operationQueue = Promise.resolve();
 
         function enqueue(operation) {
@@ -231,20 +259,15 @@
 
         }
 
-        async function acquirePrevalidatedFloorNow(request) {
+        async function acquireRandomFloorNow() {
 
-          const floorIdentity = canonicalizeFloorIdentity(
-              request && request.floorIdentity,
-          );
-          if (!floorIdentity) {
-            return errorResult(ERRORS.INVALID_FLOOR_IDENTITY);
-          }
-          if (!request || request.portPrevalidated !== true) {
-            return errorResult(ERRORS.PORT_PREVALIDATION_REQUIRED);
-          }
           const privateAccess = await checkPrivateAccessNow();
           if (!privateAccess.ok) {
             return privateAccess;
+          }
+          const floorIdentity = randomFloorIdentity(generatePort);
+          if (!floorIdentity) {
+            return errorResult(ERRORS.FLOOR_GENERATION_FAILED);
           }
           const durableState = await persistFloorIdentity(floorIdentity);
           if (!durableState) {
@@ -265,7 +288,13 @@
           if (!isExactOwnedFloor(liveResult.live, floorIdentity)) {
             return errorResult(ERRORS.OWNERSHIP_MISMATCH, durableState);
           }
-          return successResult(RESULTS.ACQUIRED, durableState);
+          return {
+            ok: true,
+            status: RESULTS.ACQUIRED,
+            assurance: FLOOR_ASSURANCE,
+            floorIdentity,
+            durableState,
+          };
 
         }
 
@@ -318,9 +347,9 @@
         }
 
         return Object.freeze({
-          acquirePrevalidatedFloor(request) {
+          acquireRandomFloor() {
 
-            return enqueue(() => acquirePrevalidatedFloorNow(request));
+            return enqueue(acquireRandomFloorNow);
 
           },
           clearFloor() {
@@ -350,6 +379,7 @@
       return Object.freeze({
         CONTROLLED_BY_THIS_EXTENSION,
         ERRORS,
+        FLOOR_ASSURANCE,
         RESULTS,
         canonicalizeFloorIdentity,
         canonicalizeLiveFloorIdentity,

@@ -121,6 +121,16 @@ function makeController(options = {}) {
       }
       return options.privateAccess !== false;
     },
+    generateHighPortCandidate: options.generateHighPortCandidate || (() => {
+
+      events.push('floor-generate');
+      if (options.generationError) {
+        throw options.generationError;
+      }
+      return options.generatedPort === undefined ? 55001 :
+        options.generatedPort;
+
+    }),
     clearEphemeralState() {
 
       events.push('ephemeral-clear');
@@ -192,6 +202,17 @@ describe('Firefox fail-closed proxy control', function() {
         () => ProxyControl.generateHighPortCandidate({}),
         /CRYPTO_RANDOM_UNAVAILABLE/,
     );
+    for (const word of [0, 1, 16383, 16384, 32767, 49151, 65535]) {
+      const port = ProxyControl.generateHighPortCandidate({
+        getRandomValues(words) {
+
+          words[0] = word;
+          return words;
+
+        },
+      });
+      Assert.ok(port >= 49152 && port <= 65535);
+    }
 
   });
 
@@ -260,19 +281,22 @@ describe('Firefox fail-closed proxy control', function() {
 
       });
 
-  it('acquires only a caller-prevalidated floor after private access',
+  it('generates and acquires its exact random floor after private access',
       async function() {
 
         const fixture = makeController({events: []});
-        const result = await fixture.controller.acquirePrevalidatedFloor({
-          floorIdentity: floor(),
-          portPrevalidated: true,
-        });
+        const result = await fixture.controller.acquireRandomFloor();
 
         Assert.strictEqual(result.ok, true);
         Assert.strictEqual(result.status, 'ACQUIRED');
+        Assert.strictEqual(
+            result.assurance,
+            ProxyControl.FLOOR_ASSURANCE,
+        );
+        Assert.deepStrictEqual(result.floorIdentity, floor());
         Assert.deepStrictEqual(fixture.events, [
           'private-access',
+          'floor-generate',
           'storage-set',
           'ephemeral-clear',
           'proxy-set',
@@ -286,20 +310,41 @@ describe('Firefox fail-closed proxy control', function() {
 
       });
 
-  it('rejects acquisition without explicit external port prevalidation',
+  it('does not let an activation caller choose the floor identity',
       async function() {
 
-        const fixture = makeController();
-        const result = await fixture.controller.acquirePrevalidatedFloor({
-          floorIdentity: floor(),
+        const fixture = makeController({generatedPort: 55002});
+        const result = await fixture.controller.acquireRandomFloor({
+          floorIdentity: floor(62000),
+          callerAssertion: true,
         });
+
+        Assert.strictEqual(result.ok, true);
+        Assert.deepStrictEqual(result.floorIdentity, floor(55002));
+        Assert.deepStrictEqual(
+            fixture.storage.values[OffState.STORAGE_KEY],
+            durable(floor(55002)),
+        );
+
+      });
+
+  it('fails before persistence when cryptographic generation fails',
+      async function() {
+
+        const fixture = makeController({
+          generationError: new Error('synthetic random failure'),
+        });
+        const result = await fixture.controller.acquireRandomFloor();
 
         Assert.deepStrictEqual(result, {
           ok: false,
-          error: {code: 'PORT_PREVALIDATION_REQUIRED'},
+          error: {code: ProxyControl.ERRORS.FLOOR_GENERATION_FAILED},
         });
+        Assert.deepStrictEqual(fixture.events, [
+          'private-access',
+          'floor-generate',
+        ]);
         Assert.strictEqual(fixture.proxy.calls.set, 0);
-        Assert.deepStrictEqual(fixture.events, []);
 
       });
 
@@ -307,10 +352,7 @@ describe('Firefox fail-closed proxy control', function() {
       async function() {
 
         const fixture = makeController({privateAccess: false});
-        const result = await fixture.controller.acquirePrevalidatedFloor({
-          floorIdentity: floor(),
-          portPrevalidated: true,
-        });
+        const result = await fixture.controller.acquireRandomFloor();
 
         Assert.deepStrictEqual(result, {
           ok: false,
@@ -329,10 +371,7 @@ describe('Firefox fail-closed proxy control', function() {
       value: {proxyType: 'none'},
     }, {setError: new Error('set failed')}, events);
     const fixture = makeController({events, proxy});
-    const result = await fixture.controller.acquirePrevalidatedFloor({
-      floorIdentity: floor(),
-      portPrevalidated: true,
-    });
+    const result = await fixture.controller.acquireRandomFloor();
 
     Assert.strictEqual(result.error.code, 'PROXY_SET_FAILED');
     Assert.deepStrictEqual(

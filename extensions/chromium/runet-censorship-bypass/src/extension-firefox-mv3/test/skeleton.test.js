@@ -710,7 +710,7 @@ describe('Firefox MV3 inert skeleton', function() {
           Assert.strictEqual(runtimeSource.includes(forbidden), false, forbidden);
         }
         Assert.strictEqual(
-            eventPageSource.includes('acquirePrevalidatedFloor('),
+            eventPageSource.includes('acquireRandomFloor('),
             false,
         );
         Assert.strictEqual(eventPageSource.includes('activatePrepared('), false);

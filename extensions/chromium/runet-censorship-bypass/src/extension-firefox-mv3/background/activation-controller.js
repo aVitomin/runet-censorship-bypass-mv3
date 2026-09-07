@@ -22,8 +22,6 @@
       const PREPARED_KEYS = Object.freeze([
         'datasetIdentity',
         'datasetStore',
-        'floorIdentity',
-        'portPrevalidated',
         'providerKey',
         'resolveCredentials',
         'routingBaseInputForRequest',
@@ -159,31 +157,25 @@
 
         try {
           if (!hasExactKeys(value, PREPARED_KEYS) ||
-              value.portPrevalidated !== true ||
               !value.datasetStore ||
               typeof value.datasetStore.loadVerifications !== 'function' ||
               !isSynchronousCallable(value.routingBaseInputForRequest) ||
               !isSynchronousCallable(value.resolveCredentials)) {
             return null;
           }
-          const floorIdentity = ProxyControl.canonicalizeFloorIdentity(
-              value.floorIdentity,
-          );
           const datasetIdentity = OffState.canonicalizeDatasetIdentity(
               value.datasetIdentity,
           );
           const routingDescriptor = OffState.canonicalizeRoutingDescriptor(
               value.routingDescriptor,
           );
-          if (!floorIdentity || !datasetIdentity || !routingDescriptor ||
+          if (!datasetIdentity || !routingDescriptor ||
               value.providerKey !== datasetIdentity.providerKey) {
             return null;
           }
           return Object.freeze({
             datasetIdentity: Object.freeze(datasetIdentity),
             datasetStore: value.datasetStore,
-            floorIdentity: Object.freeze(floorIdentity),
-            portPrevalidated: true,
             providerKey: datasetIdentity.providerKey,
             resolveCredentials: value.resolveCredentials,
             routingBaseInputForRequest: value.routingBaseInputForRequest,
@@ -234,7 +226,7 @@
         const afterFloorAcquired = options.afterFloorAcquired;
         const afterDurableOnPersisted = options.afterDurableOnPersisted;
         if (!floorControl ||
-            typeof floorControl.acquirePrevalidatedFloor !== 'function' ||
+            typeof floorControl.acquireRandomFloor !== 'function' ||
             typeof floorControl.checkPrivateAccess !== 'function' ||
             typeof floorControl.clearFloor !== 'function' ||
             typeof floorControl.inspectOwnedFloor !== 'function' ||
@@ -434,11 +426,11 @@
 
         }
 
-        async function persistOn(prepared) {
+        async function persistOn(prepared, floorIdentity) {
 
           try {
             return await OffState.writeOnState(storageArea, {
-              floorIdentity: prepared.floorIdentity,
+              floorIdentity,
               providerKey: prepared.providerKey,
               datasetIdentity: prepared.datasetIdentity,
               routingDescriptor: prepared.routingDescriptor,
@@ -469,10 +461,7 @@
 
           let acquired;
           try {
-            acquired = await floorControl.acquirePrevalidatedFloor({
-              floorIdentity: prepared.floorIdentity,
-              portPrevalidated: true,
-            });
+            acquired = await floorControl.acquireRandomFloor();
           } catch (_error) {
             setUnavailable(ProxyControl.ERRORS.PROXY_SET_FAILED);
             return errorResult(ProxyControl.ERRORS.PROXY_SET_FAILED);
@@ -488,8 +477,22 @@
             }
             return errorResult(code);
           }
-          durableState = acquired.durableState ||
-            OffState.canonicalOffState(prepared.floorIdentity);
+          const acquiredFloor = ProxyControl.canonicalizeFloorIdentity(
+              acquired.floorIdentity,
+          );
+          if (!acquiredFloor ||
+              acquired.assurance !== ProxyControl.FLOOR_ASSURANCE ||
+              !OffState.isCanonicalOffState(acquired.durableState) ||
+              !ProxyControl.sameFloorIdentity(
+                  acquired.durableState.floorIdentity,
+                  acquiredFloor,
+              )) {
+            if (acquired.durableState) {
+              durableState = acquired.durableState;
+            }
+            return rollback(ProxyControl.ERRORS.OWNERSHIP_MISMATCH);
+          }
+          durableState = acquired.durableState;
           runtimeState = DatasetRuntime.STATES.INITIALIZING;
           recoveryStatus = RECOVERY_STATUS.INITIALIZING;
 
@@ -497,7 +500,7 @@
             if (afterFloorAcquired) {
               await afterFloorAcquired();
             }
-            const persistedOn = await persistOn(prepared);
+            const persistedOn = await persistOn(prepared, acquiredFloor);
             if (!persistedOn) {
               return rollback(ERRORS.DURABLE_ON_PERSIST_FAILED);
             }
