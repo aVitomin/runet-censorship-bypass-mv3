@@ -101,8 +101,6 @@ function prepared(store, artifact = Helpers.artifact(), overrides = {}) {
   return Object.assign({
     datasetIdentity: datasetIdentity(artifact),
     datasetStore: store,
-    floorIdentity: floor(),
-    portPrevalidated: true,
     providerKey: artifact.envelope.providerKey,
     resolveCredentials: () => null,
     routingBaseInputForRequest: baseInputForRequest(),
@@ -162,6 +160,7 @@ function createSystem(options = {}) {
   };
   let liveSettings = options.liveSettings || previousSettings;
   const proxyCalls = {clear: 0, get: 0, set: 0};
+  let floorGenerations = 0;
   const proxySettings = {
     async clear() {
 
@@ -212,6 +211,13 @@ function createSystem(options = {}) {
   const proxyControl = ProxyControl.createController({
     proxySettings,
     storageArea,
+    generateHighPortCandidate() {
+
+      floorGenerations += 1;
+      return options.generateHighPortCandidate ?
+        options.generateHighPortCandidate() : 55031;
+
+    },
     async isPrivateAccessAllowed() {
 
       events.push('private-access');
@@ -239,6 +245,11 @@ function createSystem(options = {}) {
     access,
     controller,
     events,
+    get floorGenerations() {
+
+      return floorGenerations;
+
+    },
     get liveSettings() {
 
       return liveSettings;
@@ -348,6 +359,11 @@ describe('Firefox durable activation recovery', function() {
             system.storageArea.values[OffState.STORAGE_KEY].intent,
             OffState.ON,
         );
+        Assert.deepStrictEqual(
+            system.storageArea.values[OffState.STORAGE_KEY].floorIdentity,
+            floor(),
+        );
+        Assert.strictEqual(system.floorGenerations, 1);
         Assert.strictEqual(system.controller.currentRuntimeState(), 'READY');
 
       });
@@ -482,6 +498,7 @@ describe('Firefox durable activation recovery', function() {
 
     Assert.strictEqual(result.status, Activation.RESULTS.RECOVERED);
     Assert.strictEqual(system.proxyCalls.set, 0);
+    Assert.strictEqual(system.floorGenerations, 0);
     Assert.strictEqual(system.controller.currentRuntimeState(), 'READY');
     Assert.strictEqual(system.controller.snapshot().recoveryStatus,
         Activation.RECOVERY_STATUS.RECOVERED);
@@ -665,10 +682,7 @@ describe('Firefox durable activation recovery', function() {
 
         const storageArea = memoryStorage(OffState.canonicalOffState());
         const acquiring = createSystem({storageArea});
-        const acquired = await acquiring.proxyControl.acquirePrevalidatedFloor({
-          floorIdentity: floor(),
-          portPrevalidated: true,
-        });
+        const acquired = await acquiring.proxyControl.acquireRandomFloor();
         Assert.strictEqual(acquired.ok, true);
         const recreated = createSystem({
           storageArea,

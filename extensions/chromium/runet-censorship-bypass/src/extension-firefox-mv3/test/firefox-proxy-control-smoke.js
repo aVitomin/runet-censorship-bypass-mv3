@@ -42,7 +42,7 @@ function floor(port) {
 
 }
 
-async function highUnusedPort() {
+async function highFixturePort() {
 
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const port = await Smoke.unusedPort();
@@ -50,7 +50,7 @@ async function highUnusedPort() {
       return port;
     }
   }
-  throw new Error('Could not obtain a high externally prevalidated port.');
+  throw new Error('Could not obtain a high fixture port.');
 
 }
 
@@ -94,6 +94,7 @@ function makeInstrumentedExtension() {
     '  const controller = ProxyControl.createController({',
     '    proxySettings,',
     '    storageArea: browser.storage.local,',
+    '    generateHighPortCandidate: () => port,',
     '    isPrivateAccessAllowed: () =>',
     '      browser.extension.isAllowedIncognitoAccess(),',
     '  });',
@@ -123,10 +124,7 @@ function makeInstrumentedExtension() {
     '    });',
     '    result = {persisted: true};',
     '  } else if (action === \'acquire\') {',
-    '    result = await controller.acquirePrevalidatedFloor({',
-    '      floorIdentity,',
-    '      portPrevalidated: true,',
-    '    });',
+    '    result = await controller.acquireRandomFloor();',
     '  } else if (action === \'clear-rpc\') {',
     '    result = await controller.clearFloor();',
     '  } else if (action === \'set-unrelated\') {',
@@ -469,7 +467,7 @@ async function main() {
       temporary: true,
     });
     const extension = await Smoke.extensionOrigin(client);
-    const port = await highUnusedPort();
+    const port = await highFixturePort();
 
     await control(client, handle, extension, 'persist-v1');
     await setAddonEnabled(client, handle, false);
@@ -508,11 +506,15 @@ async function main() {
         JSON.stringify(acquired),
     );
     Assert.strictEqual(acquired.counters.set, 1);
+    Assert.strictEqual(
+        acquired.result.assurance,
+        'RANDOM_LOOPBACK_UNVERIFIED_V1',
+    );
     await expectFloorBlocked(
         client, handle, targetUrl, proxyRequests, originRequests,
         'acquired-floor',
     );
-    checked('test-only prevalidated acquisition owns exact floor');
+    checked('test-only random acquisition owns exact floor');
 
     await control(client, handle, extension, 'set-unrelated', {
       manualPort: previousProxy.address().port,

@@ -118,7 +118,7 @@ function verifyPackage(packageRoot, sourceRoot) {
       'utf8',
   );
   Assert.strictEqual(eventPageText.includes('proxy.settings.set'), false);
-  Assert.strictEqual(eventPageText.includes('acquirePrevalidatedFloor('), false);
+  Assert.strictEqual(eventPageText.includes('acquireRandomFloor('), false);
   Assert.strictEqual(eventPageText.includes('activatePrepared('), false);
   Assert.strictEqual(eventPageText.includes('fetchAndStage'), false);
   Assert.strictEqual(eventPageText.includes('promoteStaged'), false);

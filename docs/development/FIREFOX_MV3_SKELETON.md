@@ -43,10 +43,18 @@ fail-closed floor и Clear, но не содержит production activation pat
 floor — manual SOCKS5 `127.0.0.1:<persisted-high-port>` с `proxyDNS: true`,
 пустыми HTTP/SSL/auto-config/passthrough и `httpProxyAll: false`. Port `0`,
 well-known и другие low ports невалидны. Кандидат high port создаётся только
-через `crypto.getRandomValues`, но WebExtension API не может надёжно доказать,
-что произвольный локальный процесс не владеет портом. Поэтому acquisition
-primitive требует внешне prevalidated identity и не вызывается ни startup, ни
-RPC. Остаточный риск local-port collision сохраняется.
+внутри proxy-control через `crypto.getRandomValues`; activation caller не
+выбирает floor и не подтверждает состояние порта. Assurance identifier
+`RANDOM_LOOPBACK_UNVERIFIED_V1` прямо означает, что WebExtension API не может
+доказать отсутствие listener на выбранном endpoint. Port не probe-ится и не
+retry-ится по network behavior.
+
+Принятый threat model защищает от Firefox/WebExtension lifecycle и listener
+failures, control loss и private-access revocation, но не от hostile local
+software. Случайный занятый port возможен. Обычный non-SOCKS listener обычно
+остаётся fail-closed, но это не security guarantee; доступный SOCKS service на
+точном endpoint может обойти floor. WebExtension не может предотвратить
+bind-after-selection. Product сознательно не требует native helper/reservation.
 
 Durable state имеет schema v3; канонический `OFF` имеет форму:
 
@@ -111,10 +119,11 @@ primitives не делают routing доступным. Команда
 полностью подготовленной synthetic session. Его production event page создаёт,
 но не вызывает: RPC, startup и storage не имеют пути к `activatePrepared`, а
 capability `activationSupported` остаётся `false`. Prepared input имеет строгую
-форму и содержит только exact prevalidated floor identity, подтверждение
-внешней проверки порта, provider key, exact dataset identity, строгий routing
+форму и содержит provider key, exact dataset identity, строгий routing
 descriptor, dataset store, synchronous routing-input factory и synchronous
-in-memory credential resolver. Credentials не сохраняются.
+in-memory credential resolver. Floor identity не является caller input: её
+генерирует и возвращает proxy-control только после exact ownership confirmation.
+Credentials не сохраняются.
 
 Транзакция сначала полностью проверяет exact dataset и строит lookup index,
 затем требует `READY`, приобретает и подтверждает exact fail-closed floor,
@@ -140,7 +149,7 @@ identity сохраняется только для безопасного exact
 запросы, пока storage intent неизвестен. `OFF` выполняет cleanup reconciliation
 и только затем разрешает обычный browser routing. Для `ON` recovery сначала
 требует private access и уже существующий exact extension-owned floor; старый
-random port никогда не считается заново prevalidated и floor не переустанавливается.
+random port никогда не генерируется заново и floor не переустанавливается.
 Затем recovery factory должен восстановить dataset store, routing-input factory,
 тот же exact routing descriptor и in-memory credential resolver. Controller
 принимает только exact сохранённые dataset hash и routing descriptor, строит

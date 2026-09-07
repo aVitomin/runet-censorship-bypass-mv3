@@ -81,8 +81,6 @@ function prepared(datasetStore, overrides = {}) {
       artifactSha256: envelope.artifactSha256,
     },
     datasetStore,
-    floorIdentity: floor(),
-    portPrevalidated: true,
     providerKey: Helpers.PROVIDER_KEY,
     resolveCredentials: () => null,
     routingBaseInputForRequest: baseInputForRequest(),
@@ -93,6 +91,18 @@ function prepared(datasetStore, overrides = {}) {
       configurationSha256: 'a'.repeat(64),
     },
   }, overrides);
+
+}
+
+function acquiredFloorResult(identity = floor()) {
+
+  return {
+    ok: true,
+    status: ProxyControl.RESULTS.ACQUIRED,
+    assurance: ProxyControl.FLOOR_ASSURANCE,
+    floorIdentity: identity,
+    durableState: OffState.canonicalOffState(identity),
+  };
 
 }
 
@@ -116,16 +126,19 @@ function createHarness(options = {}) {
     },
   };
   const floorControl = Object.assign({
-    async acquirePrevalidatedFloor(request) {
+    async acquireRandomFloor() {
 
-      events.push(['floor-acquire', request]);
+      events.push(['floor-acquire']);
+      const identity = options.generatedFloor || floor();
       const durableState = await OffState.writeOffState(
           storageArea,
-          request.floorIdentity,
+          identity,
       );
       return options.acquireResult || {
         ok: true,
         status: ProxyControl.RESULTS.ACQUIRED,
+        assurance: ProxyControl.FLOOR_ASSURANCE,
+        floorIdentity: identity,
         durableState,
       };
 
@@ -200,7 +213,7 @@ function createHarness(options = {}) {
 
 describe('Firefox inert activation transaction', function() {
 
-  it('accepts only the exact prevalidated prepared contract', async function() {
+  it('accepts only the exact floor-independent prepared contract', async function() {
 
     const store = await verifiedStore();
     const valid = prepared(store);
@@ -209,7 +222,6 @@ describe('Firefox inert activation transaction', function() {
     for (const invalid of [
       null,
       Object.assign({}, valid, {extra: true}),
-      Object.assign({}, valid, {portPrevalidated: false}),
       Object.assign({}, valid, {floorIdentity: floor(1)}),
       Object.assign({}, valid, {providerKey: 'INVALID'}),
       Object.assign({}, valid, {datasetStore: {}}),
@@ -267,10 +279,10 @@ describe('Firefox inert activation transaction', function() {
         };
         const harness = createHarness({
           proxyControl: {
-            async acquirePrevalidatedFloor() {
+            async acquireRandomFloor() {
 
               order.push('floor-acquire');
-              return {ok: true, status: ProxyControl.RESULTS.ACQUIRED};
+              return acquiredFloorResult();
 
             },
             async clearFloor() {
@@ -308,6 +320,10 @@ describe('Firefox inert activation transaction', function() {
           recoveryStatus: Activation.RECOVERY_STATUS.ACTIVE,
           failureCode: null,
         });
+        Assert.deepStrictEqual(
+            harness.values[OffState.STORAGE_KEY].floorIdentity,
+            floor(),
+        );
 
       });
 
@@ -482,9 +498,9 @@ describe('Firefox inert activation transaction', function() {
         const holder = {};
         const observations = [];
         const control = {
-          async acquirePrevalidatedFloor() {
+          async acquireRandomFloor() {
 
-            return {ok: true, status: ProxyControl.RESULTS.ACQUIRED};
+            return acquiredFloorResult();
 
           },
           async clearFloor() {
@@ -549,9 +565,9 @@ describe('Firefox inert activation transaction', function() {
         let floorClears = 0;
         const controller = Activation.createController({
           proxyControl: {
-            async acquirePrevalidatedFloor() {
+            async acquireRandomFloor() {
 
-              return {ok: true, status: ProxyControl.RESULTS.ACQUIRED};
+              return acquiredFloorResult();
 
             },
             async clearFloor() {
