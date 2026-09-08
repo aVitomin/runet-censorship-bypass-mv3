@@ -189,11 +189,16 @@ development branch. Именно этот gate вместе с docs integrity о
 
 Для каждого кандидата убедитесь, что:
 
-- `manifest.json` находится в корне ZIP, а не во вложенном каталоге;
+- `manifest.json` находится в корне Chromium ZIP или Firefox XPI, а не во
+  вложенном каталоге;
 - распакованное содержимое совпадает с проверенной build directory;
 - package-integrity и runtime-icon verification прошли;
 - SHA-256 вычислен после окончательной упаковки;
 - docs screenshots, `.local`, `.tmp`, profiles и reports не попали в ZIP.
+
+Firefox дополнительно требует byte-identical two-build XPI/source archive,
+Mozilla addons-linter и проверку exact Gecko/data-collection manifest fields.
+См. [Firefox release candidate build](FIREFOX_RELEASE_BUILD.md).
 
 Подробности: [процесс выпуска](RELEASE_PROCESS.md).
 

@@ -84,7 +84,7 @@ const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/pages/options/options.css',
   './src/extension-firefox-mv3/_locales/en/messages.json',
   './src/extension-firefox-mv3/_locales/ru/messages.json',
-  './src/extension-firefox-mv3/provider/anticensority-hosts-v1.json',
+  './src/extension-firefox-mv3/provider/anticensority-hosts-v1.data',
   './src/extension-firefox-mv3/provider/anticensority-hosts-v1.envelope.json',
 ];
 const firefoxMv3CommonSrc = [

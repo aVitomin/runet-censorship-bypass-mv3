@@ -375,7 +375,7 @@
 
   })();
 
-  root.rucbFirefoxSkeletonRuntime = Object.freeze({
+  root.rucbFirefoxRuntime = Object.freeze({
     bootId,
     whenReady() {
 

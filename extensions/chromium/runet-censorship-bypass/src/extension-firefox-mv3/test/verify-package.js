@@ -5,6 +5,11 @@ const Crypto = require('node:crypto');
 const Fs = require('node:fs');
 const Path = require('node:path');
 const ProductionProvider = require('../background/production-provider');
+const Templates = require('../../templates-data');
+
+const FIREFOX_GECKO_ID = '{adf5f697-1149-42a2-92eb-c163cb9a4146}';
+const EXPECTED_FIREFOX_VERSION =
+  `0.0.${Templates.contexts.chromiumMv3.storeVersion}`;
 
 const EXPECTED_FILES = Object.freeze([
   '_locales/en/messages.json',
@@ -34,8 +39,8 @@ const EXPECTED_FILES = Object.freeze([
   'pages/popup/popup.css',
   'pages/shared/ui-runtime.js',
   'pages/shared/ui-tokens.css',
+  'provider/anticensority-hosts-v1.data',
   'provider/anticensority-hosts-v1.envelope.json',
-  'provider/anticensority-hosts-v1.json',
 ]);
 const FORBIDDEN_RUNTIME_TEXT = Object.freeze([
   'XMLHttpRequest',
@@ -95,6 +100,7 @@ function verifyPackage(packageRoot, sourceRoot) {
       'utf8',
   ));
   Assert.strictEqual(manifest.manifest_version, 3);
+  Assert.strictEqual(manifest.version, EXPECTED_FIREFOX_VERSION);
   Assert.strictEqual(manifest.default_locale, 'en');
   Assert.deepStrictEqual(manifest.permissions, [
     'storage',
@@ -134,6 +140,15 @@ function verifyPackage(packageRoot, sourceRoot) {
   Assert.deepStrictEqual(manifest.content_security_policy, {
     extension_pages:
       'default-src \'self\'; script-src \'self\'; object-src \'none\'',
+  });
+  Assert.deepStrictEqual(manifest.browser_specific_settings, {
+    gecko: {
+      id: FIREFOX_GECKO_ID,
+      strict_min_version: '154.0',
+      data_collection_permissions: {
+        required: ['authenticationInfo', 'browsingActivity'],
+      },
+    },
   });
 
   const runtimeText = EXPECTED_FILES
@@ -215,4 +230,10 @@ if (require.main === module) {
   );
 }
 
-module.exports = Object.freeze({EXPECTED_FILES, listFiles, verifyPackage});
+module.exports = Object.freeze({
+  EXPECTED_FILES,
+  EXPECTED_FIREFOX_VERSION,
+  FIREFOX_GECKO_ID,
+  listFiles,
+  verifyPackage,
+});

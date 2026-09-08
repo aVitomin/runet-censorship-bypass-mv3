@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "0.0.0.1",
+  "version": "0.0.3.0",
   "description": "__MSG_extensionDescription__",
   "default_locale": "en",
   "permissions": [
@@ -48,8 +48,14 @@
   "incognito": "spanning",
   "browser_specific_settings": {
     "gecko": {
-      "id": "firefox-mv3-skeleton@runet-censorship-bypass.invalid",
-      "strict_min_version": "154.0"
+      "id": "{adf5f697-1149-42a2-92eb-c163cb9a4146}",
+      "strict_min_version": "154.0",
+      "data_collection_permissions": {
+        "required": [
+          "authenticationInfo",
+          "browsingActivity"
+        ]
+      }
     }
   }
 }
