@@ -10,10 +10,12 @@
   const datasetStoreApi = root.rucbFirefoxDatasetStore;
   const productConfigApi = root.rucbFirefoxProductConfig;
   const productionProviderApi = root.rucbFirefoxProductionProvider;
+  const datasetPromotionApi = root.rucbFirefoxDatasetPromotion;
   const settingsControlApi = root.rucbFirefoxSettingsControl;
   let activationController = null;
   let settingsController = null;
   let productionDatasetStore = null;
+  let datasetPromotionController = null;
   let providerBootstrapState = Object.freeze({
     ok: false,
     status: 'INITIALIZING',
@@ -123,6 +125,27 @@
     storageArea: browser.storage.local,
     sha256,
     activationSnapshot: () => activationController.snapshot(),
+    async datasetIdentityAvailable(identity) {
+
+      const stored = await createProductionDatasetStore().loadVerifications(
+          identity.providerKey,
+      );
+      return [stored.active, stored.previousLkg, stored.packagedBaseline]
+          .some((verification) => verification && verification.ok === true &&
+            verification.dataset.identity.providerKey === identity.providerKey &&
+            verification.dataset.identity.datasetVersion ===
+              identity.datasetVersion &&
+            verification.dataset.identity.artifactSha256 ===
+              identity.artifactSha256);
+
+    },
+  });
+  datasetPromotionController = datasetPromotionApi.createController({
+    storageArea: browser.storage.local,
+    datasetStore: createProductionDatasetStore(),
+    sha256,
+    activationSnapshot: () => activationController.snapshot(),
+    providerKey: productionProviderApi.PROVIDER_KEY,
   });
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
     root.crypto.randomUUID() :
@@ -144,6 +167,9 @@
   ]);
   const SAFE_SETTINGS_ERROR_CODES = new Set(
       Object.values(settingsControlApi.ERRORS),
+  );
+  const SAFE_PROMOTION_ERROR_CODES = new Set(
+      Object.values(datasetPromotionApi.ERRORS),
   );
 
   function exactRpcRequest(message, type) {
@@ -169,6 +195,15 @@
       value && typeof value === 'object' ? value.code : null;
     return SAFE_SETTINGS_ERROR_CODES.has(code) ? code :
       settingsControlApi.ERRORS.SETTINGS_STATE_UNAVAILABLE;
+
+  }
+
+  function safePromotionErrorCode(value) {
+
+    const code = typeof value === 'string' ? value :
+      value && typeof value === 'object' ? value.code : null;
+    return SAFE_PROMOTION_ERROR_CODES.has(code) ? code :
+      datasetPromotionApi.ERRORS.RECOVERY_REQUIRED;
 
   }
 
@@ -277,6 +312,17 @@
 
   }
 
+  async function installStagedProviderDataset() {
+
+    try {
+      const installed = await datasetPromotionController.install();
+      return {ok: true, result: {status: installed.status}};
+    } catch (error) {
+      return errorResponse(safePromotionErrorCode(error));
+    }
+
+  }
+
   async function handleMessage(message) {
 
     await initialization;
@@ -328,6 +374,12 @@
       }
       return enqueueRpcControlOperation(() => replaceProductSettings(message));
     }
+    if (type === 'firefox.provider.update.install') {
+      if (!exactRpcRequest(message, type)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      return enqueueRpcControlOperation(installStagedProviderDataset);
+    }
     return errorResponse('UNKNOWN_RPC');
 
   }
@@ -370,6 +422,7 @@
   const initialization = (async () => {
 
     providerBootstrapState = await providerBootstrap.initialize();
+    await datasetPromotionController.initialize();
     await settingsController.initialize();
     return activationController.initializeFromDurable();
 

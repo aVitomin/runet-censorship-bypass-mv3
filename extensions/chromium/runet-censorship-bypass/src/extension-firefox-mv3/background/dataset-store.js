@@ -675,6 +675,67 @@
 
         }
 
+        async function promoteStagedExact(input = {}) {
+
+          const providerKey = input.providerKey;
+          const currentIdentity = input.currentDatasetIdentity;
+          if (!isProviderKey(providerKey) ||
+              !isSha256(input.stagedArtifactSha256) ||
+              !currentIdentity || typeof currentIdentity !== 'object' ||
+              currentIdentity.providerKey !== providerKey ||
+              typeof currentIdentity.datasetVersion !== 'string' ||
+              !isSha256(currentIdentity.artifactSha256) ||
+              !Number.isSafeInteger(input.stagedSequence) ||
+              input.stagedSequence < 1) {
+            return rejection('INVALID_PROMOTION_INPUT');
+          }
+          const staged = await loadStaged(providerKey);
+          if (!staged.ok || staged.status !== 'STAGED' ||
+              staged.verification.trust !==
+                Dataset.TRUST.REMOTE_AUTHENTICATED) {
+            return staged.ok ? rejection('NO_STAGED_CANDIDATE') : staged;
+          }
+          if (staged.sequence !== input.stagedSequence ||
+              staged.verification.dataset.identity.artifactSha256 !==
+                input.stagedArtifactSha256 ||
+              staged.pointers.highestAuthenticatedSequence !==
+                input.stagedSequence ||
+              staged.pointers.highestAuthenticatedArtifactSha256 !==
+                input.stagedArtifactSha256 ||
+              input.stagedArtifactSha256 === currentIdentity.artifactSha256) {
+            return rejection('PROMOTION_STATE_MISMATCH');
+          }
+          const stored = await loadVerifications(providerKey);
+          const selectable = [
+            stored.active,
+            stored.previousLkg,
+            stored.packagedBaseline,
+          ].some((verification) => verification && verification.ok === true &&
+            verification.dataset.identity.artifactSha256 ===
+              currentIdentity.artifactSha256 &&
+            verification.dataset.identity.datasetVersion ===
+              currentIdentity.datasetVersion &&
+            verification.dataset.identity.providerKey ===
+              currentIdentity.providerKey);
+          if (!selectable) {
+            return rejection('CURRENT_DATASET_UNAVAILABLE');
+          }
+          const pointers = Object.assign({}, staged.pointers, {
+            activeArtifactSha256: input.stagedArtifactSha256,
+            previousLkgArtifactSha256: currentIdentity.artifactSha256,
+            stagedArtifactSha256: null,
+            stagedSequence: null,
+          });
+          await backend.commit(null, pointers);
+          return Object.freeze({
+            ok: true,
+            status: 'PROMOTED',
+            sequence: staged.sequence,
+            verification: staged.verification,
+          });
+
+        }
+
         return Object.freeze({
           activateCandidate(input) {
 
@@ -691,6 +752,11 @@
           promoteStaged(providerKey) {
 
             return enqueueMutation(() => promoteStaged(providerKey));
+
+          },
+          promoteStagedExact(input) {
+
+            return enqueueMutation(() => promoteStagedExact(input));
 
           },
           stageAuthenticatedCandidate(input) {

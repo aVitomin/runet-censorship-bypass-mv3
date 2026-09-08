@@ -583,11 +583,13 @@
         const storageArea = options.storageArea;
         const sha256 = options.sha256;
         const activationSnapshot = options.activationSnapshot;
+        const datasetIdentityAvailable = options.datasetIdentityAvailable;
         if (!storageArea || typeof storageArea.get !== 'function' ||
             typeof storageArea.set !== 'function' ||
             typeof storageArea.remove !== 'function' ||
             typeof sha256 !== 'function' ||
-            typeof activationSnapshot !== 'function') {
+            typeof activationSnapshot !== 'function' ||
+            typeof datasetIdentityAvailable !== 'function') {
           throw settingsError(ERRORS.INVALID_SETTINGS_DEPENDENCIES);
         }
         let queue = Promise.resolve();
@@ -608,6 +610,7 @@
               ProductConfig.CREDENTIALS_STORAGE_KEY,
               ProductConfig.SETTINGS_COMMIT_STORAGE_KEY,
               ProductConfig.SETTINGS_TRANSACTION_STORAGE_KEY,
+              ProductConfig.DATASET_PROMOTION_STORAGE_KEY,
             ]);
           } catch (_error) {
             throw settingsError(ERRORS.SETTINGS_STORAGE_FAILED);
@@ -637,8 +640,12 @@
 
           const stored = await readStored();
           const mutation = stored[ProductConfig.SETTINGS_TRANSACTION_STORAGE_KEY];
+          const promotion = stored[ProductConfig.DATASET_PROMOTION_STORAGE_KEY];
           const rawCommit = stored[ProductConfig.SETTINGS_COMMIT_STORAGE_KEY];
-          if (mutation !== undefined) {
+          if (mutation !== undefined || promotion !== undefined) {
+            if (promotion !== undefined) {
+              throw settingsError(ERRORS.SETTINGS_TRANSACTION_INCOMPLETE);
+            }
             if (!validMutation(mutation) || rawCommit === undefined) {
               if (!options.allowIncomplete) {
                 throw settingsError(ERRORS.SETTINGS_TRANSACTION_INCOMPLETE);
@@ -657,13 +664,20 @@
             throw settingsError(ERRORS.SETTINGS_STATE_UNAVAILABLE);
           }
           const config = verified.config;
-          const expectedIdentity = ProductionProvider.datasetIdentity();
           if (config.providerKey !== ProductionProvider.PROVIDER_KEY ||
-              config.datasetIdentity.providerKey !== expectedIdentity.providerKey ||
-              config.datasetIdentity.datasetVersion !==
-                expectedIdentity.datasetVersion ||
-              config.datasetIdentity.artifactSha256 !==
-                expectedIdentity.artifactSha256) {
+              config.datasetIdentity.providerKey !==
+                ProductionProvider.PROVIDER_KEY) {
+            throw settingsError(ERRORS.SETTINGS_DATASET_BINDING_FAILED);
+          }
+          let datasetAvailable;
+          try {
+            datasetAvailable = await datasetIdentityAvailable(
+                config.datasetIdentity,
+            );
+          } catch (_error) {
+            datasetAvailable = false;
+          }
+          if (datasetAvailable !== true) {
             throw settingsError(ERRORS.SETTINGS_DATASET_BINDING_FAILED);
           }
           const credentials = credentialsMap(
@@ -701,7 +715,7 @@
             const expected = await ProductConfig.createProductConfig({
               configurationKey: ProductionProvider.CONFIGURATION_KEY,
               configurationVersion: `settings-${commit.revision}`,
-              datasetIdentity: ProductionProvider.datasetIdentity(),
+              datasetIdentity: config.datasetIdentity,
               providerKey: ProductionProvider.PROVIDER_KEY,
               routingConfig: rebuilt.routingConfig,
               sha256,
@@ -760,7 +774,7 @@
           const config = await ProductConfig.createProductConfig({
             configurationKey: ProductionProvider.CONFIGURATION_KEY,
             configurationVersion: `settings-${nextRevision}`,
-            datasetIdentity: ProductionProvider.datasetIdentity(),
+            datasetIdentity: current.config.datasetIdentity,
             providerKey: ProductionProvider.PROVIDER_KEY,
             routingConfig: built.routingConfig,
             sha256,

@@ -84,6 +84,7 @@ function controller(store, state = activation()) {
     storageArea: store.area,
     sha256,
     activationSnapshot: () => state,
+    datasetIdentityAvailable: () => true,
   });
 
 }
@@ -549,6 +550,46 @@ describe('Firefox production settings control plane', function() {
     Assert.strictEqual(recreated.settings.ownProxies[0].id, 'primary');
 
   });
+
+  it('preserves an internally promoted dataset identity across settings writes',
+      async function() {
+
+        const store = await initialStorage();
+        const promotedIdentity = {
+          providerKey: Production.PROVIDER_KEY,
+          datasetVersion: 'authenticated-v2',
+          artifactSha256: 'b'.repeat(64),
+        };
+        store.values[Config.CONFIG_STORAGE_KEY].datasetIdentity =
+          promotedIdentity;
+        const api = controller(store);
+        const current = await api.get();
+        current.settings.flags.noDirect = true;
+        await api.replace(current.revision, current.settings);
+
+        Assert.deepStrictEqual(
+            store.values[Config.CONFIG_STORAGE_KEY].datasetIdentity,
+            promotedIdentity,
+        );
+
+      });
+
+  it('rejects a config whose exact dataset identity is not installed',
+      async function() {
+
+        const store = await initialStorage();
+        const api = Settings.createController({
+          storageArea: store.area,
+          sha256,
+          activationSnapshot: () => activation(),
+          datasetIdentityAvailable: () => false,
+        });
+        await rejectsCode(
+            api.get(),
+            Settings.ERRORS.SETTINGS_DATASET_BINDING_FAILED,
+        );
+
+      });
 
   it('has no browser, network, logging, or dataset mutation dependency', function() {
 

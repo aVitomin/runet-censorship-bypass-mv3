@@ -290,9 +290,9 @@ bytes. Remote candidate с unauthenticated trust не может стать acti
 входит. В `OFF` proxy settings не меняются. Firefox build не меняет Chromium
 build output.
 
-Пакет содержит инертный authenticated-update pipeline, но production event
-page его не создаёт и не вызывает: отсутствуют production URL, public key,
-alarm/timer, startup fetch и RPC update command. Update manifest schema v1
+Пакет содержит инертный authenticated-download pipeline, но production event
+page не запускает загрузку: отсутствуют production URL, public key,
+alarm/timer, startup fetch и RPC download command. Update manifest schema v1
 содержит только `schemaVersion`, `providerKey`, monotonic `sequence`, `keyId`,
 relative `artifactPath` и строгий dataset `envelope`. Отдельная 64-byte
 Ed25519 signature проверяется native WebCrypto над точными UTF-8 bytes
@@ -315,11 +315,17 @@ anti-rollback пару `highestAuthenticatedSequence`/artifact SHA-256. Lower
 sequence отклоняется; одинаковые sequence+SHA idempotent, а одинаковый
 sequence с другим SHA даёт conflict. Только полностью verified candidate
 атомарно записывает immutable artifact, staged pointer и sequence metadata.
-Stage не меняет active/LKG/live session/durable ON identity. Отдельный explicit
-promotion одной IndexedDB transaction переводит staged в active, прежний
-active в LKG и очищает staged; production event page promotion не вызывает.
-Storage/signature/network failure не продвигает sequence и не меняет текущий
-routing dataset.
+Stage не меняет active/LKG/live session/durable ON identity. Строгий
+`firefox.provider.update.install` без дополнительных полей доступен только в
+полном `OFF`: он заново проверяет exact staged artifact и anti-rollback pair,
+а затем переводит его в dataset для следующего Apply. IndexedDB atomically
+меняет active/LKG/staged pointers, а write-ahead journal в `storage.local`
+связывает это изменение с exact `productConfig.datasetIdentity`. При restart
+journal по фактическому pointer state детерминированно восстанавливает старую
+или завершает новую пару; Apply и settings mutation блокируются, пока journal
+не согласован. Настройки и отдельная credential record не изменяются, proxy
+settings не затрагиваются, live session не hot-swap-ится. Storage/signature/
+network failure не продвигает sequence и не меняет текущий routing dataset.
 
 Отдельный
 локальный smoke с установленным Firefox 154.0.1 и одноразовым профилем можно

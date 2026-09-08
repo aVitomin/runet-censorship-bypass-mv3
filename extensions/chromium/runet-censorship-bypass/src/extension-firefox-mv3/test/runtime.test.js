@@ -50,6 +50,10 @@ const providerUpdaterSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'provider-updater.js'),
     'utf8',
 );
+const datasetPromotionSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'dataset-promotion.js'),
+    'utf8',
+);
 const providerLookupSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'provider-lookup.js'),
     'utf8',
@@ -367,12 +371,42 @@ function startEventPage(options = {}) {
   });
   Vm.runInContext(proxyAuthSource, context, {filename: 'proxy-auth.js'});
   Vm.runInContext(productConfigSource, context, {filename: 'product-config.js'});
+  Vm.runInContext(datasetPromotionSource, context, {
+    filename: 'dataset-promotion.js',
+  });
+  if (options.promotionInstall) {
+    context.rucbFirefoxDatasetPromotion = Object.freeze(Object.assign(
+        {},
+        context.rucbFirefoxDatasetPromotion,
+        {
+          createController: () => ({
+            initialize: async () => ({
+              ok: true, status: 'NO_RECOVERY_NEEDED',
+            }),
+            install: options.promotionInstall,
+          }),
+        },
+    ));
+  }
   Vm.runInContext(productionProviderSource, context, {
     filename: 'production-provider.js',
   });
   Vm.runInContext(settingsControlSource, context, {
     filename: 'settings-control.js',
   });
+  const createSettingsController =
+    context.rucbFirefoxSettingsControl.createController;
+  context.rucbFirefoxSettingsControl = Object.freeze(Object.assign(
+      {},
+      context.rucbFirefoxSettingsControl,
+      {
+        createController: (settingsOptions) => createSettingsController(
+            Object.assign({}, settingsOptions, {
+              datasetIdentityAvailable: () => true,
+            }),
+        ),
+      },
+  ));
   context.rucbFirefoxProductionProvider = Object.freeze(Object.assign(
       {},
       context.rucbFirefoxProductionProvider,
@@ -451,6 +485,7 @@ describe('Firefox MV3 production control package', function() {
         'background/routing-adapter.js',
         'background/proxy-auth.js',
         'background/product-config.js',
+        'background/dataset-promotion.js',
         'background/production-provider.js',
         'background/settings-control.js',
         'background/activation-controller.js',
@@ -760,7 +795,7 @@ describe('Firefox MV3 production control package', function() {
         Assert.strictEqual(
             eventPage.events.filter((event) =>
               event === 'product-config-storage-get').length,
-            2,
+            3,
         );
 
       });
@@ -1078,6 +1113,62 @@ describe('Firefox MV3 production control package', function() {
 
   });
 
+  it('installs staged provider data only through an exact no-input RPC',
+      async function() {
+
+        let calls = 0;
+        const eventPage = startEventPage({
+          promotionInstall: async () => {
+
+            calls += 1;
+            return {ok: true, status: 'INSTALLED'};
+
+          },
+        });
+        Assert.deepStrictEqual(await eventPage.send({
+          type: 'firefox.provider.update.install',
+          artifactSha256: 'caller-controlled',
+        }), {ok: false, error: {code: 'INVALID_RPC_REQUEST'}});
+        Assert.deepStrictEqual(await eventPage.send({
+          type: 'firefox.provider.update.install',
+        }), {ok: true, result: {status: 'INSTALLED'}});
+        Assert.strictEqual(calls, 1);
+
+      });
+
+  it('serializes provider install with Apply, Clear, and settings operations',
+      async function() {
+
+        let releaseInstall;
+        const installWait = new Promise((resolve) => {
+          releaseInstall = resolve;
+        });
+        const order = [];
+        const eventPage = startEventPage({
+          promotionInstall: async () => {
+
+            order.push('install-start');
+            await installWait;
+            order.push('install-end');
+            return {ok: true, status: 'INSTALLED'};
+
+          },
+        });
+        const installing = eventPage.send({
+          type: 'firefox.provider.update.install',
+        });
+        const clearing = eventPage.send({type: 'firefox.activation.clear'})
+            .then((result) => {
+              order.push('clear');
+              return result;
+            });
+        await Promise.resolve();
+        releaseInstall();
+        await Promise.all([installing, clearing]);
+        Assert.deepStrictEqual(order, ['install-start', 'install-end', 'clear']);
+
+      });
+
   it('rejects settings mutation while production routing is active',
       async function() {
 
@@ -1270,6 +1361,7 @@ describe('Firefox MV3 production control package', function() {
           proxyControlSource,
           datasetStoreSource,
           providerUpdaterSource,
+          datasetPromotionSource,
           providerLookupSource,
           datasetRuntimeSource,
           routingAdapterSource,

@@ -27,6 +27,7 @@
       "background/routing-adapter.js",
       "background/proxy-auth.js",
       "background/product-config.js",
+      "background/dataset-promotion.js",
       "background/production-provider.js",
       "background/settings-control.js",
       "background/activation-controller.js",

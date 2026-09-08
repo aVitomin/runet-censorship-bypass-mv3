@@ -90,6 +90,15 @@ contains neither a URL nor a trust key.
 
 The Firefox settings control plane can replace only the user-routing portion of
 the product configuration while durable and runtime state are both `OFF`.
-Provider key, packaged dataset identity, provider candidates, and provider
-fallback come from this production module and are never RPC input. A settings
-write therefore cannot select, mutate, or promote a provider artifact.
+Provider key, current trusted dataset identity, provider candidates, and
+provider fallback are internal and never RPC input. A settings write preserves
+the exact current dataset identity and cannot select, mutate, or promote a
+provider artifact.
+
+The package has no production update URL, public key, alarm, startup fetch, or
+RPC that invokes a download. A separate exact no-input install RPC can promote
+only a candidate already staged as `REMOTE_AUTHENTICATED`. It is OFF-only,
+reverifies exact bytes/provider/sequence, rotates active/LKG pointers, and uses
+a `storage.local` write-ahead journal so startup resolves cross-store crashes to
+one consistent old or new dataset/config pair. It never changes settings,
+credentials, proxy ownership, or an active session.
