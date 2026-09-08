@@ -9,8 +9,15 @@
   const activationApi = root.rucbFirefoxActivationController;
   const datasetStoreApi = root.rucbFirefoxDatasetStore;
   const productConfigApi = root.rucbFirefoxProductConfig;
+  const productionProviderApi = root.rucbFirefoxProductionProvider;
   let activationController = null;
   let productionDatasetStore = null;
+  let providerBootstrapState = Object.freeze({
+    ok: false,
+    status: 'INITIALIZING',
+    datasetAvailable: false,
+    productConfigAvailable: false,
+  });
 
   async function sha256(bytes) {
 
@@ -30,6 +37,38 @@
 
   }
 
+  async function readPackagedAsset(relativePath, maximumBytes) {
+
+    const packagedUrl = browser.runtime.getURL(relativePath);
+    const response = await root.fetch(packagedUrl, {
+      cache: 'no-store',
+      credentials: 'omit',
+      method: 'GET',
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
+    });
+    if (!response || response.ok !== true || response.status !== 200 ||
+        response.redirected === true || response.url !== packagedUrl) {
+      const error = new TypeError('PACKAGED_ASSET_READ_FAILED');
+      error.code = 'PACKAGED_ASSET_READ_FAILED';
+      throw error;
+    }
+    const declared = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > maximumBytes) {
+      const error = new TypeError('PACKAGED_ASSET_TOO_LARGE');
+      error.code = 'PACKAGED_ASSET_TOO_LARGE';
+      throw error;
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!bytes.byteLength || bytes.byteLength > maximumBytes) {
+      const error = new TypeError('PACKAGED_ASSET_TOO_LARGE');
+      error.code = 'PACKAGED_ASSET_TOO_LARGE';
+      throw error;
+    }
+    return bytes;
+
+  }
+
   const productFactoryOptions = {
     storageArea: browser.storage.local,
     createDatasetStore: createProductionDatasetStore,
@@ -41,6 +80,12 @@
   const recoveryFactory = productConfigApi.createRecoveryFactory(
       productFactoryOptions,
   );
+  const providerBootstrap = productionProviderApi.createBootstrap({
+    storageArea: browser.storage.local,
+    datasetStore: createProductionDatasetStore(),
+    sha256,
+    readPackagedAsset,
+  });
   const routingAdapter = routing.createAdapter({
     runtimeStateForRequest: () => activationController ?
       activationController.currentRuntimeState() : routing.STATES.INITIALIZING,
@@ -198,7 +243,8 @@
           routingImplemented: true,
           activationSupported: true,
           providerDatasetImplemented: true,
-          providerDatasetAvailable: activation.active,
+          providerDatasetAvailable:
+            providerBootstrapState.datasetAvailable === true,
         },
       };
     }
@@ -250,7 +296,12 @@
   );
   browser.runtime.onMessage.addListener(handleMessage);
 
-  const initialization = activationController.initializeFromDurable();
+  const initialization = (async () => {
+
+    providerBootstrapState = await providerBootstrap.initialize();
+    return activationController.initializeFromDurable();
+
+  })();
 
   root.rucbFirefoxSkeletonRuntime = Object.freeze({
     bootId,

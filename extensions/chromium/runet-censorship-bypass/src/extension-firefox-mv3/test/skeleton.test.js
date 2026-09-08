@@ -67,6 +67,10 @@ const productConfigSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'product-config.js'),
     'utf8',
 );
+const productionProviderSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'production-provider.js'),
+    'utf8',
+);
 const activationControllerSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'activation-controller.js'),
     'utf8',
@@ -295,6 +299,13 @@ function startEventPage(options = {}) {
   };
   const context = Vm.createContext({
     browser,
+    indexedDB: {
+      open() {
+
+        throw new Error('TEST_INDEXED_DB_MUST_NOT_OPEN');
+
+      },
+    },
     crypto: {
       randomUUID: () => options.bootId || 'test-boot',
       getRandomValues(words) {
@@ -335,6 +346,29 @@ function startEventPage(options = {}) {
   });
   Vm.runInContext(proxyAuthSource, context, {filename: 'proxy-auth.js'});
   Vm.runInContext(productConfigSource, context, {filename: 'product-config.js'});
+  Vm.runInContext(productionProviderSource, context, {
+    filename: 'production-provider.js',
+  });
+  context.rucbFirefoxProductionProvider = Object.freeze(Object.assign(
+      {},
+      context.rucbFirefoxProductionProvider,
+      {
+        createBootstrap: () => ({
+          async initialize() {
+
+            return {
+              ok: options.providerBootstrapError ? false : true,
+              status: options.providerBootstrapError ? 'FAILED' :
+                'ALREADY_INSTALLED',
+              code: options.providerBootstrapError || undefined,
+              datasetAvailable: !options.providerBootstrapError,
+              productConfigAvailable: !options.providerBootstrapError,
+            };
+
+          },
+        }),
+      },
+  ));
   if (options.activationFactory) {
     context.rucbFirefoxProductConfig = Object.freeze(Object.assign(
         {},
@@ -393,6 +427,7 @@ describe('Firefox MV3 production control package', function() {
         'background/routing-adapter.js',
         'background/proxy-auth.js',
         'background/product-config.js',
+        'background/production-provider.js',
         'background/activation-controller.js',
         'background/event-page.js',
       ],
@@ -605,7 +640,7 @@ describe('Firefox MV3 production control package', function() {
 
       });
 
-  it('reports production Apply capability without claiming absent data',
+  it('reports the verified packaged provider baseline as available',
       async function() {
 
         const eventPage = startEventPage({privateWindowAccess: true});
@@ -628,7 +663,7 @@ describe('Firefox MV3 production control package', function() {
             routingImplemented: true,
             activationSupported: true,
             providerDatasetImplemented: true,
-            providerDatasetAvailable: false,
+            providerDatasetAvailable: true,
           },
         });
         Assert.strictEqual('bootId' in response.result, false);
@@ -970,7 +1005,7 @@ describe('Firefox MV3 production control package', function() {
           Assert.strictEqual(
               (await eventPage.send({type: 'firefox.capabilities.get'}))
                   .result.providerDatasetAvailable,
-              false,
+              true,
           );
         }
 
@@ -1024,18 +1059,23 @@ describe('Firefox MV3 production control package', function() {
           routingAdapterSource,
           proxyAuthSource,
           productConfigSource,
+          productionProviderSource,
           activationControllerSource,
-          eventPageSource,
         ].join('\n');
         for (const forbidden of [
           'XMLHttpRequest',
-          'fetch(',
           'extension-chromium-mv3',
           'eval(',
           'Function(',
         ]) {
           Assert.strictEqual(runtimeSource.includes(forbidden), false, forbidden);
         }
+        Assert.strictEqual(
+            eventPageSource.includes('root.fetch(packagedUrl'),
+            true,
+        );
+        Assert.strictEqual(eventPageSource.includes('http://'), false);
+        Assert.strictEqual(eventPageSource.includes('https://'), false);
         Assert.strictEqual(
             eventPageSource.includes('acquireRandomFloor('),
             false,

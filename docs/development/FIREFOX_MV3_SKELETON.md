@@ -4,10 +4,11 @@
 `src/extension-firefox-mv3`. Она пока **не является поддерживаемым Firefox-
 продуктом** и не входит в публичные инструкции установки или выпуска.
 
-Текущий пакет намеренно остаётся в состоянии `OFF`. Он содержит Firefox MV3
-manifest, непостоянную background event page, минимальное долговременное
-состояние `OFF`, read-only capability RPC, неактивный Firefox routing adapter и
-реализацию declarative dataset runtime без самого provider dataset.
+Чистая установка намеренно остаётся в состоянии `OFF`. Пакет содержит Firefox
+MV3 manifest, непостоянную background event page, durable activation state,
+production Apply/Clear RPC, routing adapter и declarative dataset runtime.
+Packaged Anticensority baseline, его воспроизводимость и trust boundary описаны
+в [Firefox production provider dataset](FIREFOX_PROVIDER_DATASET.md).
 Adapter заранее регистрирует `proxy.onRequest` и блокирующий
 `webRequest.onBeforeRequest`, поэтому manifest уже запрашивает `proxy`,
 `webRequest`, `webRequestBlocking` и `<all_urls>`. Пока durable intent равен
@@ -108,10 +109,10 @@ route-auth, так и attempt state. Отмена исчерпанного auth 
 request вместо перехода к следующему proxy candidate; это известное Firefox
 availability-отличие, а не Direct fallback или утечка.
 
-Реальный provider dataset, production updater configuration, config writer/UI и
-health-проверки ещё не реализованы. Чистая установка остаётся `OFF`; Apply без
-заранее сохранённых и полностью валидных local product config, credentials и
-verified dataset завершается безопасной ошибкой до proxy acquisition.
+Production updater configuration, config writer/UI и health-проверки ещё не
+реализованы. На чистой установке bootstrap проверяет и локально сохраняет
+packaged baseline и default product config, но оставляет durable intent `OFF` и
+не меняет proxy settings.
 
 Production event page реализует строгий no-input RPC
 `{type: "firefox.activation.apply"}`. Unexpected fields отклоняются, а caller
@@ -192,8 +193,9 @@ factories. Apply сначала дожидается boot initialization, тре
 activation controller. Успешный RPC возвращает только `ON`/`ACTIVE`; ошибки —
 только allowlisted code без raw exception или secret. Capability
 `activationSupported` равен `true`, а `providerDatasetAvailable` становится
-`true` только для уже опубликованной READY session. Чистая установка `OFF` не
-открывает IndexedDB до явного Apply и не читает product config при startup.
+`true` после успешной проверки и установки packaged baseline независимо от
+того, активна ли READY session. Первый clean-start bootstrap открывает
+IndexedDB для установки exact packaged bytes, но не активирует routing.
 
 Apply не записывает product config/credentials, не fetch-ит и не promote-ит
 dataset и не заменяет exact identity. Snapshot остаётся неизменным для всей
@@ -225,10 +227,10 @@ mismatch, missing credential, hash failure или недоступный dataset
 оставляют session недоступной, а exact floor — fail-closed до Clear.
 
 Recovery не выполняет network request: production dataset store открывается
-локально через IndexedDB только для durable `ON`, exact stored artifact ещё раз
-проверяется существующим dataset runtime, и session публикуется только после
-полного успеха. Реальный provider artifact, updater URL/key и persistent
-production configuration по-прежнему отсутствуют в package.
+локально через IndexedDB, exact stored artifact ещё раз проверяется существующим
+dataset runtime, и session публикуется только после полного успеха. Packaged
+provider artifact и default product configuration присутствуют; updater URL/key
+и persistent credential configuration по-прежнему отсутствуют.
 
 Для каркаса используется development-only Gecko ID
 `firefox-mv3-skeleton@runet-censorship-bypass.invalid`. Production Gecko/AMO ID
@@ -244,8 +246,8 @@ npm --prefix $Project run lint:firefox
 npm --prefix $Project run build:firefox
 ```
 
-Сборка содержит только `manifest.json`, Firefox background-скрипты и точные
-копии browser-neutral routing/dataset contract в
+Сборка содержит `manifest.json`, Firefox background-скрипты, exact packaged
+HOST_BUCKETS_V1 artifact/envelope и точные копии browser-neutral contract в
 `build/extension-firefox-mv3`. Dataset runtime использует неизменяемые
 SHA-256-addressed артефакты, строгую общую верификацию и fallback
 active -> previous LKG -> packaged baseline; parsed index хранится только в
@@ -263,7 +265,8 @@ alarm/timer, startup fetch и RPC update command. Update manifest schema v1
 relative `artifactPath` и строгий dataset `envelope`. Отдельная 64-byte
 Ed25519 signature проверяется native WebCrypto над точными UTF-8 bytes
 manifest до доверия его полям. `keyId` выбирает ключ только из injected pinned
-`Map`; remote JSON не может объявить `trust`. После signature, manifest,
+`Map`; remote JSON не может объявить `trust`. Production trust configuration
+пока disabled и не содержит URL/ключей. После signature, manifest,
 provider identity, exact byte count, SHA-256 и общей declarative dataset
 verification pipeline внутренне присваивает `REMOTE_AUTHENTICATED`.
 
@@ -296,8 +299,6 @@ npm --prefix $Project run test:browser:firefox-skeleton
 
 Smoke проверяет реальное уничтожение и пересоздание event page после idle,
 сохранение `OFF` и отсутствие изменений заранее настроенного localhost proxy.
-Он не является обязательным сетевым CI-шагом. Маршрутизация и пользовательский
-Firefox-интерфейс должны появляться только в последующих отдельно проверяемых
-изменениях. Источник, лицензия и authenticated publication production-scale
-provider dataset остаются нерешённым prerelease-блокером; этот пакет не
-предполагает их одобрения.
+Он не является обязательным сетевым CI-шагом. Пользовательский Firefox-интерфейс,
+production update URL/public key и release/signing остаются отдельными
+последующими задачами.

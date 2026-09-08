@@ -1,8 +1,10 @@
 'use strict';
 
 const Assert = require('node:assert');
+const Crypto = require('node:crypto');
 const Fs = require('node:fs');
 const Path = require('node:path');
+const ProductionProvider = require('../background/production-provider');
 
 const EXPECTED_FILES = Object.freeze([
   'background/activation-controller.js',
@@ -14,16 +16,18 @@ const EXPECTED_FILES = Object.freeze([
   'background/event-page.js',
   'background/off-state.js',
   'background/product-config.js',
+  'background/production-provider.js',
   'background/provider-lookup.js',
   'background/provider-updater.js',
   'background/proxy-auth.js',
   'background/proxy-control.js',
   'background/routing-adapter.js',
   'manifest.json',
+  'provider/anticensority-hosts-v1.envelope.json',
+  'provider/anticensority-hosts-v1.json',
 ]);
 const FORBIDDEN_RUNTIME_TEXT = Object.freeze([
   'XMLHttpRequest',
-  'fetch(',
   'BEGIN PRIVATE KEY',
   'extension-chromium-mv3',
   'BEGIN PAC',
@@ -100,6 +104,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/routing-adapter.js',
     'background/proxy-auth.js',
     'background/product-config.js',
+    'background/production-provider.js',
     'background/activation-controller.js',
     'background/event-page.js',
   ]);
@@ -130,6 +135,34 @@ function verifyPackage(packageRoot, sourceRoot) {
       eventPageText.includes('createActivationFactory('),
       true,
   );
+  Assert.strictEqual(
+      eventPageText.includes('root.fetch(packagedUrl'),
+      true,
+  );
+  Assert.strictEqual(eventPageText.includes('http://'), false);
+  Assert.strictEqual(eventPageText.includes('https://'), false);
+
+  const artifact = Fs.readFileSync(Path.join(
+      packageRoot,
+      ProductionProvider.ARTIFACT_PATH,
+  ));
+  const envelope = JSON.parse(Fs.readFileSync(Path.join(
+      packageRoot,
+      ProductionProvider.ENVELOPE_PATH,
+  ), 'utf8'));
+  Assert.strictEqual(
+      Crypto.createHash('sha256').update(artifact).digest('hex'),
+      ProductionProvider.ARTIFACT_SHA256,
+  );
+  Assert.strictEqual(artifact.byteLength,
+      ProductionProvider.ARTIFACT_BYTE_COUNT);
+  Assert.strictEqual(envelope.ruleCount, ProductionProvider.RULE_COUNT);
+  Assert.strictEqual(envelope.artifactSha256,
+      ProductionProvider.ARTIFACT_SHA256);
+  const payload = JSON.parse(artifact);
+  Assert.strictEqual(payload.format, 'HOST_BUCKETS_V1');
+  Assert.strictEqual(payload.buckets.length, 80);
+  Assert.strictEqual(JSON.stringify(payload).includes('FindProxyForURL'), false);
 
   return Object.freeze({files});
 

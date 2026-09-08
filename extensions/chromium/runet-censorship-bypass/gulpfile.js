@@ -70,8 +70,11 @@ const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/background/routing-adapter.js',
   './src/extension-firefox-mv3/background/proxy-auth.js',
   './src/extension-firefox-mv3/background/product-config.js',
+  './src/extension-firefox-mv3/background/production-provider.js',
   './src/extension-firefox-mv3/background/activation-controller.js',
   './src/extension-firefox-mv3/background/event-page.js',
+  './src/extension-firefox-mv3/provider/anticensority-hosts-v1.json',
+  './src/extension-firefox-mv3/provider/anticensority-hosts-v1.envelope.json',
 ];
 const firefoxMv3CommonSrc = [
   './src/extension-mv3-common/routing-contract.js',
