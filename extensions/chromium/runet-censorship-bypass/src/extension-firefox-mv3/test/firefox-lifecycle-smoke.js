@@ -8,7 +8,7 @@ const Net = require('node:net');
 const Os = require('node:os');
 const Path = require('node:path');
 
-const MANUAL_PROXY_MARKER = 'FIREFOX_SKELETON_MANUAL_PROXY';
+const MANUAL_PROXY_MARKER = 'FIREFOX_RUNTIME_MANUAL_PROXY';
 const projectRoot = Path.resolve(__dirname, '..', '..', '..');
 const packageRoot = Path.join(projectRoot, 'build', 'extension-firefox-mv3');
 
@@ -104,7 +104,7 @@ function safeRemoveTemporary(directory, prefix) {
 function makeInstrumentedExtension(collectorPort) {
 
   const directory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), 'rucb-firefox-skeleton-extension-'),
+      Path.join(Os.tmpdir(), 'rucb-firefox-runtime-extension-'),
   );
   Fs.cpSync(packageRoot, directory, {recursive: true});
   const manifestPath = Path.join(directory, 'manifest.json');
@@ -120,7 +120,7 @@ function makeInstrumentedExtension(collectorPort) {
     'browser.alarms.create(\'lifecycle-wake\', {delayInMinutes: 1});',
     '(async () => {',
     '  const initialization = await',
-    '    globalThis.rucbFirefoxSkeletonRuntime.whenReady();',
+    '    globalThis.rucbFirefoxRuntime.whenReady();',
     '  const stored = await browser.storage.local.get(',
     '    globalThis.rucbFirefoxOffState.STORAGE_KEY,',
     '  );',
@@ -129,7 +129,7 @@ function makeInstrumentedExtension(collectorPort) {
     '    method: \'POST\',',
     '    headers: {\'content-type\': \'application/json\'},',
     '    body: JSON.stringify({',
-    '      bootId: globalThis.rucbFirefoxSkeletonRuntime.bootId,',
+    '      bootId: globalThis.rucbFirefoxRuntime.bootId,',
     '      initialization,',
     '      state,',
     '    }),',
@@ -139,7 +139,7 @@ function makeInstrumentedExtension(collectorPort) {
   Fs.writeFileSync(Path.join(directory, 'probe.html'), [
     '<!doctype html>',
     '<meta charset="utf-8">',
-    '<title>Firefox skeleton lifecycle probe</title>',
+    '<title>Firefox runtime lifecycle probe</title>',
     '<body></body>',
     '<script src="probe.js"></script>',
   ].join('\n'));
@@ -150,9 +150,9 @@ function makeInstrumentedExtension(collectorPort) {
     '    type: \'firefox.capabilities.get\',',
     '  });',
     '  const background = browser.extension.getBackgroundPage();',
-    '  await background.rucbFirefoxSkeletonRuntime.whenReady();',
+    '  await background.rucbFirefoxRuntime.whenReady();',
     '  document.body.textContent = JSON.stringify({',
-    '    bootId: background.rucbFirefoxSkeletonRuntime.bootId,',
+    '    bootId: background.rucbFirefoxRuntime.bootId,',
     '    capabilities,',
     '  });',
     '})().catch((error) => {',
@@ -336,7 +336,7 @@ async function bodyText(client) {
 
   return webdriverValue(await client.command('WebDriver:ExecuteScript', {
     args: [],
-    filename: 'firefox-skeleton-lifecycle-smoke.js',
+    filename: 'firefox-runtime-lifecycle-smoke.js',
     line: 1,
     newSandbox: true,
     script: 'return document.body.textContent;',
@@ -351,7 +351,7 @@ async function extensionOrigin(client) {
   try {
     preference = webdriverValue(await client.command('WebDriver:ExecuteScript', {
       args: [],
-      filename: 'firefox-skeleton-lifecycle-smoke.js',
+      filename: 'firefox-runtime-lifecycle-smoke.js',
       line: 1,
       newSandbox: false,
       script: [
@@ -364,7 +364,7 @@ async function extensionOrigin(client) {
     await client.command('Marionette:SetContext', {value: 'content'});
   }
   const uuids = JSON.parse(preference);
-  const uuid = uuids['firefox-mv3-skeleton@runet-censorship-bypass.invalid'];
+  const uuid = uuids['{adf5f697-1149-42a2-92eb-c163cb9a4146}'];
   Assert.strictEqual(typeof uuid, 'string', preference);
   return `moz-extension://${uuid}`;
 
@@ -419,6 +419,13 @@ async function waitForExit(child, timeoutMilliseconds) {
 async function main() {
 
   Assert.strictEqual(Fs.existsSync(packageRoot), true, 'Run build:firefox first.');
+  const productionPackagePath = process.env.FIREFOX_RELEASE_XPI ?
+    Path.resolve(process.env.FIREFOX_RELEASE_XPI) : packageRoot;
+  Assert.strictEqual(
+      Fs.existsSync(productionPackagePath),
+      true,
+      'Firefox production package is missing.',
+  );
   const firefox = resolveFirefox();
   const bootEvents = [];
   const proxyRequests = [];
@@ -442,7 +449,7 @@ async function main() {
   await listen(proxy);
   const extensionDirectory = makeInstrumentedExtension(collector.address().port);
   const profileDirectory = Fs.mkdtempSync(
-      Path.join(Os.tmpdir(), 'rucb-firefox-skeleton-profile-'),
+      Path.join(Os.tmpdir(), 'rucb-firefox-runtime-profile-'),
   );
   const marionettePort = await unusedPort();
   Fs.writeFileSync(
@@ -496,7 +503,7 @@ async function main() {
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
     await client.command('Addon:Install', {
       allowPrivateBrowsing: false,
-      path: packageRoot,
+      path: productionPackagePath,
       temporary: true,
     });
     await delay(500);
@@ -506,7 +513,7 @@ async function main() {
     );
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
     await client.command('Addon:Uninstall', {
-      id: 'firefox-mv3-skeleton@runet-censorship-bypass.invalid',
+      id: '{adf5f697-1149-42a2-92eb-c163cb9a4146}',
     });
     await client.command('Addon:Install', {
       allowPrivateBrowsing: false,
@@ -563,6 +570,8 @@ async function main() {
       privateWindowAccess: secondRpc.capabilities.result.privateWindowAccess,
       manualProxyChecks: phases.length,
       productionPackageInstalledSeparately: true,
+      productionPackageKind: productionPackagePath.endsWith('.xpi') ?
+        'UNSIGNED_XPI' : 'UNPACKED',
     }, null, 2));
   } catch (error) {
     throw new Error(`${error && error.stack ? error.stack : error}\n${stderr}`);
@@ -585,9 +594,9 @@ async function main() {
     await closeServer(proxy);
     safeRemoveTemporary(
         extensionDirectory,
-        'rucb-firefox-skeleton-extension-',
+        'rucb-firefox-runtime-extension-',
     );
-    safeRemoveTemporary(profileDirectory, 'rucb-firefox-skeleton-profile-');
+    safeRemoveTemporary(profileDirectory, 'rucb-firefox-runtime-profile-');
   }
 
 }

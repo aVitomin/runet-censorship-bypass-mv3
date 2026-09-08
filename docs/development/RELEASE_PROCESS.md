@@ -1,8 +1,11 @@
-# Процесс выпуска Chromium MV3
+# Процесс выпуска Chromium MV3 и Firefox MV3
 
-Публичный продуктовый артефакт — ZIP готовой MV3-сборки. Выпуск допустим только
-из точного validated commit актуального чистого `main`, после успешного
-trusted-main CI и проверки того же артефакта, который будет опубликован.
+Chromium публикуется как ZIP готовой MV3-сборки. Firefox release candidate
+состоит из детерминированного unsigned XPI, checksum и reviewer source archive;
+нормальная пользовательская установка Firefox требует отдельной Mozilla
+signature. Выпуск любого target допустим только из точного validated commit
+актуального чистого `main`, после успешного trusted-main CI и проверки того же
+артефакта, который будет опубликован.
 
 > Release останавливается, если в обязательном CI отсутствует любой release
 > gate, даже когда отдельные тесты зелёные. Нельзя заменять отсутствующий
@@ -68,7 +71,7 @@ artifact этого run. Dispatch другой ветки не является 
 - aggregate `verify`;
 - runtime icons и package integrity внутри build;
 - exact-output и tracked-worktree checks;
-- trusted-main-only artifact upload.
+- trusted-main-only Chromium и Firefox artifact uploads.
 
 Если обязательного шага нет, release блокирован до исправления workflow и
 нового успешного trusted-main run. Артефакт PR не является trusted release
@@ -76,8 +79,8 @@ source: upload на pull request намеренно пропускается.
 
 ## 4. Скачать и проверить trusted artifact
 
-Скачайте unpacked MV3 artifact именно из успешного trusted-main run exact SHA.
-Не пересобирайте release независимо от CI. Проверьте:
+Скачайте нужный Chromium или Firefox artifact именно из успешного trusted-main
+run exact SHA. Не пересобирайте release независимо от CI. Проверьте:
 
 - имя run/artifact и полный commit SHA;
 - `manifest_version: 3`, version и `manifest.json` в корне;
@@ -86,11 +89,24 @@ source: upload на pull request намеренно пропускается.
 - отсутствие docs, screenshots, tests, source maps, archives, profiles, logs,
   `.env`, `.local`, `.tmp`, credentials и приватных URL.
 
+Firefox artifact дополнительно содержит unpacked package, unsigned XPI,
+checksum и reviewer source archive. Проверьте XPI checksum, manifest Gecko ID,
+data-collection declaration и побайтовое совпадение XPI contents с unpacked
+package. Инструкции и AMO notes находятся в
+[`FIREFOX_RELEASE_BUILD.md`](FIREFOX_RELEASE_BUILD.md) и
+[`FIREFOX_AMO_REVIEW.md`](FIREFOX_AMO_REVIEW.md). Подписание выполняется AMO
+после проверки exact unsigned XPI; signing credentials в репозитории и CI нет.
+
 Если выпуск требует browser QA, загрузите именно распакованный trusted artifact
 в чистый профиль. Запишите browser и точную версию. Минимально проверьте Brave;
 статус stable Chrome укажите честно. Сценарии перечислены в
 [TESTING.md](TESTING.md#браузерная-qa). Для authenticated proxy используйте
 только разрешённый тестовый аккаунт и не записывайте пароль.
+
+Для Firefox установите exact unsigned XPI как temporary add-on в Firefox
+154.0.1, проверьте popup/options, Apply/recovery/Clear, EN/RU, authenticated
+proxy, private-access revoke и external control loss. Обычная установка
+unsigned XPI не считается пользовательским release path.
 
 ## 5. Создать ZIP из проверенного artifact
 

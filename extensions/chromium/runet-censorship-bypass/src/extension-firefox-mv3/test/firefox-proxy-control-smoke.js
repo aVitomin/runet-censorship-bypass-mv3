@@ -8,7 +8,7 @@ const Os = require('node:os');
 const Path = require('node:path');
 const Smoke = require('./firefox-lifecycle-smoke');
 
-const EXTENSION_ID = 'firefox-mv3-skeleton@runet-censorship-bypass.invalid';
+const EXTENSION_ID = '{adf5f697-1149-42a2-92eb-c163cb9a4146}';
 const MANUAL_PROXY_MARKER = 'FIREFOX_PROXY_CONTROL_PREVIOUS_MANUAL';
 const projectRoot = Path.resolve(__dirname, '..', '..', '..');
 const packageRoot = Path.join(projectRoot, 'build', 'extension-firefox-mv3');
@@ -73,7 +73,7 @@ function makeInstrumentedExtension() {
     '  const parameters = new URLSearchParams(location.search);',
     '  const action = parameters.get(\'action\');',
     '  const background = browser.extension.getBackgroundPage();',
-    '  await background.rucbFirefoxSkeletonRuntime.whenReady();',
+    '  await background.rucbFirefoxRuntime.whenReady();',
     '  const OffState = background.rucbFirefoxOffState;',
     '  const ProxyControl = background.rucbFirefoxProxyControl;',
     '  const counters = {clear: 0, get: 0, set: 0};',

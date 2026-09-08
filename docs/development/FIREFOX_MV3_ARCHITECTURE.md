@@ -1,8 +1,8 @@
-# Инертный каркас Firefox MV3
+# Архитектура Firefox MV3
 
-В репозитории есть отдельная экспериментальная production-source граница
-`src/extension-firefox-mv3`. Она пока **не является поддерживаемым Firefox-
-продуктом** и не входит в публичные инструкции установки или выпуска.
+Firefox production source находится в отдельной границе
+`src/extension-firefox-mv3`. Пакет готовится как воспроизводимый release
+candidate, но пока не опубликован и не входит в публичные инструкции установки.
 
 Чистая установка намеренно остаётся в состоянии `OFF`. Пакет содержит Firefox
 MV3 manifest, непостоянную background event page, durable activation state,
@@ -39,9 +39,9 @@ Firefox routing adapter фиксирует проверенную в Firefox 154
 Обычный provider Direct остаётся поддержанным, если shared routing core уже
 свёл решение к `{kind: 'DIRECT'}`. Default provider Auto больше не блокируется
 до первой proxy-попытки, но полная routing parity с Chromium не заявляется.
-Firefox-specific control plane теперь содержит узкие primitives для global
-fail-closed floor и Clear, но не содержит production activation path. Canonical
-floor — manual SOCKS5 `127.0.0.1:<persisted-high-port>` с `proxyDNS: true`,
+Firefox-specific control plane содержит production Apply/Clear/recovery вокруг
+global fail-closed floor, но чистая установка остаётся `OFF` до явного Apply.
+Canonical floor — manual SOCKS5 `127.0.0.1:<persisted-high-port>` с `proxyDNS: true`,
 пустыми HTTP/SSL/auto-config/passthrough и `httpProxyAll: false`. Port `0`,
 well-known и другие low ports невалидны. Кандидат high port создаётся только
 внутри proxy-control через `crypto.getRandomValues`; activation caller не
@@ -260,10 +260,12 @@ dataset runtime, и session публикуется только после по�
 provider artifact и default product configuration присутствуют; updater URL/key
 и persistent credential configuration по-прежнему отсутствуют.
 
-Для каркаса используется development-only Gecko ID
-`firefox-mv3-skeleton@runet-censorship-bypass.invalid`. Production Gecko/AMO ID
-и возможная связь с legacy-идентичностями пока не определены; этот ID нельзя
-использовать для выпуска или миграции.
+Production Gecko ID — неизменяемый UUIDv4
+`{adf5f697-1149-42a2-92eb-c163cb9a4146}`. Он создан для этого Firefox MV3
+продукта и не переиспользует legacy AMO identity. Firefox следует общей версии
+репозитория: текущий release candidate имеет manifest version `0.0.3.0`,
+совпадающую с `storeVersion` Chromium release train; следующий публичный
+release обновляет обе версии согласованно через обычный release-процесс.
 
 Детерминированные проверки запускаются из корня репозитория:
 
@@ -282,9 +284,11 @@ active -> previous LKG -> packaged baseline; parsed index хранится то�
 памяти event page. Неизменяемые bytes и маленькие provider pointers находятся
 в отдельных object stores Firefox-specific IndexedDB; запись артефакта и
 переключение pointer выполняются одной транзакцией только после проверки точных
-bytes. Remote candidate с unauthenticated trust не может стать active. Пакет не
-содержит реального или синтетического provider dataset и в `OFF` не открывает
-dataset storage. Он не меняет Chromium build output.
+bytes. Remote candidate с unauthenticated trust не может стать active. Пакет
+содержит только локальный declarative Anticensority baseline, описанный в
+`FIREFOX_PROVIDER_DATASET.md`; PAC/JavaScript провайдера в runtime package не
+входит. В `OFF` proxy settings не меняются. Firefox build не меняет Chromium
+build output.
 
 Пакет содержит инертный authenticated-update pipeline, но production event
 page его не создаёт и не вызывает: отсутствуют production URL, public key,
@@ -322,7 +326,7 @@ routing dataset.
 запустить командой:
 
 ```powershell
-npm --prefix $Project run test:browser:firefox-skeleton
+npm --prefix $Project run test:browser:firefox-lifecycle
 ```
 
 Smoke проверяет реальное уничтожение и пересоздание event page после idle,

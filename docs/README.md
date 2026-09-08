@@ -34,7 +34,9 @@
 
 - [Подготовка среды и разработка](development/DEVELOPMENT.md)
 - [Архитектура Manifest V3](development/ARCHITECTURE.md)
-- [Инертный каркас Firefox MV3](development/FIREFOX_MV3_SKELETON.md)
+- [Архитектура Firefox MV3](development/FIREFOX_MV3_ARCHITECTURE.md)
+- [Сборка Firefox release candidate](development/FIREFOX_RELEASE_BUILD.md)
+- [Памятка Firefox AMO reviewer](development/FIREFOX_AMO_REVIEW.md)
 - [Тестирование и браузерная QA](development/TESTING.md)
 - [Процесс выпуска](development/RELEASE_PROCESS.md)
 - [Совместимость и миграция старых настроек](development/LEGACY_MIGRATION.md)

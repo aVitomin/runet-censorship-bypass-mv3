@@ -27,7 +27,7 @@
         '4a779826cf70ad5a524f4483bb6aa7a5f5bca19626b32ad8b2597f1a403c0795';
       const ARTIFACT_BYTE_COUNT = 11642895;
       const RULE_COUNT = 662819;
-      const ARTIFACT_PATH = 'provider/anticensority-hosts-v1.json';
+      const ARTIFACT_PATH = 'provider/anticensority-hosts-v1.data';
       const ENVELOPE_PATH =
         'provider/anticensority-hosts-v1.envelope.json';
       const BOOTSTRAP_STORAGE_KEY = 'firefoxMv3ProductionProviderBootstrap';

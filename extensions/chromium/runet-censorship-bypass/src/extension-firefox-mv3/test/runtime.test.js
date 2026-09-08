@@ -418,7 +418,7 @@ function startEventPage(options = {}) {
     storage,
     async ready() {
 
-      return context.rucbFirefoxSkeletonRuntime.whenReady();
+      return context.rucbFirefoxRuntime.whenReady();
 
     },
     send(message) {
@@ -462,7 +462,7 @@ describe('Firefox MV3 production control package', function() {
     Assert.strictEqual('service_worker' in manifest.background, false);
     Assert.strictEqual(
         manifest.browser_specific_settings.gecko.id,
-        'firefox-mv3-skeleton@runet-censorship-bypass.invalid',
+        '{adf5f697-1149-42a2-92eb-c163cb9a4146}',
     );
     Assert.strictEqual(
         manifest.browser_specific_settings.gecko.strict_min_version,
@@ -1169,8 +1169,8 @@ describe('Firefox MV3 production control package', function() {
             ['direct.example'],
         );
         Assert.notStrictEqual(
-            first.context.rucbFirefoxSkeletonRuntime.bootId,
-            second.context.rucbFirefoxSkeletonRuntime.bootId,
+            first.context.rucbFirefoxRuntime.bootId,
+            second.context.rucbFirefoxRuntime.bootId,
         );
 
       });
@@ -1250,8 +1250,8 @@ describe('Firefox MV3 production control package', function() {
     await second.ready();
     const capabilities = await second.send({type: 'firefox.capabilities.get'});
 
-    Assert.strictEqual(first.context.rucbFirefoxSkeletonRuntime.bootId, 'boot-one');
-    Assert.strictEqual(second.context.rucbFirefoxSkeletonRuntime.bootId, 'boot-two');
+    Assert.strictEqual(first.context.rucbFirefoxRuntime.bootId, 'boot-one');
+    Assert.strictEqual(second.context.rucbFirefoxRuntime.bootId, 'boot-two');
     Assert.strictEqual(capabilities.result.runtimeState, 'OFF');
     Assert.deepStrictEqual(
         JSON.parse(JSON.stringify(storage.values[OffState.STORAGE_KEY])), {

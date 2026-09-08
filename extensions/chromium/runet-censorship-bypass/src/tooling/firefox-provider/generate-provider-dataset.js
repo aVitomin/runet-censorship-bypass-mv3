@@ -375,7 +375,7 @@ async function runCli(argv) {
   });
   const outputDirectory = Path.resolve(options['output-directory']);
   await Fs.mkdir(outputDirectory, {recursive: true});
-  const artifactName = 'anticensority-hosts-v1.json';
+  const artifactName = 'anticensority-hosts-v1.data';
   await Fs.writeFile(Path.join(outputDirectory, artifactName),
       generated.artifactBytes);
   await Fs.writeFile(

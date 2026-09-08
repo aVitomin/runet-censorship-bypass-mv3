@@ -10,7 +10,7 @@ const sourceRoot = Path.resolve(__dirname, '..');
 
 function makePackage() {
 
-  const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'firefox-skeleton-package-'));
+  const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'firefox-runtime-package-'));
   for (const relativePath of EXPECTED_FILES) {
     const target = Path.join(root, relativePath);
     const source = relativePath.startsWith('background/common/') ?

@@ -115,9 +115,10 @@ npm run build:mv3
 Workflow [`.github/workflows/mv3.yml`](../../.github/workflows/mv3.yml) работает
 на Node 22 для push и pull request в `main`. Он устанавливает только зависимости
 расширения, проверяет документацию, запускает PAC/MV3 tests, lint, build,
-aggregate `verify`, package/icons и чистоту tracked tree. Только trusted push в
-`main` сохраняет краткоживущий unpacked artifact; pull request artifact не
-публикуется.
+aggregate `verify`, package/icons, воспроизводимость Firefox XPI/source archive
+и чистоту tracked tree. Только trusted push или explicit dispatch exact `main`
+сохраняет краткоживущие Chromium/Firefox artifacts; pull request artifacts не
+публикуются.
 
 ## Ветки и pull request
 

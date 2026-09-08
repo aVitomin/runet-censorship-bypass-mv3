@@ -87,14 +87,17 @@ jobs:
       - name: Run aggregate verification
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run verify
 
-      - name: Run Firefox skeleton tests
+      - name: Run Firefox tests
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:firefox
 
-      - name: Lint Firefox skeleton
+      - name: Lint Firefox
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run lint:firefox
 
-      - name: Build and verify Firefox skeleton
+      - name: Build and verify Firefox
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run build:firefox
+
+      - name: Build deterministic Firefox release candidate
+        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run release:firefox
 
       - name: Validate exact MV3 output
         run: |
@@ -102,7 +105,7 @@ jobs:
           test -d "$package_dir"
           test -f "$package_dir/manifest.json"
 
-      - name: Validate exact Firefox skeleton output
+      - name: Validate exact Firefox output
         run: |
           package_dir='./extensions/chromium/runet-censorship-bypass/build/extension-firefox-mv3'
           test -d "$package_dir"
@@ -117,5 +120,16 @@ jobs:
         with:
           name: runet-censorship-bypass-mv3-${{ github.sha }}
           path: extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Firefox release candidate
+        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runet-censorship-bypass-firefox-mv3-${{ github.sha }}
+          path: |
+            extensions/chromium/runet-censorship-bypass/build/extension-firefox-mv3
+            extensions/chromium/runet-censorship-bypass/dist/firefox-release
           if-no-files-found: error
           retention-days: 7
