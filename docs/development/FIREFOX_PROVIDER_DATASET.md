@@ -87,3 +87,9 @@ The bootstrap performs no external request: its only reads use
 `browser.runtime.getURL()` for fixed package paths. It does not set proxy
 settings or activate routing. Remote update configuration remains disabled and
 contains neither a URL nor a trust key.
+
+The Firefox settings control plane can replace only the user-routing portion of
+the product configuration while durable and runtime state are both `OFF`.
+Provider key, packaged dataset identity, provider candidates, and provider
+fallback come from this production module and are never RPC input. A settings
+write therefore cannot select, mutate, or promote a provider artifact.

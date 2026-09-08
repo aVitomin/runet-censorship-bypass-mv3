@@ -1,11 +1,14 @@
 'use strict';
 
 const Assert = require('node:assert');
+const Crypto = require('node:crypto');
 const Fs = require('node:fs');
 const Path = require('node:path');
 const Vm = require('node:vm');
 const DatasetStore = require('../background/dataset-store');
 const OffState = require('../background/off-state');
+const ProductConfig = require('../background/product-config');
+const ProductionProvider = require('../background/production-provider');
 const Routing = require('../../extension-mv3-common/routing-contract');
 const Helpers = require('./dataset-test-helpers');
 
@@ -71,6 +74,10 @@ const productionProviderSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'production-provider.js'),
     'utf8',
 );
+const settingsControlSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'settings-control.js'),
+    'utf8',
+);
 const activationControllerSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'activation-controller.js'),
     'utf8',
@@ -105,6 +112,11 @@ function makeStorage(initialValue) {
 
         writes.push(update);
         Object.assign(values, update);
+
+      },
+      async remove(key) {
+
+        delete values[key];
 
       },
     },
@@ -260,6 +272,12 @@ function startEventPage(options = {}) {
           return storage.area.set(update);
 
         },
+        async remove(key) {
+
+          events.push('storage-remove');
+          return storage.area.remove(key);
+
+        },
       },
     },
     webRequest: {
@@ -299,6 +317,8 @@ function startEventPage(options = {}) {
   };
   const context = Vm.createContext({
     browser,
+    TextDecoder,
+    TextEncoder,
     indexedDB: {
       open() {
 
@@ -307,6 +327,7 @@ function startEventPage(options = {}) {
       },
     },
     crypto: {
+      subtle: Crypto.webcrypto.subtle,
       randomUUID: () => options.bootId || 'test-boot',
       getRandomValues(words) {
 
@@ -348,6 +369,9 @@ function startEventPage(options = {}) {
   Vm.runInContext(productConfigSource, context, {filename: 'product-config.js'});
   Vm.runInContext(productionProviderSource, context, {
     filename: 'production-provider.js',
+  });
+  Vm.runInContext(settingsControlSource, context, {
+    filename: 'settings-control.js',
   });
   context.rucbFirefoxProductionProvider = Object.freeze(Object.assign(
       {},
@@ -428,6 +452,7 @@ describe('Firefox MV3 production control package', function() {
         'background/proxy-auth.js',
         'background/product-config.js',
         'background/production-provider.js',
+        'background/settings-control.js',
         'background/activation-controller.js',
         'background/event-page.js',
       ],
@@ -587,7 +612,7 @@ describe('Firefox MV3 production control package', function() {
           'completed-listener-registered',
           'error-listener-registered',
           'listener-registered',
-          'storage-get',
+          'product-config-storage-get',
         ]);
         Assert.deepStrictEqual(
             JSON.parse(JSON.stringify(
@@ -735,7 +760,7 @@ describe('Firefox MV3 production control package', function() {
         Assert.strictEqual(
             eventPage.events.filter((event) =>
               event === 'product-config-storage-get').length,
-            1,
+            2,
         );
 
       });
@@ -956,6 +981,197 @@ describe('Firefox MV3 production control package', function() {
               false,
           );
         }
+
+      });
+
+  it('exposes strict redacted production settings RPCs', async function() {
+
+    const productConfig = await ProductionProvider.createProductionProductConfig(
+        async (bytes) => Helpers.sha256(Buffer.from(bytes)),
+    );
+    const storage = makeStorage();
+    storage.values[ProductConfig.CONFIG_STORAGE_KEY] = productConfig;
+    const eventPage = startEventPage({storage});
+    await eventPage.ready();
+    const invalidGet = await eventPage.send({
+      type: 'firefox.settings.get',
+      extra: true,
+    });
+    Assert.deepStrictEqual(invalidGet, {
+      ok: false, error: {code: 'INVALID_RPC_REQUEST'},
+    });
+    const current = await eventPage.send({type: 'firefox.settings.get'});
+    Assert.strictEqual(current.ok, true);
+    Assert.strictEqual(current.result.revision, 0);
+    current.result.settings.ownProxies = [{
+      id: 'fixture-authenticated',
+      enabled: true,
+      type: 'HTTP',
+      host: '127.0.0.1',
+      port: 18080,
+      proxyDNS: false,
+      failoverTimeoutSeconds: null,
+      useAsDirectReplacement: false,
+      credentials: {
+        mode: 'SET',
+        username: 'fixture-user',
+        password: 'fixture-password',
+      },
+    }];
+    const replaced = await eventPage.send({
+      type: 'firefox.settings.replace',
+      expectedRevision: 0,
+      settings: current.result.settings,
+    });
+
+    Assert.strictEqual(replaced.ok, true);
+    Assert.strictEqual(replaced.result.revision, 1);
+    Assert.deepStrictEqual(
+        replaced.result.settings.ownProxies[0].credentials,
+        {mode: 'KEEP', username: 'fixture-user'},
+    );
+    Assert.strictEqual(JSON.stringify(replaced).includes('fixture-password'), false);
+    Assert.strictEqual(
+        JSON.stringify(storage.values[ProductConfig.CONFIG_STORAGE_KEY])
+            .includes('fixture-password'),
+        false,
+    );
+    Assert.strictEqual(
+        storage.values[ProductConfig.CREDENTIALS_STORAGE_KEY]
+            .entries[0].password,
+        'fixture-password',
+    );
+
+  });
+
+  it('serializes settings writes and rejects stale revisions', async function() {
+
+    const productConfig = await ProductionProvider.createProductionProductConfig(
+        async (bytes) => Helpers.sha256(Buffer.from(bytes)),
+    );
+    const storage = makeStorage();
+    storage.values[ProductConfig.CONFIG_STORAGE_KEY] = productConfig;
+    const eventPage = startEventPage({storage});
+    const current = await eventPage.send({type: 'firefox.settings.get'});
+    const first = JSON.parse(JSON.stringify(current.result.settings));
+    const second = JSON.parse(JSON.stringify(current.result.settings));
+    first.flags.noDirect = true;
+    second.flags.replaceDirectWithProxy = true;
+    const results = await Promise.all([
+      eventPage.send({
+        type: 'firefox.settings.replace',
+        expectedRevision: 0,
+        settings: first,
+      }),
+      eventPage.send({
+        type: 'firefox.settings.replace',
+        expectedRevision: 0,
+        settings: second,
+      }),
+    ]);
+
+    Assert.strictEqual(results.filter((result) => result.ok).length, 1);
+    Assert.deepStrictEqual(
+        results.find((result) => !result.ok),
+        {ok: false, error: {code: 'SETTINGS_REVISION_CONFLICT'}},
+    );
+
+  });
+
+  it('rejects settings mutation while production routing is active',
+      async function() {
+
+        const productConfig = await ProductionProvider.createProductionProductConfig(
+            async (bytes) => Helpers.sha256(Buffer.from(bytes)),
+        );
+        const storage = makeStorage();
+        storage.values[ProductConfig.CONFIG_STORAGE_KEY] = productConfig;
+        const prepared = await preparedActivation();
+        const eventPage = startEventPage({
+          storage,
+          privateWindowAccess: true,
+          activationFactory: async () => prepared,
+        });
+        const current = await eventPage.send({type: 'firefox.settings.get'});
+        Assert.strictEqual((await eventPage.send({
+          type: 'firefox.activation.apply',
+        })).ok, true);
+        const result = await eventPage.send({
+          type: 'firefox.settings.replace',
+          expectedRevision: current.result.revision,
+          settings: current.result.settings,
+        });
+
+        Assert.deepStrictEqual(result, {
+          ok: false,
+          error: {code: 'SETTINGS_MUTATION_REQUIRES_OFF'},
+        });
+
+      });
+
+  it('supports Clear then settings replace then a new explicit Apply',
+      async function() {
+
+        const productConfig = await ProductionProvider.createProductionProductConfig(
+            async (bytes) => Helpers.sha256(Buffer.from(bytes)),
+        );
+        const storage = makeStorage();
+        storage.values[ProductConfig.CONFIG_STORAGE_KEY] = productConfig;
+        const prepared = await preparedActivation();
+        const eventPage = startEventPage({
+          storage,
+          privateWindowAccess: true,
+          activationFactory: async () => prepared,
+        });
+        Assert.strictEqual((await eventPage.send({
+          type: 'firefox.activation.apply',
+        })).ok, true);
+        Assert.strictEqual((await eventPage.send({
+          type: 'firefox.activation.clear',
+        })).ok, true);
+        const current = await eventPage.send({type: 'firefox.settings.get'});
+        current.result.settings.flags.noDirect = true;
+        Assert.strictEqual((await eventPage.send({
+          type: 'firefox.settings.replace',
+          expectedRevision: current.result.revision,
+          settings: current.result.settings,
+        })).ok, true);
+        Assert.strictEqual((await eventPage.send({
+          type: 'firefox.activation.apply',
+        })).ok, true);
+        Assert.strictEqual(eventPage.proxySettingsCalls.set, 2);
+        Assert.strictEqual(eventPage.proxySettingsCalls.clear, 1);
+
+      });
+
+  it('reloads committed settings after genuine event-page recreation',
+      async function() {
+
+        const productConfig = await ProductionProvider.createProductionProductConfig(
+            async (bytes) => Helpers.sha256(Buffer.from(bytes)),
+        );
+        const storage = makeStorage();
+        storage.values[ProductConfig.CONFIG_STORAGE_KEY] = productConfig;
+        const first = startEventPage({storage, bootId: 'settings-boot-one'});
+        const current = await first.send({type: 'firefox.settings.get'});
+        current.result.settings.rules.direct = ['direct.example'];
+        Assert.strictEqual((await first.send({
+          type: 'firefox.settings.replace',
+          expectedRevision: 0,
+          settings: current.result.settings,
+        })).ok, true);
+        const second = startEventPage({storage, bootId: 'settings-boot-two'});
+        const restored = await second.send({type: 'firefox.settings.get'});
+
+        Assert.strictEqual(restored.result.revision, 1);
+        Assert.deepStrictEqual(
+            restored.result.settings.rules.direct,
+            ['direct.example'],
+        );
+        Assert.notStrictEqual(
+            first.context.rucbFirefoxSkeletonRuntime.bootId,
+            second.context.rucbFirefoxSkeletonRuntime.bootId,
+        );
 
       });
 

@@ -10,7 +10,9 @@
   const datasetStoreApi = root.rucbFirefoxDatasetStore;
   const productConfigApi = root.rucbFirefoxProductConfig;
   const productionProviderApi = root.rucbFirefoxProductionProvider;
+  const settingsControlApi = root.rucbFirefoxSettingsControl;
   let activationController = null;
+  let settingsController = null;
   let productionDatasetStore = null;
   let providerBootstrapState = Object.freeze({
     ok: false,
@@ -117,6 +119,11 @@
     proxyAuth,
     storageArea: browser.storage.local,
   });
+  settingsController = settingsControlApi.createController({
+    storageArea: browser.storage.local,
+    sha256,
+    activationSnapshot: () => activationController.snapshot(),
+  });
   const bootId = root.crypto && typeof root.crypto.randomUUID === 'function' ?
     root.crypto.randomUUID() :
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -135,6 +142,9 @@
     'NO_USABLE_PROVIDER_DATASET',
     'SELECTED_DATASET_UNAVAILABLE',
   ]);
+  const SAFE_SETTINGS_ERROR_CODES = new Set(
+      Object.values(settingsControlApi.ERRORS),
+  );
 
   function exactRpcRequest(message, type) {
 
@@ -150,6 +160,26 @@
       value && typeof value === 'object' ? value.code : null;
     return SAFE_APPLY_ERROR_CODES.has(code) ? code :
       activationApi.ERRORS.ACTIVATION_FAILED;
+
+  }
+
+  function safeSettingsErrorCode(value) {
+
+    const code = typeof value === 'string' ? value :
+      value && typeof value === 'object' ? value.code : null;
+    return SAFE_SETTINGS_ERROR_CODES.has(code) ? code :
+      settingsControlApi.ERRORS.SETTINGS_STATE_UNAVAILABLE;
+
+  }
+
+  function exactSettingsReplaceRequest(message) {
+
+    return Boolean(message) && typeof message === 'object' &&
+      !Array.isArray(message) &&
+      message.type === 'firefox.settings.replace' &&
+      Object.keys(message).length === 3 &&
+      Object.prototype.hasOwnProperty.call(message, 'expectedRevision') &&
+      Object.prototype.hasOwnProperty.call(message, 'settings');
 
   }
 
@@ -221,6 +251,32 @@
 
   }
 
+  async function getProductSettings() {
+
+    try {
+      return {ok: true, result: await settingsController.get()};
+    } catch (error) {
+      return errorResponse(safeSettingsErrorCode(error));
+    }
+
+  }
+
+  async function replaceProductSettings(message) {
+
+    try {
+      return {
+        ok: true,
+        result: await settingsController.replace(
+            message.expectedRevision,
+            message.settings,
+        ),
+      };
+    } catch (error) {
+      return errorResponse(safeSettingsErrorCode(error));
+    }
+
+  }
+
   async function handleMessage(message) {
 
     await initialization;
@@ -255,7 +311,22 @@
       return enqueueRpcControlOperation(applyPersistedProductConfiguration);
     }
     if (type === 'firefox.activation.clear') {
+      if (!exactRpcRequest(message, type)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
       return enqueueRpcControlOperation(clearProductActivation);
+    }
+    if (type === 'firefox.settings.get') {
+      if (!exactRpcRequest(message, type)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      return enqueueRpcControlOperation(getProductSettings);
+    }
+    if (type === 'firefox.settings.replace') {
+      if (!exactSettingsReplaceRequest(message)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      return enqueueRpcControlOperation(() => replaceProductSettings(message));
     }
     return errorResponse('UNKNOWN_RPC');
 
@@ -299,6 +370,7 @@
   const initialization = (async () => {
 
     providerBootstrapState = await providerBootstrap.initialize();
+    await settingsController.initialize();
     return activationController.initializeFromDurable();
 
   })();
