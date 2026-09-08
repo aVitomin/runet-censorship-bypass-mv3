@@ -73,7 +73,7 @@ describe('Firefox MV3 package verifier', function() {
 
   });
 
-  it('rejects a packaged provider artifact or synthetic fixture', function() {
+  it('rejects an unexpected synthetic provider artifact', function() {
 
     packageRoot = makePackage();
     Fs.mkdirSync(Path.join(packageRoot, 'provider'), {recursive: true});

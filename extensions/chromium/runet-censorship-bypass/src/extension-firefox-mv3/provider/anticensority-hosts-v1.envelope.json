@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "providerKey": "anticensority",
+  "datasetVersion": "2025.11.11-0448d748",
+  "generatedAt": "2025-11-11T08:10:04.000Z",
+  "sourceRevisions": [
+    {
+      "sourceId": "anticensority-generated-pac",
+      "revision": "0448d748585ce0ed31434097d83b2b18236acbfb;sha256=47334452e4075e1be3e20dca842a9ee62f694ae5404dfc3c154b3de8215ba4f5"
+    },
+    {
+      "sourceId": "anticensority-pac-generator",
+      "revision": "869aad85dce20ace9d44d3a9d694b6ac84baea6a"
+    }
+  ],
+  "ruleCount": 662819,
+  "artifactByteCount": 11642895,
+  "artifactSha256": "4a779826cf70ad5a524f4483bb6aa7a5f5bca19626b32ad8b2597f1a403c0795",
+  "routeTableVersion": 1
+}
