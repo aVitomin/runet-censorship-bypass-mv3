@@ -263,7 +263,7 @@ provider artifact и default product configuration присутствуют; upd
 Production Gecko ID — неизменяемый UUIDv4
 `{adf5f697-1149-42a2-92eb-c163cb9a4146}`. Он создан для этого Firefox MV3
 продукта и не переиспользует legacy AMO identity. Firefox следует общей версии
-репозитория: текущий release candidate имеет manifest version `0.0.3.0`,
+репозитория: текущий release candidate имеет manifest version `0.0.4.0`,
 совпадающую с `storeVersion` Chromium release train; следующий публичный
 release обновляет обе версии согласованно через обычный release-процесс.
 

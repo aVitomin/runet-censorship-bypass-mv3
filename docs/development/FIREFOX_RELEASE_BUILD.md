@@ -2,7 +2,7 @@
 
 Firefox MV3 follows the repository release train. Its manifest version is the
 same `0.0.<storeVersion>` derived from `src/templates-data.js` for Chromium;
-the current candidate is `0.0.3.0`. A future public release updates the shared
+the current candidate is `0.0.4.0`. A future public release updates the shared
 release version through the normal release process rather than creating an
 independent Firefox-only version.
 
@@ -29,10 +29,10 @@ package allowlist/integrity verifier after each build, and compares both
 release sets byte for byte. It refuses a dirty tracked tree and refuses to
 overwrite an existing release output. It then writes:
 
-- `dist/firefox-release/runet-censorship-bypass-firefox-0.0.3.0.xpi` — unsigned
+- `dist/firefox-release/runet-censorship-bypass-firefox-0.0.4.0.xpi` — unsigned
   release candidate with `manifest.json` at archive root;
 - the matching `.xpi.sha256` file;
-- `runet-censorship-bypass-firefox-0.0.3.0-source.zip` — all tracked source
+- `runet-censorship-bypass-firefox-0.0.4.0-source.zip` — all tracked source
   files needed for review and reproduction, under one versioned root;
 - the matching source-archive `.sha256` file.
 
@@ -57,7 +57,7 @@ version recorded in the PR. For this candidate the command is:
 
 ```powershell
 npx --yes --ignore-scripts addons-linter@10.10.0 `
-  "$Project\dist\firefox-release\runet-censorship-bypass-firefox-0.0.3.0.xpi"
+  "$Project\dist\firefox-release\runet-censorship-bypass-firefox-0.0.4.0.xpi"
 ```
 
 This command is an explicit release audit tool invocation; it is not a project

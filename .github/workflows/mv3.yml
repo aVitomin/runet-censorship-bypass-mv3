@@ -81,6 +81,9 @@ jobs:
       - name: Build MV3
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run build:mv3
 
+      - name: Build deterministic Chromium release candidate
+        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run release:chromium
+
       - name: Run Chrome Stable MV3 browser smoke
         run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:browser:mv3
 
@@ -119,7 +122,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: runet-censorship-bypass-mv3-${{ github.sha }}
-          path: extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3
+          path: |
+            extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3
+            extensions/chromium/runet-censorship-bypass/dist/chromium-release
           if-no-files-found: error
           retention-days: 7
 
