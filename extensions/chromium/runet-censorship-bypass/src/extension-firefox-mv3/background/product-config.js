@@ -20,6 +20,8 @@
 
       const CONFIG_STORAGE_KEY = 'firefoxMv3ProductRoutingConfig';
       const CREDENTIALS_STORAGE_KEY = 'firefoxMv3ProxyCredentials';
+      const SETTINGS_COMMIT_STORAGE_KEY = 'firefoxMv3SettingsCommit';
+      const SETTINGS_TRANSACTION_STORAGE_KEY = 'firefoxMv3SettingsMutation';
       const SCHEMA_VERSION = 1;
       const MAX_RULES = 4096;
       const MAX_CANDIDATES = 256;
@@ -77,6 +79,12 @@
         'password',
         'username',
       ]);
+      const SETTINGS_COMMIT_KEYS = Object.freeze([
+        'revision',
+        'routingDescriptor',
+        'schemaVersion',
+        'settings',
+      ]);
       const AUTH_REF_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
       const CANDIDATE_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
       const SHA256_PATTERN = /^[a-f0-9]{64}$/;
@@ -99,6 +107,8 @@
         PRODUCT_CONFIG_PROVIDER_MISMATCH: 'PRODUCT_CONFIG_PROVIDER_MISMATCH',
         PRODUCT_CONFIG_STORAGE_UNAVAILABLE:
           'PRODUCT_CONFIG_STORAGE_UNAVAILABLE',
+        PRODUCT_CONFIG_UPDATE_INCOMPLETE:
+          'PRODUCT_CONFIG_UPDATE_INCOMPLETE',
         PRODUCT_CONFIG_VERSION_UNSUPPORTED:
           'PRODUCT_CONFIG_VERSION_UNSUPPORTED',
         REQUIRED_CREDENTIAL_MISSING: 'REQUIRED_CREDENTIAL_MISSING',
@@ -497,6 +507,8 @@
             stored = await storageArea.get([
               CONFIG_STORAGE_KEY,
               CREDENTIALS_STORAGE_KEY,
+              SETTINGS_COMMIT_STORAGE_KEY,
+              SETTINGS_TRANSACTION_STORAGE_KEY,
             ]);
           } catch (_error) {
             throw configError(ERRORS.PRODUCT_CONFIG_STORAGE_UNAVAILABLE);
@@ -507,11 +519,33 @@
           if (!Object.prototype.hasOwnProperty.call(stored, CONFIG_STORAGE_KEY)) {
             throw configError(ERRORS.PRODUCT_CONFIG_MISSING);
           }
+          if (Object.prototype.hasOwnProperty.call(
+              stored,
+              SETTINGS_TRANSACTION_STORAGE_KEY,
+          )) {
+            throw configError(ERRORS.PRODUCT_CONFIG_UPDATE_INCOMPLETE);
+          }
           const verified = await verifyProductConfig(
               stored[CONFIG_STORAGE_KEY],
               sha256,
           );
           const config = verified.config;
+          if (Object.prototype.hasOwnProperty.call(
+              stored,
+              SETTINGS_COMMIT_STORAGE_KEY,
+          )) {
+            const commit = stored[SETTINGS_COMMIT_STORAGE_KEY];
+            if (!hasExactKeys(commit, SETTINGS_COMMIT_KEYS) ||
+                commit.schemaVersion !== 1 ||
+                !Number.isSafeInteger(commit.revision) ||
+                commit.revision < 1 || !sameDescriptor(
+                commit.routingDescriptor,
+                config.routingDescriptor,
+            ) || !commit.settings || typeof commit.settings !== 'object' ||
+                Array.isArray(commit.settings)) {
+              throw configError(ERRORS.PRODUCT_CONFIG_DESCRIPTOR_MISMATCH);
+            }
+          }
           const hasCredentialConfig = Object.prototype.hasOwnProperty.call(
               stored,
               CREDENTIALS_STORAGE_KEY,
@@ -644,6 +678,8 @@
       return Object.freeze({
         CONFIG_STORAGE_KEY,
         CREDENTIALS_STORAGE_KEY,
+        SETTINGS_COMMIT_STORAGE_KEY,
+        SETTINGS_TRANSACTION_STORAGE_KEY,
         ERRORS,
         MAX_CANDIDATES,
         MAX_CREDENTIALS,

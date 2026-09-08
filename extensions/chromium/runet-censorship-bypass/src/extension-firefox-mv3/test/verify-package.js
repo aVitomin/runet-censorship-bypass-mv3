@@ -22,6 +22,7 @@ const EXPECTED_FILES = Object.freeze([
   'background/proxy-auth.js',
   'background/proxy-control.js',
   'background/routing-adapter.js',
+  'background/settings-control.js',
   'manifest.json',
   'provider/anticensority-hosts-v1.envelope.json',
   'provider/anticensority-hosts-v1.json',
@@ -105,6 +106,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/proxy-auth.js',
     'background/product-config.js',
     'background/production-provider.js',
+    'background/settings-control.js',
     'background/activation-controller.js',
     'background/event-page.js',
   ]);

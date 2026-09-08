@@ -222,9 +222,37 @@ Configuration содержит только `authRef`; credential record сод�
 до publication, проверяется наличие всех и только требуемых `authRef`, после
 чего READY session получает синхронный in-memory resolver. Passwords не входят
 в durable `ON`, routing descriptor, dataset metadata, RPC/status/errors/logs
-или diagnostics. Missing/malformed/future config, descriptor/provider/dataset
+или diagnostics. Settings RPC может записывать эту запись, но никогда не
+возвращает password: ответ использует явные `NONE`/`KEEP`, а новый секрет
+принимается только как `SET` внутри полного OFF-only replace.
+Missing/malformed/future config, descriptor/provider/dataset
 mismatch, missing credential, hash failure или недоступный dataset store
 оставляют session недоступной, а exact floor — fail-closed до Clear.
+
+Production settings control plane предоставляет только строгие
+`firefox.settings.get` и `firefox.settings.replace`. Get не раскрывает
+provider/dataset identity, routing descriptor/hash, `authRef` или floor.
+Replace принимает complete schema v1 и разрешён только при одновременных
+durable/runtime `OFF`; Apply, Clear и settings writes проходят через одну
+event-page queue. Optimistic numeric revision отклоняет stale concurrent save.
+
+Public schema хранит Direct/Proxy/whitelist patterns, own proxies, отдельные
+local Tor/Tor Browser/WARP scopes и четыре общих routing flags. Patterns и
+proxy hosts нормализуются в lowercase с удалением внешних пробелов и конечной
+точки; `*.example` по-прежнему совпадает с base domain и subdomains, а простой
+pattern — только с exact host. В отличие от Chromium UI, Firefox control plane
+пока не имеет UI-level `enabled` master-toggle для Tor: три явных boolean scope
+показывают участие кандидата в Proxy rules, onion и Direct replacement. Это
+позволяет без скрытой семантики представить production default, где Tor
+кандидаты доступны для `.onion`, но не расширяют explicit Proxy chain.
+
+Сохранение использует write-ahead marker, затем один `storage.local.set` для
+descriptor-bound product config, credential record и redacted settings commit.
+Apply/recovery отказываются читать snapshot, пока marker существует. После
+crash завершённый exact commit может быть reconciled, а partial/mismatched
+config остаётся fail-closed; новая config никогда не принимается вместе со
+старыми credentials. RPC caller не выбирает provider или dataset identity и не
+может promote staged data.
 
 Recovery не выполняет network request: production dataset store открывается
 локально через IndexedDB, exact stored artifact ещё раз проверяется существующим
