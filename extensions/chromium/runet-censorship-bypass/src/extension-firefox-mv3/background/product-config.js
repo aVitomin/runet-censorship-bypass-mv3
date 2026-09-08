@@ -22,6 +22,8 @@
       const CREDENTIALS_STORAGE_KEY = 'firefoxMv3ProxyCredentials';
       const SETTINGS_COMMIT_STORAGE_KEY = 'firefoxMv3SettingsCommit';
       const SETTINGS_TRANSACTION_STORAGE_KEY = 'firefoxMv3SettingsMutation';
+      const DATASET_PROMOTION_STORAGE_KEY =
+        'firefoxMv3DatasetPromotionJournal';
       const SCHEMA_VERSION = 1;
       const MAX_RULES = 4096;
       const MAX_CANDIDATES = 256;
@@ -509,6 +511,7 @@
               CREDENTIALS_STORAGE_KEY,
               SETTINGS_COMMIT_STORAGE_KEY,
               SETTINGS_TRANSACTION_STORAGE_KEY,
+              DATASET_PROMOTION_STORAGE_KEY,
             ]);
           } catch (_error) {
             throw configError(ERRORS.PRODUCT_CONFIG_STORAGE_UNAVAILABLE);
@@ -522,6 +525,9 @@
           if (Object.prototype.hasOwnProperty.call(
               stored,
               SETTINGS_TRANSACTION_STORAGE_KEY,
+          ) || Object.prototype.hasOwnProperty.call(
+              stored,
+              DATASET_PROMOTION_STORAGE_KEY,
           )) {
             throw configError(ERRORS.PRODUCT_CONFIG_UPDATE_INCOMPLETE);
           }
@@ -678,6 +684,7 @@
       return Object.freeze({
         CONFIG_STORAGE_KEY,
         CREDENTIALS_STORAGE_KEY,
+        DATASET_PROMOTION_STORAGE_KEY,
         SETTINGS_COMMIT_STORAGE_KEY,
         SETTINGS_TRANSACTION_STORAGE_KEY,
         ERRORS,
