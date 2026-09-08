@@ -7,6 +7,8 @@ const Path = require('node:path');
 const ProductionProvider = require('../background/production-provider');
 
 const EXPECTED_FILES = Object.freeze([
+  '_locales/en/messages.json',
+  '_locales/ru/messages.json',
   'background/activation-controller.js',
   'background/common/provider-dataset-state.js',
   'background/common/provider-dataset.js',
@@ -24,6 +26,14 @@ const EXPECTED_FILES = Object.freeze([
   'background/routing-adapter.js',
   'background/settings-control.js',
   'manifest.json',
+  'pages/options/index.html',
+  'pages/options/index.js',
+  'pages/options/options.css',
+  'pages/popup/index.html',
+  'pages/popup/index.js',
+  'pages/popup/popup.css',
+  'pages/shared/ui-runtime.js',
+  'pages/shared/ui-tokens.css',
   'provider/anticensority-hosts-v1.envelope.json',
   'provider/anticensority-hosts-v1.json',
 ]);
@@ -85,6 +95,7 @@ function verifyPackage(packageRoot, sourceRoot) {
       'utf8',
   ));
   Assert.strictEqual(manifest.manifest_version, 3);
+  Assert.strictEqual(manifest.default_locale, 'en');
   Assert.deepStrictEqual(manifest.permissions, [
     'storage',
     'proxy',
@@ -112,6 +123,18 @@ function verifyPackage(packageRoot, sourceRoot) {
   ]);
   Assert.strictEqual('service_worker' in manifest.background, false);
   Assert.deepStrictEqual(manifest.host_permissions, ['<all_urls>']);
+  Assert.deepStrictEqual(manifest.action, {
+    default_title: '__MSG_popupTitle__',
+    default_popup: 'pages/popup/index.html',
+  });
+  Assert.deepStrictEqual(manifest.options_ui, {
+    page: 'pages/options/index.html',
+    open_in_tab: true,
+  });
+  Assert.deepStrictEqual(manifest.content_security_policy, {
+    extension_pages:
+      'default-src \'self\'; script-src \'self\'; object-src \'none\'',
+  });
 
   const runtimeText = EXPECTED_FILES
       .filter((file) => file.endsWith('.js'))
@@ -119,6 +142,17 @@ function verifyPackage(packageRoot, sourceRoot) {
       .join('\n');
   for (const forbidden of FORBIDDEN_RUNTIME_TEXT) {
     Assert.strictEqual(runtimeText.includes(forbidden), false, forbidden);
+  }
+  for (const page of [
+    'pages/shared/ui-runtime.js',
+    'pages/popup/index.js',
+    'pages/options/index.js',
+  ]) {
+    const source = Fs.readFileSync(Path.join(packageRoot, page), 'utf8');
+    Assert.strictEqual(source.includes('innerHTML'), false, page);
+    Assert.strictEqual(source.includes('http://'), false, page);
+    Assert.strictEqual(source.includes('https://'), false, page);
+    Assert.strictEqual(source.includes('console.'), false, page);
   }
   const eventPageText = Fs.readFileSync(
       Path.join(packageRoot, 'background', 'event-page.js'),

@@ -1,0 +1,189 @@
+:root {
+  color-scheme: light;
+  --ui-color-canvas: #f4f7fb;
+  --ui-color-surface: #ffffff;
+  --ui-color-surface-subtle: #f8fafc;
+  --ui-color-text: #172033;
+  --ui-color-text-secondary: #334155;
+  --ui-color-text-muted: #5f6f83;
+  --ui-color-border: #d8e0ea;
+  --ui-color-divider: #e8edf3;
+  --ui-color-accent: #1d4ed8;
+  --ui-color-accent-hover: #1e40af;
+  --ui-color-success: #15803d;
+  --ui-color-success-surface: #ecfdf3;
+  --ui-color-warning: #b45309;
+  --ui-color-warning-surface: #fff7ed;
+  --ui-color-error: #b42318;
+  --ui-color-error-surface: #fef2f2;
+  --ui-color-disabled: #667085;
+  --ui-color-focus: #2563eb;
+  --ui-space-0-5: 4px;
+  --ui-space-1: 8px;
+  --ui-space-1-5: 12px;
+  --ui-space-2: 16px;
+  --ui-space-3: 24px;
+  --ui-space-4: 32px;
+  --ui-radius-small: 6px;
+  --ui-radius-medium: 10px;
+  --ui-radius-large: 14px;
+  --ui-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ui-font-size-caption: 12px;
+  --ui-font-size-body: 14px;
+  --ui-font-size-control: 14px;
+  --ui-font-size-heading: 17px;
+  --ui-font-size-title: 20px;
+  --ui-font-weight-medium: 600;
+  --ui-font-weight-bold: 700;
+  --ui-line-height-tight: 1.25;
+  --ui-line-height-body: 1.5;
+  --ui-control-height: 40px;
+  --ui-focus-ring: 0 0 0 3px rgb(37 99 235 / 24%);
+  --ui-shadow: 0 1px 2px rgb(15 23 42 / 8%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font: var(--ui-font-size-body) / var(--ui-line-height-body) var(--ui-font-family);
+}
+
+body {
+  margin: 0;
+  color: var(--ui-color-text);
+  background: var(--ui-color-canvas);
+}
+
+button,
+input,
+select,
+textarea {
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-medium);
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface);
+}
+
+button {
+  min-height: var(--ui-control-height);
+  padding: var(--ui-space-1) var(--ui-space-1-5);
+  cursor: pointer;
+  font-weight: var(--ui-font-weight-medium);
+}
+
+button.primary {
+  border-color: var(--ui-color-accent);
+  color: white;
+  background: var(--ui-color-accent);
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--ui-color-text-muted);
+}
+
+button.primary:hover:not(:disabled) {
+  border-color: var(--ui-color-accent-hover);
+  background: var(--ui-color-accent-hover);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  color: var(--ui-color-disabled);
+  background: var(--ui-color-surface-subtle);
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+  box-shadow: var(--ui-focus-ring);
+}
+
+.card {
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-large);
+  background: var(--ui-color-surface);
+  box-shadow: var(--ui-shadow);
+}
+
+.status {
+  padding: var(--ui-space-1);
+  border-radius: var(--ui-radius-medium);
+  color: var(--ui-color-text-secondary);
+  background: var(--ui-color-surface-subtle);
+}
+
+.status.success {
+  color: var(--ui-color-success);
+  background: var(--ui-color-success-surface);
+}
+
+.status.warning {
+  color: var(--ui-color-warning);
+  background: var(--ui-color-warning-surface);
+}
+
+.status.error {
+  color: var(--ui-color-error);
+  background: var(--ui-color-error-surface);
+}
+
+.muted {
+  color: var(--ui-color-text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (forced-colors: active) {
+  button,
+  input,
+  select,
+  textarea,
+  .card {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+
+  button.primary {
+    color: HighlightText;
+    background: Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+  }
+}

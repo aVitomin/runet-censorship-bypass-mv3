@@ -109,8 +109,8 @@ route-auth, так и attempt state. Отмена исчерпанного auth 
 request вместо перехода к следующему proxy candidate; это известное Firefox
 availability-отличие, а не Direct fallback или утечка.
 
-Production updater configuration, config writer/UI и health-проверки ещё не
-реализованы. На чистой установке bootstrap проверяет и локально сохраняет
+Production updater configuration и health-проверки ещё не реализованы. На
+чистой установке bootstrap проверяет и локально сохраняет
 packaged baseline и default product config, но оставляет durable intent `OFF` и
 не меняет proxy settings.
 
@@ -327,6 +327,29 @@ npm --prefix $Project run test:browser:firefox-skeleton
 
 Smoke проверяет реальное уничтожение и пересоздание event page после idle,
 сохранение `OFF` и отсутствие изменений заранее настроенного localhost proxy.
-Он не является обязательным сетевым CI-шагом. Пользовательский Firefox-интерфейс,
-production update URL/public key и release/signing остаются отдельными
-последующими задачами.
+Он не является обязательным сетевым CI-шагом. Production update URL/public key
+и release/signing остаются отдельными последующими задачами.
+
+Firefox package содержит собственные toolbar popup и Options page с локальными
+EN/RU catalogues. Popup показывает `OFF`, `INITIALIZING`, `ACTIVE`, `RECOVERED`
+или blocked state только из sanitized capabilities RPC и вызывает существующие
+Apply/Clear без caller-controlled configuration. Private access и dataset
+availability показаны отдельно; `ACTIVE` отображается только для runtime
+`READY` и не показывается при denied private access.
+
+Options page отражает только schema v1 production settings control plane:
+Direct/Proxy/whitelist rules, own proxies, local Tor, Tor Browser, WARP и четыре
+routing flags. Как и Chromium MV3, plain host означает exact host, wildcard
+`*.example.com` — base + subdomains; defaults остаются
+`useProviderProxies=true`, `ownProxiesOnlyForOwnSites=true`,
+`replaceDirectWithProxy=false`, `noDirect=false`. Firefox-specific Tor scope
+показывается напрямую, без Chromium-only master control. Provider source/update,
+health и migration controls намеренно отсутствуют, потому что Firefox control
+plane их пока не предоставляет. Изменение доступно только при полном
+durable/runtime `OFF`, не
+запускает Clear автоматически и использует exact revision. Conflict приводит к
+перезагрузке current settings без overwrite. Stored password никогда не
+загружается в DOM: unchanged value использует `KEEP`, новый password передаётся
+только явным `SET`, удаление — явным `NONE`. Pages строят DOM через text nodes и
+`textContent`, используют только extension-local scripts/styles и не добавляют
+permissions или remote assets.

@@ -1,0 +1,92 @@
+html {
+  min-width: 360px;
+}
+
+body {
+  width: 360px;
+  max-width: 100vw;
+  min-height: 360px;
+}
+
+main {
+  display: grid;
+  gap: var(--ui-space-1-5);
+  padding: var(--ui-space-2);
+}
+
+h1,
+h2,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+.popup-header {
+  display: grid;
+  gap: var(--ui-space-0-5);
+}
+
+.popup-header h1 {
+  font-size: var(--ui-font-size-title);
+  line-height: var(--ui-line-height-tight);
+}
+
+.control-card,
+.facts-card {
+  display: grid;
+  gap: var(--ui-space-1);
+  padding: var(--ui-space-1-5);
+}
+
+.control-card h2 {
+  font-size: var(--ui-font-size-heading);
+  line-height: var(--ui-line-height-tight);
+}
+
+.facts {
+  display: grid;
+  gap: var(--ui-space-1);
+}
+
+.fact {
+  display: flex;
+  gap: var(--ui-space-1);
+  justify-content: space-between;
+  padding-bottom: var(--ui-space-1);
+  border-bottom: 1px solid var(--ui-color-divider);
+}
+
+.fact:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.fact dd {
+  max-width: 55%;
+  overflow-wrap: anywhere;
+  font-weight: var(--ui-font-weight-medium);
+  text-align: right;
+}
+
+.actions button {
+  flex: 1;
+}
+
+.message {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 280px) {
+  html {
+    min-width: 220px;
+  }
+
+  body {
+    width: 100%;
+  }
+
+  .actions {
+    display: grid;
+  }
+}
