@@ -17,8 +17,8 @@ const PACKAGED_MV3_ROOT = Path.resolve(
 
 const MV3_SOURCE_ROOT = Path.resolve(__dirname, '..');
 const MV3_LOCALES = Object.freeze(['en', 'ru']);
-const EXPECTED_MV3_VERSION = '0.0.3.0';
-const EXPECTED_MV3_VERSION_NAME = '0.0.3.00';
+const EXPECTED_MV3_VERSION = '0.0.4.0';
+const EXPECTED_MV3_VERSION_NAME = '0.0.4.00';
 
 const ALLOWED_RUNTIME_DIRECTORIES = new Set([
   'background/vendor/tldts/dist',

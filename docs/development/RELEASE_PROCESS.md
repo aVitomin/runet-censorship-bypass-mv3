@@ -41,6 +41,7 @@ npm --prefix $Project run test:pac
 npm --prefix $Project run test:mv3
 npm --prefix $Project run lint:mv3
 npm --prefix $Project run build:mv3
+npm --prefix $Project run release:chromium
 npm --prefix $Project run test:firefox
 npm --prefix $Project run lint:firefox
 npm --prefix $Project run build:firefox
@@ -71,7 +72,8 @@ artifact этого run. Dispatch другой ветки не является 
 - aggregate `verify`;
 - runtime icons и package integrity внутри build;
 - exact-output и tracked-worktree checks;
-- trusted-main-only Chromium и Firefox artifact uploads.
+- trusted-main-only Chromium и Firefox artifact uploads, включая
+  детерминированные Chromium ZIP/checksum и Firefox XPI/source/checksums.
 
 Если обязательного шага нет, release блокирован до исправления workflow и
 нового успешного trusted-main run. Артефакт PR не является trusted release
@@ -112,7 +114,10 @@ unsigned XPI не считается пользовательским release pa
 
 Пакуется содержимое trusted artifact directory, а не сам каталог. После
 распаковки `manifest.json` должен находиться в корне ZIP. Не допускается ни
-одного runtime-byte отличия от проверенного artifact.
+одного runtime-byte отличия от проверенного artifact. Локальный release
+candidate создаётся детерминированно командой `npm --prefix $Project run
+release:chromium`: два независимых build сравниваются побайтово, а ZIP и
+checksum записываются в `dist/chromium-release`.
 
 Пример упаковки:
 

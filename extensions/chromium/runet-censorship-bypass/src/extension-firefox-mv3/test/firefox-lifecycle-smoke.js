@@ -101,41 +101,12 @@ function safeRemoveTemporary(directory, prefix) {
 
 }
 
-function makeInstrumentedExtension(collectorPort) {
+function makeInstrumentedExtension() {
 
   const directory = Fs.mkdtempSync(
       Path.join(Os.tmpdir(), 'rucb-firefox-runtime-extension-'),
   );
   Fs.cpSync(packageRoot, directory, {recursive: true});
-  const manifestPath = Path.join(directory, 'manifest.json');
-  const manifest = JSON.parse(Fs.readFileSync(manifestPath, 'utf8'));
-  manifest.permissions.push('alarms');
-  manifest.host_permissions = ['http://127.0.0.1/*'];
-  manifest.background.scripts.push('test-observer.js');
-  Fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  const collectorUrl = `http://127.0.0.1:${collectorPort}/boot`;
-  Fs.writeFileSync(Path.join(directory, 'test-observer.js'), [
-    '\'use strict\';',
-    'browser.alarms.onAlarm.addListener(() => {});',
-    'browser.alarms.create(\'lifecycle-wake\', {delayInMinutes: 1});',
-    '(async () => {',
-    '  const initialization = await',
-    '    globalThis.rucbFirefoxRuntime.whenReady();',
-    '  const stored = await browser.storage.local.get(',
-    '    globalThis.rucbFirefoxOffState.STORAGE_KEY,',
-    '  );',
-    '  const state = stored[globalThis.rucbFirefoxOffState.STORAGE_KEY];',
-    `  await fetch(${JSON.stringify(collectorUrl)}, {`,
-    '    method: \'POST\',',
-    '    headers: {\'content-type\': \'application/json\'},',
-    '    body: JSON.stringify({',
-    '      bootId: globalThis.rucbFirefoxRuntime.bootId,',
-    '      initialization,',
-    '      state,',
-    '    }),',
-    '  });',
-    '})();',
-  ].join('\n'));
   Fs.writeFileSync(Path.join(directory, 'probe.html'), [
     '<!doctype html>',
     '<meta charset="utf-8">',
@@ -388,17 +359,26 @@ async function readCapabilities(client, origin) {
 
 }
 
-async function waitForBoot(bootEvents, predicate, timeoutMilliseconds) {
+async function readProductionCapabilities(client, origin) {
 
-  const deadline = Date.now() + timeoutMilliseconds;
-  while (Date.now() < deadline) {
-    const event = bootEvents.find(predicate);
-    if (event) {
-      return event;
-    }
-    await delay(100);
-  }
-  throw new Error('Timed out waiting for a Firefox event-page boot.');
+  await navigate(client, `${origin}/pages/popup/index.html`);
+  const result = webdriverValue(
+      await client.command('WebDriver:ExecuteAsyncScript', {
+        args: [],
+        filename: 'firefox-runtime-lifecycle-smoke.js',
+        line: 1,
+        newSandbox: false,
+        script: [
+          'const done = arguments[arguments.length - 1];',
+          'browser.runtime.sendMessage({',
+          '  type: "firefox.capabilities.get",',
+          '}).then(done, (error) => done({error: String(error)}));',
+        ].join('\n'),
+      }),
+  );
+  Assert.strictEqual(result && result.ok, true, JSON.stringify(result));
+  await navigate(client, 'about:blank');
+  return result;
 
 }
 
@@ -427,27 +407,14 @@ async function main() {
       'Firefox production package is missing.',
   );
   const firefox = resolveFirefox();
-  const bootEvents = [];
   const proxyRequests = [];
-  const collector = Http.createServer((request, response) => {
-    const chunks = [];
-    request.on('data', (chunk) => chunks.push(chunk));
-    request.on('end', () => {
-      if (request.method === 'POST' && request.url === '/boot') {
-        bootEvents.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      }
-      response.writeHead(204);
-      response.end();
-    });
-  });
   const proxy = Http.createServer((request, response) => {
     proxyRequests.push(request.url);
     response.writeHead(200, {'content-type': 'text/plain'});
     response.end(MANUAL_PROXY_MARKER);
   });
-  await listen(collector);
   await listen(proxy);
-  const extensionDirectory = makeInstrumentedExtension(collector.address().port);
+  const extensionDirectory = makeInstrumentedExtension();
   const profileDirectory = Fs.mkdtempSync(
       Path.join(Os.tmpdir(), 'rucb-firefox-runtime-profile-'),
   );
@@ -475,11 +442,13 @@ async function main() {
   });
   let client;
   let stderr = '';
+  let phase = 'CONNECT_MARIONETTE';
   child.stderr.on('data', (chunk) => {
     stderr = `${stderr}${chunk}`.slice(-8000);
   });
   try {
     client = await connectMarionette(marionettePort);
+    phase = 'CREATE_SESSION';
     await client.command('WebDriver:NewSession', {
       capabilities: {
         alwaysMatch: {pageLoadStrategy: 'normal'},
@@ -499,56 +468,61 @@ async function main() {
       script: 15000,
     });
 
+    phase = 'MANUAL_PROXY_BEFORE_INSTALL';
     await navigate(client, 'http://manual-proxy-check.invalid/before-install');
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
+    phase = 'INSTALL_PRODUCTION_PACKAGE';
     await client.command('Addon:Install', {
       allowPrivateBrowsing: false,
       path: productionPackagePath,
       temporary: true,
     });
-    await delay(500);
+    phase = 'WAIT_FOR_PRODUCTION_OFF';
+    const productionOrigin = await extensionOrigin(client);
+    const productionCapabilities = await readProductionCapabilities(
+        client,
+        productionOrigin,
+    );
+    Assert.strictEqual(productionCapabilities.result.runtimeState, 'OFF');
+    Assert.strictEqual(productionCapabilities.result.durableIntent, 'OFF');
+    phase = 'MANUAL_PROXY_AFTER_PRODUCTION_INSTALL';
     await navigate(
         client,
         'http://manual-proxy-check.invalid/after-production-install',
     );
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
+    phase = 'UNINSTALL_PRODUCTION_PACKAGE';
     await client.command('Addon:Uninstall', {
       id: '{adf5f697-1149-42a2-92eb-c163cb9a4146}',
     });
+    phase = 'INSTALL_LIFECYCLE_PROBE';
     await client.command('Addon:Install', {
       allowPrivateBrowsing: false,
       path: extensionDirectory,
       temporary: true,
     });
-    const first = await waitForBoot(bootEvents, () => true, 15000);
-    Assert.deepStrictEqual(first.state, {
-      schemaVersion: 3,
-      intent: 'OFF',
-      floorIdentity: null,
-    });
+    phase = 'READ_INITIAL_CAPABILITIES';
     const origin = await extensionOrigin(client);
     const firstRpc = await readCapabilities(client, origin);
-    Assert.strictEqual(firstRpc.bootId, first.bootId);
     Assert.strictEqual(firstRpc.capabilities.result.runtimeState, 'OFF');
     Assert.strictEqual(firstRpc.capabilities.result.durableIntent, 'OFF');
+    phase = 'MANUAL_PROXY_AFTER_PROBE_INSTALL';
     await navigate(client, 'http://manual-proxy-check.invalid/after-install');
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
 
-    console.log('Waiting for automatic Firefox event-page idle recreation...');
-    const second = await waitForBoot(
-        bootEvents,
-        (event) => event.bootId !== first.bootId,
-        105000,
-    );
-    Assert.deepStrictEqual(second.state, {
-      schemaVersion: 3,
-      intent: 'OFF',
-      floorIdentity: null,
-    });
+    phase = 'IDLE_EVENT_PAGE';
+    console.log('Leaving the Firefox event page genuinely idle...');
+    await delay(65000);
+    phase = 'READ_RECREATED_CAPABILITIES';
     const secondRpc = await readCapabilities(client, origin);
-    Assert.strictEqual(secondRpc.bootId, second.bootId);
+    Assert.notStrictEqual(
+        secondRpc.bootId,
+        firstRpc.bootId,
+        'Firefox event page was not destroyed and recreated while idle.',
+    );
     Assert.strictEqual(secondRpc.capabilities.result.runtimeState, 'OFF');
     Assert.strictEqual(secondRpc.capabilities.result.durableIntent, 'OFF');
+    phase = 'MANUAL_PROXY_AFTER_RECREATION';
     await navigate(client, 'http://manual-proxy-check.invalid/after-recreation');
     Assert.strictEqual(await bodyText(client), MANUAL_PROXY_MARKER);
 
@@ -563,8 +537,8 @@ async function main() {
     }
     console.log(JSON.stringify({
       firefox: firefoxVersion(firefox),
-      firstBootId: first.bootId,
-      recreatedBootId: second.bootId,
+      firstBootId: firstRpc.bootId,
+      recreatedBootId: secondRpc.bootId,
       runtimeState: secondRpc.capabilities.result.runtimeState,
       durableIntent: secondRpc.capabilities.result.durableIntent,
       privateWindowAccess: secondRpc.capabilities.result.privateWindowAccess,
@@ -574,7 +548,10 @@ async function main() {
         'UNSIGNED_XPI' : 'UNPACKED',
     }, null, 2));
   } catch (error) {
-    throw new Error(`${error && error.stack ? error.stack : error}\n${stderr}`);
+    throw new Error(
+        `Lifecycle phase ${phase} failed:\n` +
+        `${error && error.stack ? error.stack : error}\n${stderr}`,
+    );
   } finally {
     if (client) {
       try {
@@ -590,7 +567,6 @@ async function main() {
       child.kill();
       await waitForExit(child, 5000).catch(() => {});
     }
-    await closeServer(collector);
     await closeServer(proxy);
     safeRemoveTemporary(
         extensionDirectory,
