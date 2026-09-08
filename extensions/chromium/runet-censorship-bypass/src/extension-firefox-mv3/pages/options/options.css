@@ -1,0 +1,166 @@
+body {
+  min-width: 280px;
+}
+
+main {
+  display: grid;
+  gap: var(--ui-space-2);
+  width: min(100% - 32px, 980px);
+  margin: 0 auto;
+  padding: var(--ui-space-3) 0 var(--ui-space-4);
+}
+
+h1,
+h2,
+h3,
+p,
+fieldset {
+  margin: 0;
+}
+
+.page-header {
+  display: grid;
+  gap: var(--ui-space-0-5);
+}
+
+.page-header h1 {
+  font-size: var(--ui-font-size-title);
+  line-height: var(--ui-line-height-tight);
+}
+
+.section {
+  display: grid;
+  gap: var(--ui-space-1-5);
+  padding: var(--ui-space-2);
+}
+
+.section h2 {
+  font-size: var(--ui-font-size-heading);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--ui-space-1-5);
+}
+
+.field {
+  display: grid;
+  gap: var(--ui-space-0-5);
+  min-width: 0;
+  color: var(--ui-color-text-secondary);
+  font-weight: var(--ui-font-weight-medium);
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: var(--ui-space-1);
+}
+
+.field textarea {
+  min-height: 130px;
+  resize: vertical;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.check {
+  display: flex;
+  gap: var(--ui-space-1);
+  align-items: flex-start;
+  color: var(--ui-color-text-secondary);
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--ui-color-accent);
+}
+
+.candidate-list {
+  display: grid;
+  gap: var(--ui-space-1-5);
+}
+
+.candidate {
+  display: grid;
+  gap: var(--ui-space-1);
+  padding: var(--ui-space-1-5);
+  border: 1px solid var(--ui-color-divider);
+  border-radius: var(--ui-radius-medium);
+  background: var(--ui-color-surface-subtle);
+}
+
+.candidate-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.candidate-header h3 {
+  overflow-wrap: anywhere;
+  font-size: var(--ui-font-size-body);
+}
+
+.candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-0-5);
+}
+
+.candidate-actions button {
+  min-height: 32px;
+  padding: 3px var(--ui-space-1);
+}
+
+.flags {
+  display: grid;
+  gap: var(--ui-space-1);
+}
+
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1);
+  align-items: center;
+  padding: var(--ui-space-1-5);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-large);
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 -2px 12px rgb(15 23 42 / 8%);
+}
+
+.form-actions .status {
+  flex: 1 1 260px;
+}
+
+.read-only {
+  border-left: 4px solid var(--ui-color-warning);
+}
+
+.technical-note {
+  font-size: var(--ui-font-size-caption);
+}
+
+@media (max-width: 520px) {
+  main {
+    width: min(100% - 20px, 980px);
+    padding-top: var(--ui-space-2);
+  }
+
+  .section {
+    padding: var(--ui-space-1-5);
+  }
+
+  .form-actions {
+    display: grid;
+  }
+}

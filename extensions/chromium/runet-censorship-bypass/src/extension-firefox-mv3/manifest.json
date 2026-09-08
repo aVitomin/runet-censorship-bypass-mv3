@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Runet Censorship Bypass Firefox MV3 development skeleton",
+  "name": "__MSG_extensionName__",
   "version": "0.0.0.1",
-  "description": "Firefox MV3 architecture package. Starts off and activates only from verified local product state.",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "en",
   "permissions": [
     "storage",
     "proxy",
@@ -32,6 +33,17 @@
       "background/event-page.js"
     ],
     "persistent": false
+  },
+  "action": {
+    "default_title": "__MSG_popupTitle__",
+    "default_popup": "pages/popup/index.html"
+  },
+  "options_ui": {
+    "page": "pages/options/index.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'"
   },
   "incognito": "spanning",
   "browser_specific_settings": {
