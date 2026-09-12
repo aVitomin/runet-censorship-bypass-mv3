@@ -73,6 +73,7 @@ const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/background/product-config.js',
   './src/extension-firefox-mv3/background/production-provider.js',
   './src/extension-firefox-mv3/background/settings-control.js',
+  './src/extension-firefox-mv3/background/site-control.js',
   './src/extension-firefox-mv3/background/activation-controller.js',
   './src/extension-firefox-mv3/background/event-page.js',
   './src/extension-firefox-mv3/pages/shared/ui-runtime.js',
@@ -98,6 +99,7 @@ const chromiumMv3TldtsSrc = [
   './node_modules/tldts/dist/index.umd.min.js',
   './node_modules/tldts/LICENSE',
 ];
+const firefoxMv3TldtsSrc = chromiumMv3TldtsSrc;
 
 const cleanChromiumMv3 = function(cb) {
 
@@ -169,6 +171,17 @@ const copyFirefoxMv3Common = function(cb) {
 
 };
 
+const copyFirefoxMv3Tldts = function(cb) {
+
+  gulp.src(firefoxMv3TldtsSrc, {
+    base: './node_modules/tldts',
+    encoding: false,
+  })
+    .pipe(gulp.dest(`${firefoxMv3Dst}/background/vendor/tldts`))
+    .on('end', cb);
+
+};
+
 const buildChromiumMv3 = gulp.series(
     cleanChromiumMv3,
     gulp.parallel(
@@ -179,7 +192,11 @@ const buildChromiumMv3 = gulp.series(
 );
 const buildFirefoxMv3 = gulp.series(
     cleanFirefoxMv3,
-    gulp.parallel(copyFirefoxMv3, copyFirefoxMv3Common),
+    gulp.parallel(
+        copyFirefoxMv3,
+        copyFirefoxMv3Common,
+        copyFirefoxMv3Tldts,
+    ),
 );
 
 module.exports = {

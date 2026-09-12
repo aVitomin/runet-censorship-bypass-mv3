@@ -363,3 +363,11 @@ durable/runtime `OFF`, не
 только явным `SET`, удаление — явным `NONE`. Pages строят DOM через text nodes и
 `textContent`, используют только extension-local scripts/styles и не добавляют
 permissions или remote assets.
+
+Popup текущего Firefox target также читает активную HTTP(S)-вкладку и через
+строгие `firefox.site.get` / `firefox.site.replace` RPC показывает Auto / Proxy /
+Direct с exact-host или public-suffix-aware domain scope. Site mutation проходит
+через ту же serialized settings transaction, exact revision и OFF-only gate;
+full tab URL не возвращается странице. Сравнение пользовательских поверхностей
+и честный список оставшихся отличий зафиксированы в
+[Chromium / Firefox UI parity matrix](FIREFOX_CHROMIUM_UI_PARITY.md).

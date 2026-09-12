@@ -15,6 +15,7 @@
   ],
   "background": {
     "scripts": [
+      "background/vendor/tldts/dist/index.umd.min.js",
       "background/common/routing-contract.js",
       "background/common/provider-dataset.js",
       "background/common/provider-dataset-state.js",
@@ -30,6 +31,7 @@
       "background/dataset-promotion.js",
       "background/production-provider.js",
       "background/settings-control.js",
+      "background/site-control.js",
       "background/activation-controller.js",
       "background/event-page.js"
     ],

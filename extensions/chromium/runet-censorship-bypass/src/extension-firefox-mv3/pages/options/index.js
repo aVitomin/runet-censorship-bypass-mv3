@@ -46,6 +46,15 @@
     'SETTINGS_REVISION_CONFLICT',
     'STALE_REVISION',
   ]);
+  const NAV_ITEMS = Object.freeze([
+    ['overview', 'optionsNavOverview'],
+    ['automatic-routing', 'optionsNavAutomaticRouting'],
+    ['site-rules', 'optionsNavSiteRules'],
+    ['proxy-connections', 'optionsNavProxyConnections'],
+    ['maintenance', 'optionsNavMaintenance'],
+    ['advanced', 'optionsNavAdvanced'],
+    ['about', 'optionsNavAbout'],
+  ]);
 
   function validCandidateFields(value, expected, requiresId = false) {
 
@@ -508,7 +517,7 @@
 
     function renderScoped(parent, titleKey, name, value) {
 
-      const section = Ui.append(parent, 'section', 'card section');
+      const section = Ui.append(parent, 'article', 'subsection');
       Ui.appendText(section, 'h2', t(titleKey));
       const candidate = Ui.append(section, 'div', 'candidate');
       candidate.dataset.kind = name;
@@ -678,18 +687,78 @@
         return;
       }
       const disabled = !state.editable || state.pending;
+      const layout = Ui.append(root, 'div', 'options-layout');
+      const nav = Ui.append(layout, 'nav', 'options-nav card');
+      nav.setAttribute('aria-label', t('optionsNavigationLabel'));
+      for (const [id, labelKey] of NAV_ITEMS) {
+        const link = Ui.append(nav, 'a');
+        link.href = `#${id}`;
+        link.textContent = t(labelKey);
+      }
+      const content = Ui.append(layout, 'div', 'options-content');
       if (!state.editable) {
         Ui.appendText(
-            root,
+            content,
             'p',
             t('optionsReadOnlyHelp'),
             'status warning read-only',
         );
       }
-      const form = Ui.append(root, 'form');
+      const form = Ui.append(content, 'form');
       form.id = 'settings-form';
 
+      const overview = Ui.append(form, 'section', 'card section');
+      overview.id = 'overview';
+      Ui.appendText(overview, 'p', t('optionsSectionEyebrow'), 'eyebrow');
+      Ui.appendText(overview, 'h2', t('optionsNavOverview'));
+      const overviewFacts = Ui.append(overview, 'dl', 'overview-facts');
+      const overviewRows = [
+        ['optionsProtectionState', state.capabilities.runtimeState === 'READY' ?
+          'popupStateActive' : state.capabilities.runtimeState ===
+            'INITIALIZING' ? 'popupStateInitializing' :
+              state.capabilities.runtimeState === 'FAILED' ?
+                'popupStateBlocked' : 'popupStateOff'],
+        ['popupDataset', state.capabilities.providerDatasetAvailable ?
+          'valueAvailable' : 'valueUnavailable'],
+        ['popupPrivateAccess', state.capabilities.privateWindowAccess ===
+          'GRANTED' ? 'valueGranted' : state.capabilities.privateWindowAccess ===
+            'DENIED' ? 'valueDenied' : 'valueUnknown'],
+      ];
+      for (const [labelKey, valueKey] of overviewRows) {
+        const row = Ui.append(overviewFacts, 'div', 'overview-fact');
+        Ui.appendText(row, 'dt', t(labelKey), 'muted');
+        Ui.appendText(row, 'dd', t(valueKey));
+      }
+
+      const automatic = Ui.append(form, 'section', 'card section');
+      automatic.id = 'automatic-routing';
+      Ui.appendText(automatic, 'p', t('optionsSectionEyebrow'), 'eyebrow');
+      Ui.appendText(automatic, 'h2', t('optionsNavAutomaticRouting'));
+      Ui.appendText(
+          automatic, 'p', t('optionsAutomaticSourceHelp'), 'muted',
+      );
+      const sourceCard = Ui.append(automatic, 'div', 'source-card');
+      Ui.appendText(sourceCard, 'strong', t('optionsAnticensoritySource'));
+      Ui.appendText(
+          sourceCard, 'span',
+          state.capabilities.providerDatasetAvailable ?
+            t('valueAvailable') : t('valueUnavailable'),
+          `pill ${state.capabilities.providerDatasetAvailable ?
+            'success' : 'warning'}`,
+      );
+      const automaticFlags = Ui.append(automatic, 'div', 'flags');
+      for (const key of [
+        'useProviderProxies',
+        'ownProxiesOnlyForOwnSites',
+      ]) {
+        check(automaticFlags,
+            `flag${key[0].toUpperCase()}${key.slice(1)}`,
+            key, draft.flags[key]);
+      }
+
       const rules = Ui.append(form, 'section', 'card section');
+      rules.id = 'site-rules';
+      Ui.appendText(rules, 'p', t('optionsSectionEyebrow'), 'eyebrow');
       Ui.appendText(rules, 'h2', t('optionsRulesTitle'));
       Ui.appendText(rules, 'p', t('optionsRulesHelp'), 'muted');
       const ruleGrid = Ui.append(rules, 'div', 'grid');
@@ -700,20 +769,9 @@
       textarea(ruleGrid, 'optionsWhitelistRules', 'whitelistRules',
           draft.rules.whitelist);
 
-      const flags = Ui.append(form, 'section', 'card section');
-      Ui.appendText(flags, 'h2', t('optionsRoutingFlags'));
-      const flagList = Ui.append(flags, 'div', 'flags');
-      for (const key of [
-        'useProviderProxies',
-        'ownProxiesOnlyForOwnSites',
-        'replaceDirectWithProxy',
-        'noDirect',
-      ]) {
-        check(flagList, `flag${key[0].toUpperCase()}${key.slice(1)}`,
-            key, draft.flags[key]);
-      }
-
       const own = Ui.append(form, 'section', 'card section');
+      own.id = 'proxy-connections';
+      Ui.appendText(own, 'p', t('optionsSectionEyebrow'), 'eyebrow');
       Ui.appendText(own, 'h2', t('optionsOwnProxies'));
       Ui.appendText(own, 'p', t('optionsOwnProxiesHelp'), 'muted');
       const ownList = Ui.append(own, 'div', 'candidate-list');
@@ -726,10 +784,41 @@
       addOwn.textContent = t('actionAddProxy');
       addOwn.dataset.action = 'own-add';
 
-      renderScoped(form, 'optionsLocalTor', 'localTor', draft.localTor);
-      renderScoped(form, 'optionsTorBrowser', 'torBrowser', draft.torBrowser);
+      const maintenance = Ui.append(form, 'section', 'card section');
+      maintenance.id = 'maintenance';
+      Ui.appendText(maintenance, 'p', t('optionsSectionEyebrow'), 'eyebrow');
+      Ui.appendText(maintenance, 'h2', t('optionsNavMaintenance'));
+      Ui.appendText(maintenance, 'p', t('optionsMaintenanceHelp'), 'muted');
+      const maintenanceFacts = Ui.append(maintenance, 'div', 'source-card');
+      Ui.appendText(
+          maintenanceFacts, 'strong', t('optionsLocalDatasetTitle'),
+      );
+      Ui.appendText(
+          maintenanceFacts, 'span',
+          state.capabilities.providerDatasetAvailable ?
+            t('valueAvailable') : t('valueUnavailable'),
+          `pill ${state.capabilities.providerDatasetAvailable ?
+            'success' : 'warning'}`,
+      );
 
-      const warp = Ui.append(form, 'section', 'card section');
+      const advanced = Ui.append(form, 'section', 'card section');
+      advanced.id = 'advanced';
+      Ui.appendText(advanced, 'p', t('optionsSectionEyebrow'), 'eyebrow');
+      Ui.appendText(advanced, 'h2', t('optionsNavAdvanced'));
+      Ui.appendText(advanced, 'p', t('optionsAdvancedHelp'), 'muted');
+      const advancedFlags = Ui.append(advanced, 'div', 'flags');
+      for (const key of ['replaceDirectWithProxy', 'noDirect']) {
+        check(advancedFlags,
+            `flag${key[0].toUpperCase()}${key.slice(1)}`,
+            key, draft.flags[key]);
+      }
+
+      renderScoped(advanced, 'optionsLocalTor', 'localTor', draft.localTor);
+      renderScoped(
+          advanced, 'optionsTorBrowser', 'torBrowser', draft.torBrowser,
+      );
+
+      const warp = Ui.append(advanced, 'article', 'subsection');
       Ui.appendText(warp, 'h2', t('optionsWarp'));
       const warpFlags = Ui.append(warp, 'div', 'flags');
       check(warpFlags, 'fieldUseForProxyRules', 'warpUseForProxyRules',
@@ -749,6 +838,17 @@
       addWarp.type = 'button';
       addWarp.textContent = t('actionAddWarp');
       addWarp.dataset.action = 'warp-add';
+
+      const about = Ui.append(form, 'section', 'card section');
+      about.id = 'about';
+      Ui.appendText(about, 'p', t('optionsSectionEyebrow'), 'eyebrow');
+      Ui.appendText(about, 'h2', t('optionsNavAbout'));
+      Ui.appendText(about, 'p', t('optionsAboutHelp'), 'muted');
+      const manifest = browserApi.runtime.getManifest();
+      Ui.appendText(
+          about, 'p', t('optionsVersion', [manifest.version]),
+          'technical-note',
+      );
 
       const actions = Ui.append(form, 'div', 'form-actions');
       const save = Ui.append(actions, 'button', 'primary');
@@ -851,6 +951,7 @@
 
   return Object.freeze({
     CANDIDATE_TYPES,
+    NAV_ITEMS,
     createController,
     credentialPayload,
     editableFromCapabilities,

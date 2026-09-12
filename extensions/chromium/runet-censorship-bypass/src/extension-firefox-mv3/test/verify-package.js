@@ -31,6 +31,9 @@ const EXPECTED_FILES = Object.freeze([
   'background/proxy-control.js',
   'background/routing-adapter.js',
   'background/settings-control.js',
+  'background/site-control.js',
+  'background/vendor/tldts/LICENSE',
+  'background/vendor/tldts/dist/index.umd.min.js',
   'manifest.json',
   'pages/options/index.html',
   'pages/options/index.js',
@@ -84,14 +87,24 @@ function verifyPackage(packageRoot, sourceRoot) {
 
   for (const relativePath of files) {
     const packaged = Fs.readFileSync(Path.join(packageRoot, relativePath));
-    const sourcePath = relativePath.startsWith('background/common/') ?
-      Path.resolve(
+    let sourcePath = Path.join(sourceRoot, relativePath);
+    if (relativePath.startsWith('background/common/')) {
+      sourcePath = Path.resolve(
           sourceRoot,
           '..',
           'extension-mv3-common',
           Path.basename(relativePath),
-      ) :
-      Path.join(sourceRoot, relativePath);
+      );
+    } else if (relativePath.startsWith('background/vendor/tldts/')) {
+      sourcePath = Path.resolve(
+          sourceRoot,
+          '..',
+          '..',
+          'node_modules',
+          'tldts',
+          relativePath.replace('background/vendor/tldts/', ''),
+      );
+    }
     const source = Fs.readFileSync(sourcePath);
     Assert.deepStrictEqual(packaged, source, `Changed package bytes: ${relativePath}`);
   }
@@ -111,6 +124,7 @@ function verifyPackage(packageRoot, sourceRoot) {
   ]);
   Assert.strictEqual(manifest.background.persistent, false);
   Assert.deepStrictEqual(manifest.background.scripts, [
+    'background/vendor/tldts/dist/index.umd.min.js',
     'background/common/routing-contract.js',
     'background/common/provider-dataset.js',
     'background/common/provider-dataset-state.js',
@@ -126,6 +140,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/dataset-promotion.js',
     'background/production-provider.js',
     'background/settings-control.js',
+    'background/site-control.js',
     'background/activation-controller.js',
     'background/event-page.js',
   ]);
