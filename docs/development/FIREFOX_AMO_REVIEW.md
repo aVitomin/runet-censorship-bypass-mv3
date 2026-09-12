@@ -24,6 +24,8 @@ configuration.
 
 The extension contains no content scripts and injects no code into web pages.
 Its CSP permits only extension-local scripts and forbids objects.
+The popup reads the active tab only to derive a normalized HTTP(S) hostname;
+the background site RPC never returns the full URL, path or query.
 
 ## Data collection declaration
 
@@ -63,6 +65,12 @@ keeps Mozilla's source-code scanner from treating the 11.6 MiB immutable table
 as JavaScript/JSON source; it does not change or obscure the content. Its exact
 bytes, size, SHA-256, rule count and strict schema are verified before index
 construction. Provider PAC/JavaScript is not packaged or evaluated.
+
+The only vendored parser used by the Firefox background is the same pinned
+`tldts` dependency already present in the maintained lockfile. Its minified UMD
+build and upstream license are both packaged solely to derive the exact
+public-suffix-aware domain scope shown by the current-site popup; it performs no
+network access and does not participate in provider data execution.
 
 An authenticated-update implementation is present for future use, but the
 production package contains no update URL, public key, alarm, startup fetch or

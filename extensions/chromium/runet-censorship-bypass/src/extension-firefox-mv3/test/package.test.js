@@ -13,14 +13,24 @@ function makePackage() {
   const root = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'firefox-runtime-package-'));
   for (const relativePath of EXPECTED_FILES) {
     const target = Path.join(root, relativePath);
-    const source = relativePath.startsWith('background/common/') ?
-      Path.resolve(
+    let source = Path.join(sourceRoot, relativePath);
+    if (relativePath.startsWith('background/common/')) {
+      source = Path.resolve(
           sourceRoot,
           '..',
           'extension-mv3-common',
           Path.basename(relativePath),
-      ) :
-      Path.join(sourceRoot, relativePath);
+      );
+    } else if (relativePath.startsWith('background/vendor/tldts/')) {
+      source = Path.resolve(
+          sourceRoot,
+          '..',
+          '..',
+          'node_modules',
+          'tldts',
+          relativePath.replace('background/vendor/tldts/', ''),
+      );
+    }
     Fs.mkdirSync(Path.dirname(target), {recursive: true});
     Fs.copyFileSync(source, target);
   }

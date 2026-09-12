@@ -82,6 +82,10 @@ const settingsControlSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'settings-control.js'),
     'utf8',
 );
+const siteControlSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'site-control.js'),
+    'utf8',
+);
 const activationControllerSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'activation-controller.js'),
     'utf8',
@@ -321,8 +325,10 @@ function startEventPage(options = {}) {
   };
   const context = Vm.createContext({
     browser,
+    tldts: require('tldts'),
     TextDecoder,
     TextEncoder,
+    URL,
     indexedDB: {
       open() {
 
@@ -407,6 +413,9 @@ function startEventPage(options = {}) {
         ),
       },
   ));
+  Vm.runInContext(siteControlSource, context, {
+    filename: 'site-control.js',
+  });
   context.rucbFirefoxProductionProvider = Object.freeze(Object.assign(
       {},
       context.rucbFirefoxProductionProvider,
@@ -473,6 +482,7 @@ describe('Firefox MV3 production control package', function() {
     Assert.strictEqual(manifest.manifest_version, 3);
     Assert.deepStrictEqual(manifest.background, {
       scripts: [
+        'background/vendor/tldts/dist/index.umd.min.js',
         'background/common/routing-contract.js',
         'background/common/provider-dataset.js',
         'background/common/provider-dataset-state.js',
@@ -488,6 +498,7 @@ describe('Firefox MV3 production control package', function() {
         'background/dataset-promotion.js',
         'background/production-provider.js',
         'background/settings-control.js',
+        'background/site-control.js',
         'background/activation-controller.js',
         'background/event-page.js',
       ],
@@ -1112,6 +1123,71 @@ describe('Firefox MV3 production control package', function() {
     );
 
   });
+
+  it('exposes strict current-site state and OFF-only rule replacement',
+      async function() {
+
+        const productConfig =
+          await ProductionProvider.createProductionProductConfig(
+              async (bytes) => Helpers.sha256(Buffer.from(bytes)),
+          );
+        const storage = makeStorage();
+        storage.values[ProductConfig.CONFIG_STORAGE_KEY] = productConfig;
+        const eventPage = startEventPage({storage});
+        await eventPage.ready();
+
+        Assert.deepStrictEqual(await eventPage.send({
+          type: 'firefox.site.get',
+          tabUrl: 'https://sub.example.co.uk/private?q=secret',
+          extra: true,
+        }), {ok: false, error: {code: 'INVALID_RPC_REQUEST'}});
+        const current = await eventPage.send({
+          type: 'firefox.site.get',
+          tabUrl: 'https://sub.example.co.uk/private?q=secret',
+        });
+        Assert.strictEqual(current.ok, true);
+        Assert.strictEqual(current.result.target.host, 'sub.example.co.uk');
+        Assert.strictEqual(current.result.route.mode, 'AUTO');
+        Assert.strictEqual(current.result.patterns.wildcard,
+            '*.example.co.uk');
+        Assert.deepStrictEqual(Object.keys(current.result).sort(), [
+          'patterns', 'proxyCandidateAvailable', 'revision', 'route',
+          'schemaVersion', 'target',
+        ]);
+        Assert.deepStrictEqual(Object.keys(current.result.target).sort(), [
+          'controllable', 'host', 'reasonCode',
+        ]);
+        Assert.strictEqual(
+            Object.hasOwn(current.result, 'tabUrl'), false,
+        );
+
+        const replaced = await eventPage.send({
+          type: 'firefox.site.replace',
+          tabUrl: 'https://sub.example.co.uk/private?q=secret',
+          expectedRevision: current.result.revision,
+          mode: 'DIRECT',
+          scope: 'DOMAIN',
+        });
+        Assert.strictEqual(replaced.ok, true);
+        Assert.strictEqual(replaced.result.route.mode, 'DIRECT');
+        Assert.strictEqual(replaced.result.route.pattern, '*.example.co.uk');
+        const settings = await eventPage.send({type: 'firefox.settings.get'});
+        Assert.deepStrictEqual(settings.result.settings.rules.direct,
+            ['*.example.co.uk']);
+
+        const unavailable = await eventPage.send({
+          type: 'firefox.site.replace',
+          tabUrl: 'https://example.com/',
+          expectedRevision: replaced.result.revision,
+          mode: 'PROXY',
+          scope: 'HOST',
+        });
+        Assert.deepStrictEqual(unavailable, {
+          ok: false,
+          error: {code: 'SITE_PROXY_CANDIDATE_UNAVAILABLE'},
+        });
+
+      });
 
   it('installs staged provider data only through an exact no-input RPC',
       async function() {

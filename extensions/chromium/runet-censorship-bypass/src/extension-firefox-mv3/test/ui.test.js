@@ -40,6 +40,35 @@ function settingsResult(revision = 0, patch = null) {
 
 }
 
+function siteState(overrides = {}) {
+
+  return Object.assign({
+    schemaVersion: 1,
+    revision: 0,
+    target: {
+      controllable: true,
+      host: 'sub.example.com',
+      reasonCode: null,
+    },
+    route: {mode: 'AUTO', scope: 'DOMAIN', pattern: '*.example.com'},
+    patterns: {
+      exact: 'sub.example.com',
+      wildcard: '*.example.com',
+      wildcardAvailable: true,
+    },
+    proxyCandidateAvailable: true,
+  }, overrides);
+
+}
+
+function popupController(options) {
+
+  return Popup.createController(Object.assign({
+    getActiveTabUrl: async () => 'https://sub.example.com/private',
+  }, options));
+
+}
+
 function failure(code) {
 
   const error = new Error('synthetic secret-bearing detail');
@@ -104,7 +133,7 @@ describe('Firefox production UI controllers', function() {
 
   });
 
-  it('renders failed recovery as blocked and permits safe Disable', function() {
+  it('renders control loss as external and permits safe Disable', function() {
 
     const view = Popup.presentation(capabilities({
       runtimeState: 'FAILED',
@@ -112,7 +141,7 @@ describe('Firefox production UI controllers', function() {
       recoveryStatus: 'BLOCKED_CONTROL_LOSS',
     }));
 
-    Assert.strictEqual(view.kind, 'BLOCKED');
+    Assert.strictEqual(view.kind, 'EXTERNAL');
     Assert.strictEqual(view.action, 'DISABLE');
 
   });
@@ -134,11 +163,14 @@ describe('Firefox production UI controllers', function() {
   it('runs Apply then refreshes capabilities', async function() {
 
     const calls = [];
-    const controller = Popup.createController({rpc: {async call(message) {
+    const controller = popupController({rpc: {async call(message) {
 
       calls.push(message);
       if (message.type === 'firefox.activation.apply') {
         return {intent: 'ON', status: 'ACTIVE'};
+      }
+      if (message.type === 'firefox.site.get') {
+        return siteState();
       }
       return capabilities({
         runtimeState: calls.length > 1 ? 'READY' : 'OFF',
@@ -152,6 +184,7 @@ describe('Firefox production UI controllers', function() {
     Assert.deepStrictEqual(calls.map((item) => item.type), [
       'firefox.activation.apply',
       'firefox.capabilities.get',
+      'firefox.site.get',
     ]);
     Assert.strictEqual(controller.snapshot().capabilities.runtimeState, 'READY');
 
@@ -160,17 +193,19 @@ describe('Firefox production UI controllers', function() {
   it('runs Clear then refreshes to OFF', async function() {
 
     const calls = [];
-    const controller = Popup.createController({rpc: {async call(message) {
+    const controller = popupController({rpc: {async call(message) {
 
       calls.push(message.type);
-      return message.type === 'firefox.capabilities.get' ?
-        capabilities() : {intent: 'OFF', status: 'OFF'};
+      if (message.type === 'firefox.capabilities.get') return capabilities();
+      if (message.type === 'firefox.site.get') return siteState();
+      return {intent: 'OFF', status: 'OFF'};
 
     }}});
 
     Assert.strictEqual(await controller.clear(), true);
     Assert.deepStrictEqual(calls, [
       'firefox.activation.clear', 'firefox.capabilities.get',
+      'firefox.site.get',
     ]);
     Assert.strictEqual(controller.snapshot().capabilities.runtimeState, 'OFF');
 
@@ -180,13 +215,14 @@ describe('Firefox production UI controllers', function() {
 
     const gate = deferred();
     let calls = 0;
-    const controller = Popup.createController({rpc: {async call(message) {
+    const controller = popupController({rpc: {async call(message) {
 
       calls += 1;
       if (message.type === 'firefox.activation.apply') {
         await gate.promise;
         return {intent: 'ON', status: 'ACTIVE'};
       }
+      if (message.type === 'firefox.site.get') return siteState();
       return capabilities({
         runtimeState: 'READY', durableIntent: 'ON', recoveryStatus: 'ACTIVE',
       });
@@ -196,13 +232,13 @@ describe('Firefox production UI controllers', function() {
     Assert.strictEqual(await controller.apply(), false);
     gate.resolve();
     Assert.strictEqual(await first, true);
-    Assert.strictEqual(calls, 2);
+    Assert.strictEqual(calls, 3);
 
   });
 
   it('maps unknown popup failures to generic sanitized state', async function() {
 
-    const controller = Popup.createController({rpc: {async call() {
+    const controller = popupController({rpc: {async call() {
 
       throw new Error('private URL and raw browser detail');
 
@@ -222,6 +258,115 @@ describe('Firefox production UI controllers', function() {
     );
 
   });
+
+  it('validates a minimal secret-free current-site response', function() {
+
+    const value = Popup.validateSiteState(siteState());
+    Assert.strictEqual(value.target.host, 'sub.example.com');
+    Assert.strictEqual(value.route.mode, 'AUTO');
+    Assert.deepStrictEqual(Object.keys(value).sort(), [
+      'patterns', 'proxyCandidateAvailable', 'revision', 'route',
+      'schemaVersion', 'target',
+    ]);
+    Assert.deepStrictEqual(Object.keys(value.target).sort(), [
+      'controllable', 'host', 'reasonCode',
+    ]);
+    Assert.strictEqual(Object.hasOwn(value, 'tabUrl'), false);
+    Assert.throws(
+        () => Popup.validateSiteState(Object.assign(siteState(), {
+          unexpectedTabData: 'must-not-cross-the-response-boundary',
+        })),
+        (error) => error.code === 'UI_RPC_FAILED',
+    );
+
+  });
+
+  it('distinguishes pending site changes from the applied route', function() {
+
+    const site = siteState();
+    Assert.strictEqual(Popup.isDraftDirty(site, {
+      mode: 'AUTO', scope: 'DOMAIN',
+    }), false);
+    Assert.strictEqual(Popup.isDraftDirty(site, {
+      mode: 'DIRECT', scope: 'HOST',
+    }), true);
+
+  });
+
+  it('persists the current-site draft before production Apply', async function() {
+
+    const calls = [];
+    const controller = popupController({rpc: {async call(message) {
+
+      calls.push(message);
+      if (message.type === 'firefox.site.replace') {
+        return siteState({
+          revision: 1,
+          route: {
+            mode: message.mode,
+            scope: message.scope,
+            pattern: 'sub.example.com',
+          },
+        });
+      }
+      if (message.type === 'firefox.activation.apply') {
+        return {intent: 'ON', status: 'ACTIVE'};
+      }
+      if (message.type === 'firefox.site.get') {
+        return siteState({
+          revision: calls.some((item) =>
+            item.type === 'firefox.site.replace') ? 1 : 0,
+          route: calls.some((item) =>
+            item.type === 'firefox.site.replace') ?
+            {mode: 'DIRECT', scope: 'HOST', pattern: 'sub.example.com'} :
+            {mode: 'AUTO', scope: 'DOMAIN', pattern: '*.example.com'},
+        });
+      }
+      return capabilities({
+        runtimeState: calls.some((item) =>
+          item.type === 'firefox.activation.apply') ? 'READY' : 'OFF',
+        durableIntent: calls.some((item) =>
+          item.type === 'firefox.activation.apply') ? 'ON' : 'OFF',
+        recoveryStatus: calls.some((item) =>
+          item.type === 'firefox.activation.apply') ? 'ACTIVE' : 'OFF',
+      });
+
+    }}});
+    await controller.refresh();
+    Assert.strictEqual(await controller.apply({
+      mode: 'DIRECT', scope: 'HOST',
+    }), true);
+    Assert.deepStrictEqual(calls.map((item) => item.type), [
+      'firefox.capabilities.get',
+      'firefox.site.get',
+      'firefox.site.replace',
+      'firefox.activation.apply',
+      'firefox.capabilities.get',
+      'firefox.site.get',
+    ]);
+    Assert.deepStrictEqual(calls[2], {
+      type: 'firefox.site.replace',
+      tabUrl: 'https://sub.example.com/private',
+      expectedRevision: 0,
+      mode: 'DIRECT',
+      scope: 'HOST',
+    });
+
+  });
+
+  it('shows external-control loss distinctly from generic blocked state',
+      function() {
+
+        const view = Popup.presentation(capabilities({
+          runtimeState: 'FAILED',
+          durableIntent: 'OFF',
+          recoveryStatus: 'BLOCKED_CONTROL_LOSS',
+          recoveryFailureCode: 'CONTROL_LOSS',
+        }));
+        Assert.strictEqual(view.kind, 'EXTERNAL');
+        Assert.strictEqual(view.titleKey, 'popupStateExternal');
+
+      });
 
   it('permits options editing only in complete durable OFF', function() {
 
@@ -502,6 +647,15 @@ describe('Firefox production UI controllers', function() {
       'flagOwnProxiesOnlyForOwnSites',
       'flagReplaceDirectWithProxy',
       'flagUseProviderProxies',
+      'popupPillOFF',
+      'popupPillACTIVE',
+      'popupPillRECOVERED',
+      'popupPillINITIALIZING',
+      'popupPillBLOCKED',
+      'popupPillEXTERNAL',
+      'popupModeAUTO',
+      'popupModePROXY',
+      'popupModeDIRECT',
     ]) {
       used.add(key);
     }

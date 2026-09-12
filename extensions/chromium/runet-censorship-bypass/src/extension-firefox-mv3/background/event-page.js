@@ -12,8 +12,10 @@
   const productionProviderApi = root.rucbFirefoxProductionProvider;
   const datasetPromotionApi = root.rucbFirefoxDatasetPromotion;
   const settingsControlApi = root.rucbFirefoxSettingsControl;
+  const siteControlApi = root.rucbFirefoxSiteControl;
   let activationController = null;
   let settingsController = null;
+  let siteController = null;
   let productionDatasetStore = null;
   let datasetPromotionController = null;
   let providerBootstrapState = Object.freeze({
@@ -140,6 +142,7 @@
 
     },
   });
+  siteController = siteControlApi.createController({settingsController});
   datasetPromotionController = datasetPromotionApi.createController({
     storageArea: browser.storage.local,
     datasetStore: createProductionDatasetStore(),
@@ -166,7 +169,8 @@
     'SELECTED_DATASET_UNAVAILABLE',
   ]);
   const SAFE_SETTINGS_ERROR_CODES = new Set(
-      Object.values(settingsControlApi.ERRORS),
+      Object.values(settingsControlApi.ERRORS)
+          .concat(Object.values(siteControlApi.ERRORS)),
   );
   const SAFE_PROMOTION_ERROR_CODES = new Set(
       Object.values(datasetPromotionApi.ERRORS),
@@ -215,6 +219,28 @@
       Object.keys(message).length === 3 &&
       Object.prototype.hasOwnProperty.call(message, 'expectedRevision') &&
       Object.prototype.hasOwnProperty.call(message, 'settings');
+
+  }
+
+  function exactSiteGetRequest(message) {
+
+    return Boolean(message) && typeof message === 'object' &&
+      !Array.isArray(message) && message.type === 'firefox.site.get' &&
+      Object.keys(message).length === 2 &&
+      Object.prototype.hasOwnProperty.call(message, 'tabUrl') &&
+      typeof message.tabUrl === 'string';
+
+  }
+
+  function exactSiteReplaceRequest(message) {
+
+    return Boolean(message) && typeof message === 'object' &&
+      !Array.isArray(message) && message.type === 'firefox.site.replace' &&
+      Object.keys(message).length === 5 &&
+      Object.prototype.hasOwnProperty.call(message, 'tabUrl') &&
+      Object.prototype.hasOwnProperty.call(message, 'expectedRevision') &&
+      Object.prototype.hasOwnProperty.call(message, 'mode') &&
+      Object.prototype.hasOwnProperty.call(message, 'scope');
 
   }
 
@@ -312,6 +338,26 @@
 
   }
 
+  async function getSiteSettings(message) {
+
+    try {
+      return {ok: true, result: await siteController.get(message.tabUrl)};
+    } catch (error) {
+      return errorResponse(safeSettingsErrorCode(error));
+    }
+
+  }
+
+  async function replaceSiteSettings(message) {
+
+    try {
+      return {ok: true, result: await siteController.replace(message)};
+    } catch (error) {
+      return errorResponse(safeSettingsErrorCode(error));
+    }
+
+  }
+
   async function installStagedProviderDataset() {
 
     try {
@@ -373,6 +419,18 @@
         return errorResponse('INVALID_RPC_REQUEST');
       }
       return enqueueRpcControlOperation(() => replaceProductSettings(message));
+    }
+    if (type === 'firefox.site.get') {
+      if (!exactSiteGetRequest(message)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      return enqueueRpcControlOperation(() => getSiteSettings(message));
+    }
+    if (type === 'firefox.site.replace') {
+      if (!exactSiteReplaceRequest(message)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      return enqueueRpcControlOperation(() => replaceSiteSettings(message));
     }
     if (type === 'firefox.provider.update.install') {
       if (!exactRpcRequest(message, type)) {
