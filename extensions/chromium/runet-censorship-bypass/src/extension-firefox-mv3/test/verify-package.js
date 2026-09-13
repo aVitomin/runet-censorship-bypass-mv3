@@ -10,6 +10,19 @@ const Templates = require('../../templates-data');
 const FIREFOX_GECKO_ID = '{adf5f697-1149-42a2-92eb-c163cb9a4146}';
 const EXPECTED_FIREFOX_VERSION =
   `0.0.${Templates.contexts.chromiumMv3.storeVersion}`;
+const EXPECTED_ICON_FILES = Object.freeze([
+  'active',
+  'busy',
+  'external',
+  'loading',
+  'off',
+  'warning',
+].flatMap((state) => [16, 19, 20, 32, 38].map((size) =>
+  `icons/action-${state}-${size}.png`,
+)).concat([
+  'icons/action-active-48.png',
+  'icons/action-active-128.png',
+]).sort());
 
 const EXPECTED_FILES = Object.freeze([
   '_locales/en/messages.json',
@@ -23,6 +36,7 @@ const EXPECTED_FILES = Object.freeze([
   'background/dataset-store.js',
   'background/event-page.js',
   'background/off-state.js',
+  'background/operational-status.js',
   'background/product-config.js',
   'background/production-provider.js',
   'background/provider-lookup.js',
@@ -45,7 +59,7 @@ const EXPECTED_FILES = Object.freeze([
   'pages/shared/ui-tokens.css',
   'provider/anticensority-hosts-v1.data',
   'provider/anticensority-hosts-v1.envelope.json',
-]);
+].concat(EXPECTED_ICON_FILES).sort());
 const FORBIDDEN_RUNTIME_TEXT = Object.freeze([
   'XMLHttpRequest',
   'BEGIN PRIVATE KEY',
@@ -104,6 +118,13 @@ function verifyPackage(packageRoot, sourceRoot) {
           'tldts',
           relativePath.replace('background/vendor/tldts/', ''),
       );
+    } else if (relativePath.startsWith('icons/')) {
+      sourcePath = Path.resolve(
+          sourceRoot,
+          '..',
+          'extension-chromium-mv3',
+          relativePath,
+      );
     }
     const source = Fs.readFileSync(sourcePath);
     Assert.deepStrictEqual(packaged, source, `Changed package bytes: ${relativePath}`);
@@ -121,6 +142,7 @@ function verifyPackage(packageRoot, sourceRoot) {
     'proxy',
     'webRequest',
     'webRequestBlocking',
+    'notifications',
   ]);
   Assert.strictEqual(manifest.background.persistent, false);
   Assert.deepStrictEqual(manifest.background.scripts, [
@@ -142,13 +164,24 @@ function verifyPackage(packageRoot, sourceRoot) {
     'background/settings-control.js',
     'background/site-control.js',
     'background/activation-controller.js',
+    'background/operational-status.js',
     'background/event-page.js',
   ]);
   Assert.strictEqual('service_worker' in manifest.background, false);
   Assert.deepStrictEqual(manifest.host_permissions, ['<all_urls>']);
   Assert.deepStrictEqual(manifest.action, {
     default_title: '__MSG_popupTitle__',
+    default_icon: {
+      16: 'icons/action-active-16.png',
+      19: 'icons/action-active-19.png',
+      32: 'icons/action-active-32.png',
+      38: 'icons/action-active-38.png',
+    },
     default_popup: 'pages/popup/index.html',
+  });
+  Assert.deepStrictEqual(manifest.icons, {
+    48: 'icons/action-active-48.png',
+    128: 'icons/action-active-128.png',
   });
   Assert.deepStrictEqual(manifest.options_ui, {
     page: 'pages/options/index.html',
@@ -156,7 +189,8 @@ function verifyPackage(packageRoot, sourceRoot) {
   });
   Assert.deepStrictEqual(manifest.content_security_policy, {
     extension_pages:
-      'default-src \'self\'; script-src \'self\'; object-src \'none\'',
+      'default-src \'self\'; script-src \'self\'; ' +
+      'connect-src http: https:; object-src \'none\'',
   });
   Assert.deepStrictEqual(manifest.browser_specific_settings, {
     gecko: {
@@ -209,6 +243,14 @@ function verifyPackage(packageRoot, sourceRoot) {
   );
   Assert.strictEqual(eventPageText.includes('http://'), false);
   Assert.strictEqual(eventPageText.includes('https://'), false);
+  Assert.strictEqual(
+      eventPageText.includes('type === \'firefox.operational.get\''),
+      true,
+  );
+  Assert.strictEqual(
+      eventPageText.includes('type === \'firefox.health.check\''),
+      true,
+  );
 
   const artifact = Fs.readFileSync(Path.join(
       packageRoot,

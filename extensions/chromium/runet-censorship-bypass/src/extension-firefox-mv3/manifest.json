@@ -8,7 +8,8 @@
     "storage",
     "proxy",
     "webRequest",
-    "webRequestBlocking"
+    "webRequestBlocking",
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -33,20 +34,31 @@
       "background/settings-control.js",
       "background/site-control.js",
       "background/activation-controller.js",
+      "background/operational-status.js",
       "background/event-page.js"
     ],
     "persistent": false
   },
   "action": {
     "default_title": "__MSG_popupTitle__",
+    "default_icon": {
+      "16": "icons/action-active-16.png",
+      "19": "icons/action-active-19.png",
+      "32": "icons/action-active-32.png",
+      "38": "icons/action-active-38.png"
+    },
     "default_popup": "pages/popup/index.html"
+  },
+  "icons": {
+    "48": "icons/action-active-48.png",
+    "128": "icons/action-active-128.png"
   },
   "options_ui": {
     "page": "pages/options/index.html",
     "open_in_tab": true
   },
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'"
+    "extension_pages": "default-src 'self'; script-src 'self'; connect-src http: https:; object-src 'none'"
   },
   "incognito": "spanning",
   "browser_specific_settings": {

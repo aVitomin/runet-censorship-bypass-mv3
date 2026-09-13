@@ -61,6 +61,36 @@ function siteState(overrides = {}) {
 
 }
 
+function operationalResult(overrides = {}) {
+
+  return Object.assign({
+    schemaVersion: 1,
+    health: {
+      status: 'UNKNOWN', code: null, checkedAt: null, candidateType: null,
+    },
+    diagnostics: {
+      schemaVersion: 1,
+      generatedAt: 1000,
+      extensionVersion: '0.0.4.0',
+      browserName: 'Firefox',
+      browserVersion: '154.0.1',
+      runtimeState: 'OFF',
+      durableIntent: 'OFF',
+      recoveryStatus: 'OFF',
+      recoveryFailureCode: null,
+      controlLevel: 'controllable_by_this_extension',
+      datasetAvailable: true,
+      datasetVersion: 'public-v1',
+      configuredProxyCount: 4,
+      enabledProxyCount: 0,
+      proxyTypes: ['HTTPS', 'SOCKS5'],
+      privateWindowAccess: 'GRANTED',
+      notificationsAvailable: true,
+    },
+  }, overrides);
+
+}
+
 function popupController(options) {
 
   return Popup.createController(Object.assign({
@@ -172,6 +202,9 @@ describe('Firefox production UI controllers', function() {
       if (message.type === 'firefox.site.get') {
         return siteState();
       }
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
+      }
       return capabilities({
         runtimeState: calls.length > 1 ? 'READY' : 'OFF',
         durableIntent: calls.length > 1 ? 'ON' : 'OFF',
@@ -185,6 +218,7 @@ describe('Firefox production UI controllers', function() {
       'firefox.activation.apply',
       'firefox.capabilities.get',
       'firefox.site.get',
+      'firefox.operational.get',
     ]);
     Assert.strictEqual(controller.snapshot().capabilities.runtimeState, 'READY');
 
@@ -198,6 +232,9 @@ describe('Firefox production UI controllers', function() {
       calls.push(message.type);
       if (message.type === 'firefox.capabilities.get') return capabilities();
       if (message.type === 'firefox.site.get') return siteState();
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
+      }
       return {intent: 'OFF', status: 'OFF'};
 
     }}});
@@ -205,7 +242,7 @@ describe('Firefox production UI controllers', function() {
     Assert.strictEqual(await controller.clear(), true);
     Assert.deepStrictEqual(calls, [
       'firefox.activation.clear', 'firefox.capabilities.get',
-      'firefox.site.get',
+      'firefox.site.get', 'firefox.operational.get',
     ]);
     Assert.strictEqual(controller.snapshot().capabilities.runtimeState, 'OFF');
 
@@ -223,6 +260,9 @@ describe('Firefox production UI controllers', function() {
         return {intent: 'ON', status: 'ACTIVE'};
       }
       if (message.type === 'firefox.site.get') return siteState();
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
+      }
       return capabilities({
         runtimeState: 'READY', durableIntent: 'ON', recoveryStatus: 'ACTIVE',
       });
@@ -232,7 +272,7 @@ describe('Firefox production UI controllers', function() {
     Assert.strictEqual(await controller.apply(), false);
     gate.resolve();
     Assert.strictEqual(await first, true);
-    Assert.strictEqual(calls, 3);
+    Assert.strictEqual(calls, 4);
 
   });
 
@@ -322,6 +362,9 @@ describe('Firefox production UI controllers', function() {
             {mode: 'AUTO', scope: 'DOMAIN', pattern: '*.example.com'},
         });
       }
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
+      }
       return capabilities({
         runtimeState: calls.some((item) =>
           item.type === 'firefox.activation.apply') ? 'READY' : 'OFF',
@@ -339,12 +382,14 @@ describe('Firefox production UI controllers', function() {
     Assert.deepStrictEqual(calls.map((item) => item.type), [
       'firefox.capabilities.get',
       'firefox.site.get',
+      'firefox.operational.get',
       'firefox.site.replace',
       'firefox.activation.apply',
       'firefox.capabilities.get',
       'firefox.site.get',
+      'firefox.operational.get',
     ]);
-    Assert.deepStrictEqual(calls[2], {
+    Assert.deepStrictEqual(calls[3], {
       type: 'firefox.site.replace',
       tabUrl: 'https://sub.example.com/private',
       expectedRevision: 0,
@@ -444,7 +489,8 @@ describe('Firefox production UI controllers', function() {
     const rpc = {async call(message) {
 
       return message.type === 'firefox.capabilities.get' ?
-        capabilities() : settingsResult(7);
+        capabilities() : message.type === 'firefox.settings.get' ?
+          settingsResult(7) : operationalResult();
 
     }};
     const controller = Options.createController({rpc});
@@ -463,6 +509,9 @@ describe('Firefox production UI controllers', function() {
       calls.push(message);
       if (message.type === 'firefox.capabilities.get') return capabilities();
       if (message.type === 'firefox.settings.get') return settingsResult(3);
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
+      }
       return settingsResult(4, (settings) => {
         settings.flags.noDirect = true;
       });
@@ -474,8 +523,8 @@ describe('Firefox production UI controllers', function() {
     next.flags.noDirect = true;
 
     Assert.strictEqual(await controller.save(next), true);
-    Assert.strictEqual(calls[2].expectedRevision, 3);
-    Assert.strictEqual(calls[2].settings.flags.noDirect, true);
+    Assert.strictEqual(calls[3].expectedRevision, 3);
+    Assert.strictEqual(calls[3].settings.flags.noDirect, true);
     Assert.strictEqual(controller.snapshot().revision, 4);
 
   });
@@ -491,6 +540,9 @@ describe('Firefox production UI controllers', function() {
         return settingsResult(settingsReads === 1 ? 1 : 2, (settings) => {
           settings.flags.noDirect = settingsReads > 1;
         });
+      }
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
       }
       throw failure('SETTINGS_REVISION_CONFLICT');
 
@@ -519,6 +571,9 @@ describe('Firefox production UI controllers', function() {
           runtimeState: 'READY', durableIntent: 'ON', recoveryStatus: 'ACTIVE',
         });
       }
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
+      }
       return settingsResult();
 
     }};
@@ -541,6 +596,9 @@ describe('Firefox production UI controllers', function() {
 
       if (message.type === 'firefox.capabilities.get') return capabilities();
       if (message.type === 'firefox.settings.get') return settingsResult();
+      if (message.type === 'firefox.operational.get') {
+        return operationalResult();
+      }
       replaceCalls += 1;
       await gate.promise;
       return settingsResult(1);
@@ -587,6 +645,130 @@ describe('Firefox production UI controllers', function() {
     );
 
   });
+
+  it('validates only the fixed sanitized operational schema', function() {
+
+    const value = Ui.validateOperationalStatus(operationalResult());
+    Assert.strictEqual(value.health.status, 'UNKNOWN');
+    Assert.deepStrictEqual(value.diagnostics.proxyTypes, ['HTTPS', 'SOCKS5']);
+    const malformed = operationalResult();
+    malformed.diagnostics = Object.assign({}, malformed.diagnostics, {
+      proxyEndpoint: 'must-not-enter-diagnostics',
+    });
+    Assert.throws(
+        () => Ui.validateOperationalStatus(malformed),
+        (error) => error.code === 'UI_RPC_FAILED',
+    );
+    const unknownHealth = operationalResult();
+    unknownHealth.health = Object.assign({}, unknownHealth.health, {
+      code: 'UNTRUSTED_HEALTH_TEXT',
+    });
+    Assert.throws(
+        () => Ui.validateOperationalStatus(unknownHealth),
+        (error) => error.code === 'UI_RPC_FAILED',
+    );
+    const unknownRecovery = operationalResult();
+    unknownRecovery.diagnostics = Object.assign(
+        {}, unknownRecovery.diagnostics, {recoveryStatus: 'UNTRUSTED_STATE'},
+    );
+    Assert.throws(
+        () => Ui.validateOperationalStatus(unknownRecovery),
+        (error) => error.code === 'UI_RPC_FAILED',
+    );
+
+  });
+
+  it('exports diagnostics without credentials, URLs, hashes, or floor data',
+      function() {
+
+        const exported = JSON.parse(Options.diagnosticsExport(
+            operationalResult(),
+        ));
+        Assert.deepStrictEqual(Object.keys(exported).sort(),
+            [...Ui.DIAGNOSTIC_KEYS].sort());
+        for (const forbidden of [
+          'credentials', 'password', 'authRef', 'tabUrl', 'targetOrigin',
+          'proxyEndpoint', 'datasetHash', 'floorIdentity',
+        ]) {
+          Assert.strictEqual(Object.hasOwn(exported, forbidden), false);
+        }
+
+      });
+
+  it('runs popup health for the exact transient tab URL then refreshes',
+      async function() {
+
+        const calls = [];
+        const controller = popupController({rpc: {async call(message) {
+
+          calls.push(message);
+          if (message.type === 'firefox.capabilities.get') {
+            return capabilities({
+              runtimeState: 'READY', durableIntent: 'ON',
+              recoveryStatus: 'ACTIVE',
+            });
+          }
+          if (message.type === 'firefox.site.get') {
+            return siteState({
+              route: {
+                mode: 'PROXY', scope: 'HOST', pattern: 'sub.example.com',
+              },
+            });
+          }
+          if (message.type === 'firefox.health.check') {
+            return {
+              status: 'OK', code: null, checkedAt: 1001,
+              candidateType: 'ownProxy',
+            };
+          }
+          return operationalResult();
+
+        }}});
+        await controller.refresh();
+        Assert.strictEqual(await controller.checkHealth(), true);
+        const request = calls.find((message) =>
+          message.type === 'firefox.health.check');
+        Assert.deepStrictEqual(request, {
+          type: 'firefox.health.check',
+          tabUrl: 'https://sub.example.com/private',
+        });
+
+      });
+
+  it('runs the Maintenance health check without caller-controlled config',
+      async function() {
+
+        const calls = [];
+        const rpc = {async call(message) {
+
+          calls.push(message);
+          if (message.type === 'firefox.capabilities.get') {
+            return capabilities({
+              runtimeState: 'READY', durableIntent: 'ON',
+              recoveryStatus: 'ACTIVE',
+            });
+          }
+          if (message.type === 'firefox.settings.get') {
+            return settingsResult();
+          }
+          if (message.type === 'firefox.health.check') {
+            return {
+              status: 'INCONCLUSIVE', code: 'HEALTH_TARGET_REQUIRED',
+              checkedAt: 1001, candidateType: null,
+            };
+          }
+          return operationalResult();
+
+        }};
+        const controller = Options.createController({rpc});
+        await controller.load();
+        Assert.strictEqual(await controller.checkHealth(), true);
+        Assert.deepStrictEqual(calls.find((message) =>
+          message.type === 'firefox.health.check'), {
+          type: 'firefox.health.check',
+        });
+
+      });
 
   it('falls back to the message key without throwing', function() {
 
@@ -656,6 +838,14 @@ describe('Firefox production UI controllers', function() {
       'popupModeAUTO',
       'popupModePROXY',
       'popupModeDIRECT',
+      'healthCode_HEALTH_CHECK_FAILED',
+      'healthCode_HEALTH_CHECK_INTERRUPTED',
+      'healthCode_HEALTH_CHECK_SUPERSEDED',
+      'healthCode_HEALTH_CHECK_TIMEOUT',
+      'healthCode_HEALTH_NOT_ACTIVE',
+      'healthCode_HEALTH_PROXY_CANDIDATE_UNAVAILABLE',
+      'healthCode_HEALTH_PROXY_RULE_REQUIRED',
+      'healthCode_HEALTH_TARGET_REQUIRED',
     ]) {
       used.add(key);
     }

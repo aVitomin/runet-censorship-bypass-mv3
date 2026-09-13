@@ -161,6 +161,7 @@
       capabilities: null,
       errorCode: null,
       operation: null,
+      operational: null,
       pending: false,
       site: null,
       tabUrl: '',
@@ -190,9 +191,11 @@
       const results = await Promise.all([
         rpc.call({type: 'firefox.capabilities.get'}),
         rpc.call({type: 'firefox.site.get', tabUrl}),
+        rpc.call({type: 'firefox.operational.get'}),
       ]);
       state.capabilities = Ui.validateCapabilities(results[0]);
       state.site = validateSiteState(results[1]);
+      state.operational = Ui.validateOperationalStatus(results[2]);
       state.tabUrl = tabUrl;
 
     }
@@ -260,8 +263,41 @@
 
     }
 
+    async function checkHealth() {
+
+      if (state.pending) {
+        return false;
+      }
+      state = Object.assign({}, state, {
+        errorCode: null, operation: 'HEALTH', pending: true,
+      });
+      emit();
+      try {
+        Ui.validateHealth(await rpc.call({
+          type: 'firefox.health.check',
+          tabUrl: state.tabUrl,
+        }));
+        await readAll();
+        return true;
+      } catch (error) {
+        state.errorCode = Ui.safeErrorCode(error);
+        try {
+          await readAll();
+        } catch (_refreshError) {
+          // Keep the original sanitized health error.
+        }
+        return false;
+      } finally {
+        state.operation = null;
+        state.pending = false;
+        emit();
+      }
+
+    }
+
     return Object.freeze({
       apply: (draft) => operate('ENABLE', draft),
+      checkHealth,
       clear: () => operate('DISABLE'),
       refresh,
       snapshot,
@@ -318,6 +354,21 @@
 
     }
 
+    function healthText(health) {
+
+      if (health.status === 'OK') {
+        return t('healthStatusOk');
+      }
+      if (health.status === 'ERROR') {
+        return t('healthStatusError');
+      }
+      if (health.status === 'INCONCLUSIVE') {
+        return t('healthStatusInconclusive');
+      }
+      return t('healthStatusUnknown');
+
+    }
+
     function renderRoute(parent, state, view) {
 
       const site = state.site;
@@ -361,6 +412,24 @@
         Ui.appendText(label, 'span', t(`popupMode${mode}`));
       }
       Ui.appendText(card, 'p', modeDescription(draft.mode), 'muted route-help');
+      if ((view.kind === 'ACTIVE' || view.kind === 'RECOVERED') &&
+          site.route.mode === 'PROXY') {
+        const health = state.operational.health;
+        const healthRow = Ui.append(card, 'div', 'health-row');
+        Ui.appendText(
+            healthRow,
+            'span',
+            healthText(health),
+            `pill ${health.status === 'OK' ? 'success' :
+              health.status === 'ERROR' ? 'error' : 'warning'}`,
+        );
+        const check = Ui.append(healthRow, 'button', 'link-button');
+        check.type = 'button';
+        check.textContent = t(health.status === 'ERROR' ?
+          'healthCheckAgain' : 'healthCheckAction');
+        check.disabled = state.pending;
+        check.addEventListener('click', () => controller.checkHealth());
+      }
       if (draft.mode === 'PROXY' && !site.proxyCandidateAvailable) {
         Ui.appendText(
             card, 'p', t('popupProxyRouteNeedsMethod'),
@@ -434,7 +503,7 @@
       settings.textContent = t('actionSettings');
       settings.disabled = state.pending;
       settings.addEventListener('click', () => openSettings());
-      if (!state.capabilities || !state.site) {
+      if (!state.capabilities || !state.site || !state.operational) {
         const loading = Ui.append(root, 'section', 'card control-card');
         Ui.appendText(
             loading,

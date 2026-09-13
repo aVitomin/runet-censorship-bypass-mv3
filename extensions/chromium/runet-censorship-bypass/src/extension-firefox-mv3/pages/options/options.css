@@ -144,6 +144,35 @@ dd {
   background: var(--ui-color-warning-surface);
 }
 
+.pill.error {
+  border-color: #f0a2a2;
+  color: var(--ui-color-error);
+  background: var(--ui-color-error-surface);
+}
+
+.section-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.diagnostics-facts {
+  margin: 0;
+}
+
+.diagnostics-export {
+  max-height: 280px;
+  overflow: auto;
+  padding: var(--ui-space-1);
+  border: 1px solid var(--ui-color-divider);
+  border-radius: var(--ui-radius-small);
+  background: var(--ui-color-surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

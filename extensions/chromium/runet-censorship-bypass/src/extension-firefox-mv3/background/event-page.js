@@ -13,9 +13,11 @@
   const datasetPromotionApi = root.rucbFirefoxDatasetPromotion;
   const settingsControlApi = root.rucbFirefoxSettingsControl;
   const siteControlApi = root.rucbFirefoxSiteControl;
+  const operationalStatusApi = root.rucbFirefoxOperationalStatus;
   let activationController = null;
   let settingsController = null;
   let siteController = null;
+  let operationalController = null;
   let productionDatasetStore = null;
   let datasetPromotionController = null;
   let providerBootstrapState = Object.freeze({
@@ -143,6 +145,25 @@
     },
   });
   siteController = siteControlApi.createController({settingsController});
+  operationalController = operationalStatusApi.createController({
+    storageArea: browser.storage.local,
+    actionApi: browser.action,
+    notificationsApi: browser.notifications,
+    tabsApi: browser.tabs,
+    runtimeApi: browser.runtime,
+    extensionApi: browser.extension,
+    proxySettings: browser.proxy.settings,
+    settingsController,
+    siteController,
+    activationSnapshot: () => activationController.snapshot(),
+    fetch: root.fetch.bind(root),
+    AbortController: root.AbortController,
+    getMessage: (key) => browser.i18n.getMessage(key),
+    getDatasetInfo: () => ({
+      available: providerBootstrapState.datasetAvailable === true,
+      version: productionProviderApi.DATASET_VERSION,
+    }),
+  });
   datasetPromotionController = datasetPromotionApi.createController({
     storageArea: browser.storage.local,
     datasetStore: createProductionDatasetStore(),
@@ -241,6 +262,19 @@
       Object.prototype.hasOwnProperty.call(message, 'expectedRevision') &&
       Object.prototype.hasOwnProperty.call(message, 'mode') &&
       Object.prototype.hasOwnProperty.call(message, 'scope');
+
+  }
+
+  function exactHealthCheckRequest(message) {
+
+    if (!message || typeof message !== 'object' || Array.isArray(message) ||
+        message.type !== 'firefox.health.check') {
+      return false;
+    }
+    const keys = Object.keys(message).sort();
+    return keys.length === 1 && keys[0] === 'type' ||
+      keys.length === 2 && keys[0] === 'tabUrl' && keys[1] === 'type' &&
+      typeof message.tabUrl === 'string';
 
   }
 
@@ -369,6 +403,30 @@
 
   }
 
+  async function runOperationalAction(kind, operation) {
+
+    const token = operationalController.beginOperation(kind);
+    try {
+      return await operation();
+    } finally {
+      await operationalController.endOperation(token);
+    }
+
+  }
+
+  async function runHealthCheck(message) {
+
+    try {
+      return {
+        ok: true,
+        result: await operationalController.checkHealth(message.tabUrl),
+      };
+    } catch (_error) {
+      return errorResponse('OPERATIONAL_STATE_UNAVAILABLE');
+    }
+
+  }
+
   async function handleMessage(message) {
 
     await initialization;
@@ -400,13 +458,31 @@
       if (!exactRpcRequest(message, type)) {
         return errorResponse('INVALID_RPC_REQUEST');
       }
-      return enqueueRpcControlOperation(applyPersistedProductConfiguration);
+      return enqueueRpcControlOperation(() => runOperationalAction(
+          'APPLY',
+          async () => {
+            const result = await applyPersistedProductConfiguration();
+            if (result.ok === true) {
+              await operationalController.resetHealth();
+            }
+            return result;
+          },
+      ));
     }
     if (type === 'firefox.activation.clear') {
       if (!exactRpcRequest(message, type)) {
         return errorResponse('INVALID_RPC_REQUEST');
       }
-      return enqueueRpcControlOperation(clearProductActivation);
+      return enqueueRpcControlOperation(() => runOperationalAction(
+          'CLEAR',
+          async () => {
+            const result = await clearProductActivation();
+            if (result.ok === true) {
+              await operationalController.resetHealth();
+            }
+            return result;
+          },
+      ));
     }
     if (type === 'firefox.settings.get') {
       if (!exactRpcRequest(message, type)) {
@@ -430,7 +506,29 @@
       if (!exactSiteReplaceRequest(message)) {
         return errorResponse('INVALID_RPC_REQUEST');
       }
-      return enqueueRpcControlOperation(() => replaceSiteSettings(message));
+      return enqueueRpcControlOperation(async () => {
+        const result = await replaceSiteSettings(message);
+        await operationalController.refreshToolbar();
+        return result;
+      });
+    }
+    if (type === 'firefox.operational.get') {
+      if (!exactRpcRequest(message, type)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      try {
+        return {ok: true, result: await operationalController.publicStatus()};
+      } catch (_error) {
+        return errorResponse('OPERATIONAL_STATE_UNAVAILABLE');
+      }
+    }
+    if (type === 'firefox.health.check') {
+      if (!exactHealthCheckRequest(message)) {
+        return errorResponse('INVALID_RPC_REQUEST');
+      }
+      return enqueueRpcControlOperation(() => runOperationalAction(
+          'HEALTH', () => runHealthCheck(message),
+      ));
     }
     if (type === 'firefox.provider.update.install') {
       if (!exactRpcRequest(message, type)) {
@@ -448,7 +546,8 @@
   );
   browser.proxy.settings.onChange.addListener((change) => {
 
-    activationController.handleProxySettingsChange(change);
+    const result = activationController.handleProxySettingsChange(change);
+    operationalController.handleControlChange(result);
 
   });
   browser.webRequest.onBeforeRequest.addListener(
@@ -476,13 +575,55 @@
       {urls: ['<all_urls>']},
   );
   browser.runtime.onMessage.addListener(handleMessage);
+  if (browser.tabs && browser.tabs.onActivated) {
+    browser.tabs.onActivated.addListener((activeInfo) => {
+
+      operationalController.refreshToolbar({tabId: activeInfo.tabId})
+          .catch(() => undefined);
+
+    });
+  }
+  if (browser.tabs && browser.tabs.onUpdated) {
+    browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+
+      if (!tab || tab.active !== true || !changeInfo ||
+          !Object.prototype.hasOwnProperty.call(changeInfo, 'url') &&
+          changeInfo.status !== 'complete') {
+        return;
+      }
+      operationalController.refreshToolbar({tabId, tab})
+          .catch(() => undefined);
+
+    });
+  }
+  if (browser.windows && browser.windows.onFocusChanged) {
+    browser.windows.onFocusChanged.addListener(() => {
+
+      operationalController.refreshToolbar().catch(() => undefined);
+
+    });
+  }
+  if (browser.notifications && browser.notifications.onClicked) {
+    browser.notifications.onClicked.addListener((notificationId) => {
+
+      operationalController.handleNotificationClicked(notificationId)
+          .catch(() => undefined);
+
+    });
+  }
+
+  operationalController.showLoading().catch(() => undefined);
 
   const initialization = (async () => {
 
     providerBootstrapState = await providerBootstrap.initialize();
     await datasetPromotionController.initialize();
     await settingsController.initialize();
-    return activationController.initializeFromDurable();
+    const activation = await activationController.initializeFromDurable();
+    await operationalController.initialize();
+    await operationalController.restoreToolbar();
+    await operationalController.reconcileStartupAttention();
+    return activation;
 
   })();
 

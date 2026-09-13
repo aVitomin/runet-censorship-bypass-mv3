@@ -353,9 +353,15 @@ routing flags. Как и Chromium MV3, plain host означает exact host, w
 `*.example.com` — base + subdomains; defaults остаются
 `useProviderProxies=true`, `ownProxiesOnlyForOwnSites=true`,
 `replaceDirectWithProxy=false`, `noDirect=false`. Firefox-specific Tor scope
-показывается напрямую, без Chromium-only master control. Provider source/update,
-health и migration controls намеренно отсутствуют, потому что Firefox control
-plane их пока не предоставляет. Изменение доступно только при полном
+показывается напрямую, без Chromium-only master control. Provider source/update
+и migration controls намеренно отсутствуют, потому что Firefox control plane их
+пока не предоставляет. Maintenance предоставляет только user-triggered
+connection check для последнего explicit Proxy origin и sanitized diagnostics.
+Только для этой явной проверки Firefox CSP разрешает `connect-src http: https:`;
+запрос нормализован до origin, не отправляет cookies/referrer, не следует
+redirects и не читает response body. Проверка не меняет rules, dataset,
+credentials или proxy ownership и не использует отдельный telemetry endpoint.
+Изменение доступно только при полном
 durable/runtime `OFF`, не
 запускает Clear автоматически и использует exact revision. Conflict приводит к
 перезагрузке current settings без overwrite. Stored password никогда не
@@ -371,3 +377,12 @@ Direct с exact-host или public-suffix-aware domain scope. Site mutation пр
 full tab URL не возвращается странице. Сравнение пользовательских поверхностей
 и честный список оставшихся отличий зафиксированы в
 [Chromium / Firefox UI parity matrix](FIREFOX_CHROMIUM_UI_PARITY.md).
+
+Firefox `browser.action` badge/icon/title строится из текущих authoritative
+activation, proxy-control и site snapshots: `OFF`, `A`, `P`, `D`, `EXT`, busy,
+loading и warning не имеют отдельного persisted routing state. После recreation
+event page повторно вычисляет presentation. Permission `notifications` служит
+только фиксированным локализованным alerts о control loss, blocked recovery и
+ошибке явно запрошенной health-проверки. Уведомления и diagnostics не включают
+hostname/URL, proxy endpoints, credentials, `authRef`, dataset hashes или floor
+identity; normal startup, `OFF` и успешная recovery не создают уведомлений.

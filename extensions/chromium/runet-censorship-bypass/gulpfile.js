@@ -75,6 +75,7 @@ const firefoxMv3RuntimeSrc = [
   './src/extension-firefox-mv3/background/settings-control.js',
   './src/extension-firefox-mv3/background/site-control.js',
   './src/extension-firefox-mv3/background/activation-controller.js',
+  './src/extension-firefox-mv3/background/operational-status.js',
   './src/extension-firefox-mv3/background/event-page.js',
   './src/extension-firefox-mv3/pages/shared/ui-runtime.js',
   './src/extension-firefox-mv3/pages/shared/ui-tokens.css',
@@ -100,6 +101,19 @@ const chromiumMv3TldtsSrc = [
   './node_modules/tldts/LICENSE',
 ];
 const firefoxMv3TldtsSrc = chromiumMv3TldtsSrc;
+const firefoxMv3IconSrc = [
+  'active',
+  'busy',
+  'external',
+  'loading',
+  'off',
+  'warning',
+].flatMap((state) => [16, 19, 20, 32, 38].map((size) =>
+  `./src/extension-chromium-mv3/icons/action-${state}-${size}.png`,
+)).concat([
+  './src/extension-chromium-mv3/icons/action-active-48.png',
+  './src/extension-chromium-mv3/icons/action-active-128.png',
+]);
 
 const cleanChromiumMv3 = function(cb) {
 
@@ -182,6 +196,17 @@ const copyFirefoxMv3Tldts = function(cb) {
 
 };
 
+const copyFirefoxMv3Icons = function(cb) {
+
+  gulp.src(firefoxMv3IconSrc, {
+    base: './src/extension-chromium-mv3',
+    encoding: false,
+  })
+    .pipe(gulp.dest(firefoxMv3Dst))
+    .on('end', cb);
+
+};
+
 const buildChromiumMv3 = gulp.series(
     cleanChromiumMv3,
     gulp.parallel(
@@ -195,6 +220,7 @@ const buildFirefoxMv3 = gulp.series(
     gulp.parallel(
         copyFirefoxMv3,
         copyFirefoxMv3Common,
+        copyFirefoxMv3Icons,
         copyFirefoxMv3Tldts,
     ),
 );

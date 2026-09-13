@@ -205,6 +205,7 @@
       editable: false,
       errorCode: null,
       notice: null,
+      operational: null,
       pending: false,
       revision: null,
       settings: null,
@@ -227,11 +228,14 @@
       const results = await Promise.all([
         rpc.call({type: 'firefox.capabilities.get'}),
         rpc.call({type: 'firefox.settings.get'}),
+        rpc.call({type: 'firefox.operational.get'}),
       ]);
       const capabilities = Ui.validateCapabilities(results[0]);
       const settings = validateSettingsResult(results[1]);
+      const operational = Ui.validateOperationalStatus(results[2]);
       state.capabilities = capabilities;
       state.editable = editableFromCapabilities(capabilities);
+      state.operational = operational;
       state.revision = settings.revision;
       state.settings = settings.settings;
 
@@ -302,7 +306,33 @@
 
     }
 
-    return Object.freeze({load, save, snapshot});
+    async function checkHealth() {
+
+      if (state.pending) {
+        return false;
+      }
+      state.pending = true;
+      state.errorCode = null;
+      state.notice = null;
+      emit();
+      try {
+        const health = Ui.validateHealth(await rpc.call({
+          type: 'firefox.health.check',
+        }));
+        await loadNow();
+        state.notice = `HEALTH_${health.status}`;
+        return true;
+      } catch (error) {
+        state.errorCode = Ui.safeErrorCode(error);
+        return false;
+      } finally {
+        state.pending = false;
+        emit();
+      }
+
+    }
+
+    return Object.freeze({checkHealth, load, save, snapshot});
 
   }
 
@@ -319,6 +349,13 @@
       return 'optionsErrorValidation';
     }
     return 'optionsErrorGeneric';
+
+  }
+
+  function diagnosticsExport(value) {
+
+    const operational = Ui.validateOperationalStatus(value);
+    return JSON.stringify(operational.diagnostics, null, 2);
 
   }
 
@@ -379,6 +416,82 @@
       input.value = values.join('\n');
       input.placeholder = t('optionsRulesPlaceholder');
       return input;
+
+    }
+
+    function formatTime(value) {
+
+      if (!Number.isSafeInteger(value) || value < 1) {
+        return t('optionsNone');
+      }
+      try {
+        return new Date(value).toLocaleString();
+      } catch (_error) {
+        return t('optionsNone');
+      }
+
+    }
+
+    function healthLabel(health) {
+
+      const keys = {
+        ERROR: 'healthStatusError',
+        INCONCLUSIVE: 'healthStatusInconclusive',
+        OK: 'healthStatusOk',
+        UNKNOWN: 'healthStatusUnknown',
+      };
+      return t(keys[health.status] || keys.UNKNOWN);
+
+    }
+
+    function candidateLabel(type) {
+
+      const keys = {
+        localTor: 'optionsLocalTor',
+        ownProxy: 'optionsOwnProxies',
+        torBrowser: 'optionsTorBrowser',
+        warp: 'optionsWarp',
+      };
+      return type && keys[type] ? t(keys[type]) : t('optionsNone');
+
+    }
+
+    function controlLabel(level) {
+
+      const keys = {
+        controlled_by_other_extensions: 'diagnosticsControlExternal',
+        controlled_by_this_extension: 'diagnosticsControlOwned',
+        controllable_by_this_extension: 'diagnosticsControlAvailable',
+        not_controllable: 'diagnosticsControlPolicy',
+        unknown: 'valueUnknown',
+      };
+      return t(keys[level] || keys.unknown);
+
+    }
+
+    function definition(parent, labelKey, value) {
+
+      Ui.appendText(parent, 'dt', t(labelKey), 'muted');
+      Ui.appendText(parent, 'dd', value || t('optionsNone'));
+
+    }
+
+    function downloadDiagnostics(operational) {
+
+      const view = document.defaultView;
+      if (!view || typeof view.Blob !== 'function' || !view.URL ||
+          typeof view.URL.createObjectURL !== 'function') {
+        throw Ui.rpcError('UI_RPC_FAILED');
+      }
+      const blob = new view.Blob([diagnosticsExport(operational)], {
+        type: 'application/json',
+      });
+      const href = view.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = 'runet-censorship-bypass-firefox-diagnostics.json';
+      link.click();
+      view.setTimeout(() => view.URL.revokeObjectURL(href), 0);
 
     }
 
@@ -800,6 +913,127 @@
           `pill ${state.capabilities.providerDatasetAvailable ?
             'success' : 'warning'}`,
       );
+      const health = state.operational.health;
+      const healthCard = Ui.append(maintenance, 'article', 'subsection');
+      const healthHeader = Ui.append(healthCard, 'div', 'section-row');
+      Ui.appendText(healthHeader, 'h3', t('healthConnectionTitle'));
+      Ui.appendText(
+          healthHeader,
+          'span',
+          healthLabel(health),
+          `pill ${health.status === 'OK' ? 'success' :
+            health.status === 'ERROR' ? 'error' : 'warning'}`,
+      );
+      Ui.appendText(
+          healthCard, 'p', t('healthConnectionHelp'), 'muted',
+      );
+      const healthFacts = Ui.append(healthCard, 'dl', 'overview-facts');
+      definition(
+          healthFacts, 'healthLastChecked', formatTime(health.checkedAt),
+      );
+      definition(
+          healthFacts, 'healthCheckedCandidate',
+          candidateLabel(health.candidateType),
+      );
+      if (health.status === 'ERROR' ||
+          health.status === 'INCONCLUSIVE') {
+        Ui.appendText(
+            healthCard,
+            'p',
+            t(health.code ? `healthCode_${health.code}` :
+              'healthStatusInconclusive'),
+            `status ${health.status === 'ERROR' ? 'error' : 'warning'}`,
+        );
+      }
+      const healthButton = Ui.append(healthCard, 'button', 'primary');
+      healthButton.type = 'button';
+      healthButton.dataset.operational = 'true';
+      healthButton.textContent = t(health.status === 'ERROR' ?
+        'healthCheckAgain' : 'healthCheckAction');
+      healthButton.disabled = state.pending ||
+        state.capabilities.runtimeState !== 'READY';
+      healthButton.addEventListener('click', () => controller.checkHealth());
+
+      const diagnostic = state.operational.diagnostics;
+      const diagnostics = Ui.append(maintenance, 'details', 'subsection');
+      const diagnosticsSummary = Ui.append(diagnostics, 'summary');
+      diagnosticsSummary.textContent = t('diagnosticsTitle');
+      Ui.appendText(
+          diagnostics, 'p', t('diagnosticsRedactionHelp'), 'muted',
+      );
+      const diagnosticFacts = Ui.append(
+          diagnostics, 'dl', 'overview-facts diagnostics-facts',
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsExtensionVersion',
+          diagnostic.extensionVersion,
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsBrowserVersion',
+          [diagnostic.browserName, diagnostic.browserVersion]
+              .filter(Boolean).join(' '),
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsRuntimeState',
+          diagnostic.runtimeState,
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsRecoveryState',
+          diagnostic.recoveryStatus,
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsControlState',
+          controlLabel(diagnostic.controlLevel),
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsDatasetVersion',
+          diagnostic.datasetVersion,
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsProxyCounts',
+          `${diagnostic.enabledProxyCount}/${diagnostic.configuredProxyCount}`,
+      );
+      definition(
+          diagnosticFacts, 'diagnosticsProxyTypes',
+          diagnostic.proxyTypes.join(', ') || t('optionsNone'),
+      );
+      definition(
+          diagnosticFacts, 'popupPrivateAccess',
+          t(diagnostic.privateWindowAccess === 'GRANTED' ? 'valueGranted' :
+            diagnostic.privateWindowAccess === 'DENIED' ? 'valueDenied' :
+              'valueUnknown'),
+      );
+      const exported = Ui.append(
+          diagnostics, 'pre', 'diagnostics-export technical-note',
+      );
+      exported.textContent = diagnosticsExport(state.operational);
+      const download = Ui.append(diagnostics, 'button');
+      download.type = 'button';
+      download.dataset.operational = 'true';
+      download.textContent = t('diagnosticsDownload');
+      download.addEventListener('click', () => {
+        try {
+          downloadDiagnostics(state.operational);
+        } catch (_error) {
+          localError = 'UI_RPC_FAILED';
+          render(controller.snapshot());
+        }
+      });
+
+      const notificationCard = Ui.append(
+          maintenance, 'article', 'subsection',
+      );
+      Ui.appendText(
+          notificationCard, 'h3', t('notificationsAttentionTitle'),
+      );
+      Ui.appendText(
+          notificationCard,
+          'p',
+          t(diagnostic.notificationsAvailable ?
+            'notificationsAttentionEnabled' :
+            'notificationsAttentionUnavailable'),
+          'muted',
+      );
 
       const advanced = Ui.append(form, 'section', 'card section');
       advanced.id = 'advanced';
@@ -877,8 +1111,11 @@
       status.setAttribute('aria-live', 'polite');
 
       for (const control of form.elements) {
-        control.disabled = disabled;
+        control.disabled = disabled && control.dataset.operational !== 'true';
       }
+      healthButton.disabled = state.pending ||
+        state.capabilities.runtimeState !== 'READY';
+      download.disabled = state.pending;
       reload.disabled = state.pending;
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -954,6 +1191,7 @@
     NAV_ITEMS,
     createController,
     credentialPayload,
+    diagnosticsExport,
     editableFromCapabilities,
     mount,
     parseRuleLines,
