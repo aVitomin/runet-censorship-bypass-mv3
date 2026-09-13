@@ -17,15 +17,24 @@ configuration.
   narrower host set would create an unguarded routing gap.
 - `storage` keeps strict product configuration, durable OFF/ON recovery
   metadata, credential records and exact local dataset pointers.
+- `notifications` is used only for fixed localized attention alerts after
+  proxy control loss, blocked recovery or a failed user-requested connection
+  check. Notifications never contain a hostname, URL, proxy endpoint or
+  credential.
 - `incognito: "spanning"` and explicit private-window access are required by
   the fail-closed architecture. Activation is refused when private access is
   denied; revocation leaves the global floor blocking private traffic until
   the user clears protection.
 
 The extension contains no content scripts and injects no code into web pages.
-Its CSP permits only extension-local scripts and forbids objects.
+Its CSP permits only extension-local scripts, forbids objects and permits
+HTTP(S) connections only for the user-requested connection check below.
 The popup reads the active tab only to derive a normalized HTTP(S) hostname;
 the background site RPC never returns the full URL, path or query.
+The user-triggered connection check reuses the origin of an explicit Proxy
+site, sends no credentials or referrer, follows no redirect, does not read the
+response body and has a bounded deadline. It does not use a telemetry endpoint
+or run automatically.
 
 ## Data collection declaration
 

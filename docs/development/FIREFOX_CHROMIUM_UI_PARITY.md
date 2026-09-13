@@ -24,8 +24,8 @@
 | Proxy candidate unavailable | Apply заблокирован, ссылка на Proxy connections | PARITY | Background также отклоняет Proxy rule без кандидата. |
 | External proxy control | Отдельное external/control-loss state | EQUIVALENT | Firefox синхронно withdraw-ит session и не перезаписывает внешний setting. |
 | PAC freshness / last download | Локальный packaged dataset availability | INTENTIONAL_PLATFORM_DIFFERENCE | Firefox не исполняет PAC и не включает remote updater. |
-| Proxy health summary/check | Нет | MISSING | Health subsystem не входит в Firefox `0.0.4.0`. |
-| Toolbar A/P/D/OFF/EXT badge и state icons | Generic Firefox toolbar icon | MISSING | Popup показывает точный state, но отдельные action badge/icon states ещё не добавлены. |
+| Proxy health summary/check | Ручная проверка текущего explicit Proxy origin | EQUIVALENT | Как Chromium, не меняет routing; Firefox не запускает automatic health и не использует отдельный telemetry endpoint. |
+| Toolbar A/P/D/OFF/EXT badge и state icons | A/P/D/OFF/EXT, busy/loading/error icons и title | PARITY | Значение строится из authoritative activation, proxy-control и current-site state и восстанавливается после event-page recreation. |
 
 ## Options
 
@@ -41,10 +41,10 @@
 | Safe routing defaults | Те же четыре browser-neutral defaults | PARITY | Provider=true, own-sites-only=true, replace-Direct=false, noDirect=false. |
 | Maintenance section | Packaged dataset readiness | EQUIVALENT | Локальная проверка доступна без сети. |
 | Manual/periodic provider refresh | Нет UI | INTENTIONAL_PLATFORM_DIFFERENCE | Authenticated updater code остаётся dormant: URL/key/timer не настроены. |
-| Proxy health и diagnostics | Нет | MISSING | Не имитируется неработающими controls. |
+| Proxy health и diagnostics | Maintenance check и redacted report/export | EQUIVALENT | Отчёт содержит только версии, состояния, public dataset version и proxy type/count; URL, endpoints, authRef, hashes, floor и credentials исключены. |
 | Advanced Direct policy | replaceDirectWithProxy / noDirect | PARITY | Общий routing contract остаётся авторитетным. |
 | Legacy MV2 migration | Нет | INTENTIONAL_PLATFORM_DIFFERENCE | MV2 исторический и отсутствует в maintained main. |
-| Notifications | Нет | MISSING | Firefox manifest не запрашивает notifications permission. |
+| Notifications | Критические control-loss/recovery/health alerts | EQUIVALENT | Фиксированный локализованный текст, cooldown и переход в Maintenance; обычные background events не создают уведомления. |
 | About/version | About с package version и local-code statement | PARITY | Никаких remote assets. |
 | EN/RU | Firefox browser i18n EN/RU | PARITY | Firefox следует выбранной locale браузера. |
 | Встроенный language selector | Нет | INTENTIONAL_PLATFORM_DIFFERENCE | Отдельная language preference не хранится. |
@@ -63,8 +63,7 @@
 
 ## Оставшаяся работа milestone
 
-Для полной пользовательской parity остаются два `MISSING` класса: Firefox
-toolbar badge/state icons и Firefox health/diagnostics/notification UX. Они не
-замаскированы существующими controls и требуют отдельных решений; remote update
-configuration, произвольный PAC и MV2 migration являются намеренными
-platform/product differences, а не parity blockers.
+В этой матрице больше нет `MISSING` user-visible классов. Remote update
+configuration, произвольный PAC, browser-driven locale, OFF-only mutation,
+fail-closed terminal proxy exhaustion и отсутствие MV2 migration остаются явно
+зафиксированными `INTENTIONAL_PLATFORM_DIFFERENCE`, а не скрытыми parity.

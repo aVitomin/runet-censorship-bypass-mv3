@@ -90,6 +90,10 @@ const activationControllerSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'activation-controller.js'),
     'utf8',
 );
+const operationalStatusSource = Fs.readFileSync(
+    Path.join(sourceRoot, 'background', 'operational-status.js'),
+    'utf8',
+);
 const eventPageSource = Fs.readFileSync(
     Path.join(sourceRoot, 'background', 'event-page.js'),
     'utf8',
@@ -188,7 +192,32 @@ function startEventPage(options = {}) {
   let messageListener;
   const networkListeners = {};
   let proxySettingsChangeListener;
+  const actionCalls = [];
+  const notificationCalls = [];
+  const tabListeners = {};
+  const notificationListeners = {};
+  const noopEvent = (key, collection = tabListeners) => ({
+    addListener(listener) {
+
+      collection[key] = listener;
+
+    },
+  });
   const browser = {
+    action: [
+      'setBadgeBackgroundColor',
+      'setBadgeText',
+      'setBadgeTextColor',
+      'setIcon',
+      'setTitle',
+    ].reduce((api, method) => {
+      api[method] = async (details) => {
+
+        actionCalls.push({details, method});
+
+      };
+      return api;
+    }, {}),
     extension: {
       async isAllowedIncognitoAccess() {
 
@@ -198,9 +227,19 @@ function startEventPage(options = {}) {
       },
     },
     runtime: {
+      async getBrowserInfo() {
+
+        return {name: 'Firefox', version: '154.0.1'};
+
+      },
       getManifest() {
 
         return manifest;
+
+      },
+      getURL(path) {
+
+        return `moz-extension://test/${path}`;
 
       },
       onMessage: {
@@ -211,6 +250,28 @@ function startEventPage(options = {}) {
 
         },
       },
+    },
+    i18n: {
+      getMessage(key) {
+
+        return key;
+
+      },
+    },
+    notifications: {
+      async clear(notificationId) {
+
+        notificationCalls.push({notificationId, type: 'clear'});
+        return true;
+
+      },
+      async create(notificationId, details) {
+
+        notificationCalls.push({details, notificationId, type: 'create'});
+        return notificationId;
+
+      },
+      onClicked: noopEvent('clicked', notificationListeners),
     },
     proxy: {
       onRequest: {
@@ -288,6 +349,27 @@ function startEventPage(options = {}) {
         },
       },
     },
+    tabs: {
+      async create(details) {
+
+        events.push(`tab-created:${details.url}`);
+        return {id: 2, url: details.url};
+
+      },
+      async get() {
+
+        return {id: 1, url: options.activeTabUrl || 'https://beta.example/'};
+
+      },
+      onActivated: noopEvent('activated'),
+      onUpdated: noopEvent('updated'),
+      async query() {
+
+        return [{id: 1, url: options.activeTabUrl ||
+          'https://beta.example/'}];
+
+      },
+    },
     webRequest: {
       onBeforeRequest: {
         addListener(listener, filter, extraInfoSpec) {
@@ -322,13 +404,25 @@ function startEventPage(options = {}) {
         },
       },
     },
+    windows: {
+      onFocusChanged: noopEvent('focusChanged'),
+    },
   };
   const context = Vm.createContext({
+    AbortController,
     browser,
     tldts: require('tldts'),
     TextDecoder,
     TextEncoder,
     URL,
+    async fetch() {
+
+      if (options.healthFetchError) {
+        throw options.healthFetchError;
+      }
+      return {body: {cancel() {}}, ok: true, status: 200};
+
+    },
     indexedDB: {
       open() {
 
@@ -446,11 +540,17 @@ function startEventPage(options = {}) {
   Vm.runInContext(activationControllerSource, context, {
     filename: 'activation-controller.js',
   });
+  Vm.runInContext(operationalStatusSource, context, {
+    filename: 'operational-status.js',
+  });
   Vm.runInContext(eventPageSource, context, {filename: 'event-page.js'});
   return {
+    actionCalls,
     context,
     events,
     networkListeners,
+    notificationCalls,
+    notificationListeners,
     proxySettingsCalls,
     proxySettingsChange(change) {
 
@@ -500,6 +600,7 @@ describe('Firefox MV3 production control package', function() {
         'background/settings-control.js',
         'background/site-control.js',
         'background/activation-controller.js',
+        'background/operational-status.js',
         'background/event-page.js',
       ],
       persistent: false,
@@ -525,6 +626,7 @@ describe('Firefox MV3 production control package', function() {
           'proxy',
           'webRequest',
           'webRequestBlocking',
+          'notifications',
         ]);
         Assert.deepStrictEqual(manifest.host_permissions, ['<all_urls>']);
 
@@ -806,7 +908,7 @@ describe('Firefox MV3 production control package', function() {
         Assert.strictEqual(
             eventPage.events.filter((event) =>
               event === 'product-config-storage-get').length,
-            3,
+            4,
         );
 
       });

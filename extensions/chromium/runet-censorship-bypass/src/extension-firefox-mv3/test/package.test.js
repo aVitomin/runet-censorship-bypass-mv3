@@ -30,6 +30,13 @@ function makePackage() {
           'tldts',
           relativePath.replace('background/vendor/tldts/', ''),
       );
+    } else if (relativePath.startsWith('icons/')) {
+      source = Path.resolve(
+          sourceRoot,
+          '..',
+          'extension-chromium-mv3',
+          relativePath,
+      );
     }
     Fs.mkdirSync(Path.dirname(target), {recursive: true});
     Fs.copyFileSync(source, target);

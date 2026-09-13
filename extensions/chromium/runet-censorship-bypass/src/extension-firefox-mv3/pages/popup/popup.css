@@ -211,6 +211,14 @@ fieldset {
   text-align: left;
 }
 
+.health-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-1);
+  align-items: center;
+  justify-content: space-between;
+}
+
 .facts {
   display: grid;
   gap: var(--ui-space-1);

@@ -35,6 +35,61 @@
   ]);
   const DURABLE_INTENTS = Object.freeze(['OFF', 'ON']);
   const PRIVATE_ACCESS = Object.freeze(['DENIED', 'GRANTED', 'UNKNOWN']);
+  const OPERATIONAL_KEYS = Object.freeze([
+    'diagnostics', 'health', 'schemaVersion',
+  ]);
+  const HEALTH_KEYS = Object.freeze([
+    'candidateType', 'checkedAt', 'code', 'status',
+  ]);
+  const HEALTH_STATUSES = Object.freeze([
+    'ERROR', 'INCONCLUSIVE', 'OK', 'UNKNOWN',
+  ]);
+  const HEALTH_CODES = Object.freeze([
+    'HEALTH_CHECK_FAILED',
+    'HEALTH_CHECK_INTERRUPTED',
+    'HEALTH_CHECK_SUPERSEDED',
+    'HEALTH_CHECK_TIMEOUT',
+    'HEALTH_NOT_ACTIVE',
+    'HEALTH_PROXY_CANDIDATE_UNAVAILABLE',
+    'HEALTH_PROXY_RULE_REQUIRED',
+    'HEALTH_TARGET_REQUIRED',
+  ]);
+  const RECOVERY_STATUSES = Object.freeze([
+    'ACTIVE',
+    'BLOCKED_CONTROL_LOSS',
+    'BLOCKED_PRIVATE_ACCESS',
+    'FAILED',
+    'INITIALIZING',
+    'OFF',
+    'OFF_RECONCILIATION_FAILED',
+    'RECOVERED',
+  ]);
+  const DIAGNOSTIC_KEYS = Object.freeze([
+    'browserName',
+    'browserVersion',
+    'configuredProxyCount',
+    'controlLevel',
+    'datasetAvailable',
+    'datasetVersion',
+    'durableIntent',
+    'enabledProxyCount',
+    'extensionVersion',
+    'generatedAt',
+    'notificationsAvailable',
+    'privateWindowAccess',
+    'proxyTypes',
+    'recoveryFailureCode',
+    'recoveryStatus',
+    'runtimeState',
+    'schemaVersion',
+  ]);
+  const CONTROL_LEVELS = Object.freeze([
+    'controlled_by_other_extensions',
+    'controlled_by_this_extension',
+    'controllable_by_this_extension',
+    'not_controllable',
+    'unknown',
+  ]);
   const SAFE_RPC_CODES = new Set([
     'ACTIVATION_ALREADY_ACTIVE',
     'ACTIVATION_FAILED',
@@ -52,6 +107,7 @@
     'EPHEMERAL_CLEAR_FAILED',
     'INVALID_RPC_REQUEST',
     'NO_USABLE_PROVIDER_DATASET',
+    'OPERATIONAL_STATE_UNAVAILABLE',
     'PRIVATE_ACCESS_CHECK_FAILED',
     'PRIVATE_ACCESS_REQUIRED',
     'PRODUCT_CONFIG_DATASET_MISMATCH',
@@ -173,6 +229,65 @@
 
   }
 
+  function validateHealth(value) {
+
+    if (!hasExactKeys(value, HEALTH_KEYS) ||
+        !HEALTH_STATUSES.includes(value.status) ||
+        (value.code !== null && !HEALTH_CODES.includes(value.code)) ||
+        (value.checkedAt !== null &&
+          (!Number.isSafeInteger(value.checkedAt) || value.checkedAt < 1)) ||
+        (value.candidateType !== null &&
+          !['localTor', 'ownProxy', 'torBrowser', 'warp']
+              .includes(value.candidateType))) {
+      throw rpcError('UI_RPC_FAILED');
+    }
+    return Object.freeze(clone(value));
+
+  }
+
+  function validateOperationalStatus(value) {
+
+    if (!hasExactKeys(value, OPERATIONAL_KEYS) || value.schemaVersion !== 1 ||
+        !hasExactKeys(value.diagnostics, DIAGNOSTIC_KEYS)) {
+      throw rpcError('UI_RPC_FAILED');
+    }
+    const diagnostic = value.diagnostics;
+    if (diagnostic.schemaVersion !== 1 ||
+        !Number.isSafeInteger(diagnostic.generatedAt) ||
+        diagnostic.generatedAt < 1 ||
+        typeof diagnostic.extensionVersion !== 'string' ||
+        !diagnostic.extensionVersion ||
+        typeof diagnostic.browserName !== 'string' ||
+        (diagnostic.browserVersion !== null &&
+          typeof diagnostic.browserVersion !== 'string') ||
+        !RUNTIME_STATES.includes(diagnostic.runtimeState) ||
+        !DURABLE_INTENTS.includes(diagnostic.durableIntent) ||
+        !RECOVERY_STATUSES.includes(diagnostic.recoveryStatus) ||
+        (diagnostic.recoveryFailureCode !== null &&
+          typeof diagnostic.recoveryFailureCode !== 'string') ||
+        !CONTROL_LEVELS.includes(diagnostic.controlLevel) ||
+        typeof diagnostic.datasetAvailable !== 'boolean' ||
+        (diagnostic.datasetVersion !== null &&
+          typeof diagnostic.datasetVersion !== 'string') ||
+        !Number.isSafeInteger(diagnostic.configuredProxyCount) ||
+        diagnostic.configuredProxyCount < 0 ||
+        !Number.isSafeInteger(diagnostic.enabledProxyCount) ||
+        diagnostic.enabledProxyCount < 0 ||
+        diagnostic.enabledProxyCount > diagnostic.configuredProxyCount ||
+        !Array.isArray(diagnostic.proxyTypes) ||
+        diagnostic.proxyTypes.some((type) =>
+          !['HTTP', 'HTTPS', 'SOCKS4', 'SOCKS5'].includes(type)) ||
+        !PRIVATE_ACCESS.includes(diagnostic.privateWindowAccess) ||
+        typeof diagnostic.notificationsAvailable !== 'boolean') {
+      throw rpcError('UI_RPC_FAILED');
+    }
+    const copy = clone(value);
+    copy.health = validateHealth(value.health);
+    copy.diagnostics = Object.freeze(copy.diagnostics);
+    return Object.freeze(copy);
+
+  }
+
   function translate(browserApi, key, substitutions) {
 
     try {
@@ -221,6 +336,13 @@
 
   return Object.freeze({
     CAPABILITY_KEYS,
+    CONTROL_LEVELS,
+    DIAGNOSTIC_KEYS,
+    HEALTH_CODES,
+    HEALTH_KEYS,
+    HEALTH_STATUSES,
+    OPERATIONAL_KEYS,
+    RECOVERY_STATUSES,
     SAFE_RPC_CODES,
     append,
     appendText,
@@ -232,6 +354,8 @@
     safeErrorCode,
     translate,
     validateCapabilities,
+    validateHealth,
+    validateOperationalStatus,
   });
 
 });
