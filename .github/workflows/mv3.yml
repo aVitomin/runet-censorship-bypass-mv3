@@ -18,14 +18,13 @@ concurrency:
 
 env:
   CI: 'true'
-  CHROME_BIN: /usr/bin/google-chrome
+  PROJECT: ./extensions/chromium/runet-censorship-bypass
 
 jobs:
-  verify:
-    name: Verify MV3
+  policy:
+    name: Policy and supply chain
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
-
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,16 +42,17 @@ jobs:
       - name: Verify documentation integrity
         run: node ./scripts/verify-docs.mjs
 
-      - name: Test documentation parser safety
-        run: node --test ./scripts/verify-docs-parser.test.mjs
+      - name: Test repository policy helpers
+        run: >-
+          node --test
+          ./scripts/verify-docs-parser.test.mjs
+          ./scripts/verify-supply-chain.test.mjs
+          ./scripts/required-checks.test.mjs
 
       - name: Verify supply-chain policy
         env:
           SUPPLY_CHAIN_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: node ./scripts/verify-supply-chain.mjs
-
-      - name: Test supply-chain verifier
-        run: node --test ./scripts/verify-supply-chain.test.mjs
 
       - name: Review dependency changes
         if: ${{ github.event_name == 'pull_request' }}
@@ -61,80 +61,153 @@ jobs:
           show-openssf-scorecard: false
 
       - name: Install extension dependencies
-        run: npm ci --prefix ./extensions/chromium/runet-censorship-bypass
+        run: npm ci --prefix "$PROJECT"
 
       - name: Verify registry signatures
-        run: npm audit signatures --prefix ./extensions/chromium/runet-censorship-bypass
+        run: npm audit signatures --prefix "$PROJECT"
 
       - name: Audit production dependencies
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run audit:prod
+        run: npm --prefix "$PROJECT" run audit:prod
 
-      - name: Run PAC regression tests
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:pac
-
-      - name: Run MV3 tests
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:mv3
-
-      - name: Lint MV3
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run lint:mv3
-
-      - name: Build MV3
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run build:mv3
-
-      - name: Build deterministic Chromium release candidate
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run release:chromium
-
-      - name: Run Chrome Stable MV3 browser smoke
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:browser:mv3
-
-      - name: Run aggregate verification
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run verify
-
-      - name: Run Firefox tests
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run test:firefox
-
-      - name: Lint Firefox
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run lint:firefox
-
-      - name: Build and verify Firefox
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run build:firefox
-
-      - name: Build deterministic Firefox release candidate
-        run: npm --prefix ./extensions/chromium/runet-censorship-bypass run release:firefox
-
-      - name: Validate exact MV3 output
-        run: |
-          package_dir='./extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3'
-          test -d "$package_dir"
-          test -f "$package_dir/manifest.json"
-
-      - name: Validate exact Firefox output
-        run: |
-          package_dir='./extensions/chromium/runet-censorship-bypass/build/extension-firefox-mv3'
-          test -d "$package_dir"
-          test -f "$package_dir/manifest.json"
+      - name: Verify build and release tooling
+        run: npm --prefix "$PROJECT" run verify:tooling
 
       - name: Validate tracked-worktree integrity
         run: git diff --exit-code
 
-      - name: Upload unpacked MV3 build
-        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+  chromium:
+    name: Chromium MV3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CHROME_BIN: /usr/bin/google-chrome
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/chromium/runet-censorship-bypass/package-lock.json
+
+      - name: Install extension dependencies
+        run: npm ci --prefix "$PROJECT"
+
+      - name: Verify Chromium MV3
+        run: npm --prefix "$PROJECT" run verify:mv3
+
+      - name: Run Chrome Stable browser smoke
+        run: npm --prefix "$PROJECT" run test:browser:mv3
+
+      - name: Validate tracked-worktree integrity
+        run: git diff --exit-code
+
+  firefox:
+    name: Firefox MV3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/chromium/runet-censorship-bypass/package-lock.json
+
+      - name: Install extension dependencies
+        run: npm ci --prefix "$PROJECT"
+
+      - name: Verify Firefox MV3
+        run: npm --prefix "$PROJECT" run verify:firefox
+
+      - name: Validate tracked-worktree integrity
+        run: git diff --exit-code
+
+  release-artifacts:
+    name: Trusted-main release artifacts
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs:
+      - policy
+      - chromium
+      - firefox
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/chromium/runet-censorship-bypass/package-lock.json
+
+      - name: Install extension dependencies
+        run: npm ci --prefix "$PROJECT"
+
+      - name: Build deterministic release candidates
+        run: |
+          npm --prefix "$PROJECT" run release:chromium
+          npm --prefix "$PROJECT" run release:firefox
+
+      - name: Validate tracked-worktree integrity
+        run: git diff --exit-code
+
+      - name: Upload Chromium release candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: runet-censorship-bypass-mv3-${{ github.sha }}
-          path: |
-            extensions/chromium/runet-censorship-bypass/build/extension-chromium-mv3
-            extensions/chromium/runet-censorship-bypass/dist/chromium-release
+          path: extensions/chromium/runet-censorship-bypass/dist/chromium-release
           if-no-files-found: error
           retention-days: 7
 
       - name: Upload Firefox release candidate
-        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: runet-censorship-bypass-firefox-mv3-${{ github.sha }}
-          path: |
-            extensions/chromium/runet-censorship-bypass/build/extension-firefox-mv3
-            extensions/chromium/runet-censorship-bypass/dist/firefox-release
+          path: extensions/chromium/runet-censorship-bypass/dist/firefox-release
           if-no-files-found: error
           retention-days: 7
+
+  verify:
+    name: Verify MV3
+    if: ${{ always() }}
+    needs:
+      - policy
+      - chromium
+      - firefox
+      - release-artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every applicable gate
+        env:
+          POLICY_RESULT: ${{ needs.policy.result }}
+          CHROMIUM_RESULT: ${{ needs.chromium.result }}
+          FIREFOX_RESULT: ${{ needs.firefox.result }}
+          RELEASE_RESULT: ${{ needs.release-artifacts.result }}
+          TRUSTED_MAIN: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        run: |
+          test "$POLICY_RESULT" = success
+          test "$CHROMIUM_RESULT" = success
+          test "$FIREFOX_RESULT" = success
+          if test "$TRUSTED_MAIN" = true; then
+            test "$RELEASE_RESULT" = success
+          else
+            test "$RELEASE_RESULT" = skipped
+          fi

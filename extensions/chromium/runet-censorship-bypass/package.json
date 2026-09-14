@@ -5,10 +5,13 @@
   "scripts": {
     "lint:mv3": "eslint ./src/extension-chromium-mv3/**/*.js",
     "lint:firefox": "eslint ./src/extension-firefox-mv3/**/*.js",
+    "lint:tooling": "eslint ./gulpfile.js ./build-cleanup.js ./scripts/*.js ./src/tooling/**/*.js",
+    "lint": "eslint ./gulpfile.js ./build-cleanup.js ./scripts/*.js ./src/tooling/**/*.js ./src/extension-chromium-mv3/**/*.js ./src/extension-firefox-mv3/**/*.js",
     "build:mv3": "node ./node_modules/gulp/bin/gulp.js buildChromiumMv3 && node ./src/extension-chromium-mv3/test/verify-runtime-icons.js && node ./src/extension-chromium-mv3/test/verify-package-integrity.js",
     "build:firefox": "node ./node_modules/gulp/bin/gulp.js buildFirefoxMv3 && node ./src/extension-firefox-mv3/test/verify-package.js",
     "audit:prod": "npm audit --omit=dev",
     "test": "mocha --recursive ./src/**/test/*",
+    "test:tooling": "mocha --recursive ./src/tooling/test/*",
     "test:mv3": "mocha --recursive ./src/extension-chromium-mv3/test/*",
     "test:pac": "mocha ./src/extension-chromium-mv3/test/pac-regression.js",
     "test:firefox": "mocha --recursive ./src/extension-firefox-mv3/test/*.test.js",
@@ -18,7 +21,8 @@
     "release:firefox": "node ./scripts/package-firefox-release.js --verify-rebuild",
     "verify:mv3": "npm run lint:mv3 && npm run test:mv3 && npm run build:mv3",
     "verify:firefox": "npm run lint:firefox && npm run test:firefox && npm run build:firefox",
-    "verify": "npm test && npm run lint:mv3 && npm run lint:firefox && npm run build:mv3 && npm run build:firefox"
+    "verify:tooling": "npm run lint:tooling && npm run test:tooling",
+    "verify": "npm run lint && npm test && npm run build:mv3 && npm run build:firefox"
   },
   "author": "Ilya Ig. Petrov",
   "license": "GPLv3",
@@ -33,8 +37,6 @@
   },
   "dependencies": {
     "gulp": "5.0.1",
-    "plugin-error": "1.0.1",
-    "through2": "4.0.2",
     "tldts": "7.4.8"
   },
   "overrides": {

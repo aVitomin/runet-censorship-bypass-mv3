@@ -5,29 +5,51 @@ description: Review package.json or package-lock changes, new or updated depende
 
 # Dependency review
 
-Work from the repository root, read `AGENTS.md` and any scoped `AGENTS.md`, and establish the exact dependency, vendored-code, Action, or configuration delta before installing anything. Obey the legacy Options quarantine; do not install that package unless the user explicitly scopes a dedicated remediation task.
+Read root and scoped instructions, then identify the exact package, lockfile,
+vendored-code, Action, or manager-config delta before installing anything. The
+repository has one npm root; historical MV2 tooling must not be reconstructed.
 
-1. Prefer browser/WebExtension APIs, Node APIs, and existing dependencies when they satisfy the requirement. State why a proposed dependency is preferable to platform, existing, or small auditable local code; do not locally reimplement complex security-sensitive primitives merely to avoid a mature dependency.
-2. Confirm the exact registry/package and source-repository identities and that the selected version exists before installation. Require the selected production or development dependency version to have been publicly available for at least 7 full days (168 hours), measured from registry publication to review. A younger version requires a concrete security or compatibility emergency, explicit user approval, and a prominent record of its version, age, reason, and extra review; an AI agent cannot approve the exception.
-3. Verify the selected version's publication metadata, license compatibility, public source/package correspondence, maintenance history, current maintainers or owners and their observable changes, advisories or malware reports, package/tarball contents, registry integrity/signature, and available provenance or attestations. Treat downloads, stars, activity, and Scorecard results as signals only, never proof.
-4. Inspect exactly what every newly introduced direct or transitive `preinstall`, `install`, or `postinstall` script executes. Record why it is needed and safe. Review transitive dependency and package-size growth for unexplained additions.
-5. Review the complete lockfile delta, including selected versions, resolved URLs, integrity hashes, source changes, lifecycle-script flags, and unexpected packages. Reject unexplained changes and explicitly review git, file, arbitrary-URL, or other non-registry sources. Prefer exact direct version pins.
-6. For a new or changed third-party GitHub Action, verify the full commit SHA belongs to the intended official repository/version, inspect its source and dependencies, require explicit least-privilege permissions, and keep `persist-credentials: false` unless write credentials are explicitly required.
-7. Run or evaluate the applicable deterministic install, audit, signature, build, and test commands from the authoritative package directory. For the Chromium package use:
+## Decision path
 
-   ```powershell
-   $Project = '.\extensions\chromium\runet-censorship-bypass'
-   node .\scripts\verify-supply-chain.mjs
-   node --test .\scripts\verify-supply-chain.test.mjs
-   npm ci --prefix $Project
-   npm --prefix $Project run audit:prod
-   npm audit --prefix $Project
-   npm audit signatures --prefix $Project
-   ```
+1. Prefer platform or existing APIs. Explain why a new dependency is necessary;
+   do not reimplement a mature security primitive merely to avoid a dependency.
+2. Before installation, prove the registry identity, selected version, source
+   repository correspondence, license, and publication time. A new direct
+   version must be at least 168 hours old. A younger emergency version requires
+   explicit user approval; the agent cannot approve its own exception.
+3. Review maintainer/source ownership changes, advisories or malware reports,
+   tarball contents and size, integrity/signatures, provenance, maintenance
+   history, and transitive growth. Popularity and Scorecard are signals, not
+   proof.
+4. Inspect every newly introduced direct or transitive lifecycle script and
+   record exactly why it is safe. Review the complete lock delta: resolved URLs,
+   integrity, lifecycle flags, unexpected packages, and git/file/URL sources.
+5. For Actions, verify the full SHA belongs to the official repository/version,
+   inspect executable contents/dependencies, preserve least privilege, and keep
+   checkout credentials disabled unless write access is explicitly required.
+6. Review vendored code to the same identity, license, source-correspondence,
+   executable-content, and update-provenance standard.
 
-   Record registry-signature and provenance results plus any CLI limitation. Run the relevant repository builds and tests for the affected scope.
-8. Review vendored third-party runtime code to the same standard, including origin, license, version, source correspondence, executable contents, and update provenance. Copying minified code does not bypass review.
+## Evidence
 
-Never run `npm audit fix --force`, install a package before confirming its identity, judge safety only from popularity or Scorecard signals, or hide transitive and lifecycle-script changes.
+Run the applicable subset from the repository root:
 
-Return exactly one decision with the evidence and unresolved risks: `APPROVE`, `REJECT`, or `NEEDS USER APPROVAL`. Use `NEEDS USER APPROVAL` for a less-than-7-day emergency exception, a material unresolved trust issue, an unusual lifecycle script, or source/maintainer identity ambiguity that cannot be resolved safely.
+```powershell
+$Project = '.\extensions\chromium\runet-censorship-bypass'
+node .\scripts\verify-supply-chain.mjs
+node --test .\scripts\verify-supply-chain.test.mjs
+npm ci --prefix $Project
+npm --prefix $Project run audit:prod
+npm audit --prefix $Project
+npm audit signatures --prefix $Project
+```
+
+Also run the canonical gate for each affected browser target. Record production
+and full audit results separately, registry/provenance tool limitations, direct
+versus transitive scope, and whether a dependency enters a shipped package.
+Never use `npm audit fix --force`, install before identity review, or hide an
+unexplained transitive/lifecycle change.
+
+Return `APPROVE`, `REJECT`, or `NEEDS USER APPROVAL`, with concise evidence and
+unresolved risks. Use the last result for a young-version exception, unusual
+lifecycle code, or unresolved source/maintainer identity.

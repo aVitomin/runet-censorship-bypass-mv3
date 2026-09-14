@@ -34,20 +34,21 @@ npm ci --prefix .\extensions\chromium\runet-censorship-bypass
 $Project = '.\extensions\chromium\runet-censorship-bypass'
 
 node .\scripts\verify-docs.mjs
+npm --prefix $Project run test:tooling
 npm --prefix $Project run test:pac
-npm --prefix $Project run test:mv3
-npm --prefix $Project run lint:mv3
-npm --prefix $Project run build:mv3
 npm --prefix $Project run verify:mv3
-npm --prefix $Project run test:firefox
-npm --prefix $Project run lint:firefox
-npm --prefix $Project run build:firefox
 npm --prefix $Project run verify:firefox
 npm --prefix $Project run verify
 ```
 
-`verify:mv3` последовательно запускает lint, весь набор MV3-тестов и сборку.
-Фокусный `test:pac` полезно запускать отдельно при работе с маршрутизацией.
+`verify:mv3` и `verify:firefox` — канонические target gates: каждый запускает
+свои lint, deterministic tests, build и package-integrity ровно один раз.
+`verify` проверяет tooling и оба browser source одним ESLint process, запускает
+все deterministic tests одним Mocha process, затем строит оба пакета. Фокусные
+команды полезны во время разработки, но их не
+нужно повторять рядом с уже выбранным каноническим gate.
+`scripts/required-checks.mjs` выдаёт advisory-план по
+изменённым путям; CI и правила `AGENTS.md` остаются авторитетными.
 Dependency-free docs verifier запускается из корня и не требует корневого
 `package.json` или `npm install`.
 
@@ -113,12 +114,12 @@ npm run build:mv3
 ## GitHub Actions
 
 Workflow [`.github/workflows/mv3.yml`](../../.github/workflows/mv3.yml) работает
-на Node 22 для push и pull request в `main`. Он устанавливает только зависимости
-расширения, проверяет документацию, запускает PAC/MV3 tests, lint, build,
-aggregate `verify`, package/icons, воспроизводимость Firefox XPI/source archive
-и чистоту tracked tree. Только trusted push или explicit dispatch exact `main`
-сохраняет краткоживущие Chromium/Firefox artifacts; pull request artifacts не
-публикуются.
+на Node 22 для push и pull request в `main`. Независимые policy/supply-chain,
+Chromium и Firefox jobs исполняют каждую deterministic suite и build один раз;
+итоговый `Verify MV3` сохраняет стабильный required-check contract. Chrome smoke
+остаётся Chromium gate. Двойная воспроизводимая упаковка и загрузка artifacts
+выполняются только для trusted push или explicit dispatch exact `main`; pull
+request artifacts не создаются.
 
 ## Ветки и pull request
 

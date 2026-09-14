@@ -5,27 +5,48 @@ description: Perform a focused MV3 security review after changes to permissions,
 
 # MV3 security review
 
-Work from the repository root. Set `$Project = '.\extensions\chromium\runet-censorship-bypass'` and read `AGENTS.md` plus `$Project\src\extension-chromium-mv3\background\AGENTS.md`. Review the complete relevant diff and enough callers to prove impact. Do not echo secrets, credential-bearing strings, full custom provider URLs, or browser-profile data; cite their locations and redact values.
+Read root instructions and only the scoped `AGENTS.md` for paths actually
+affected. Review the complete relevant diff plus enough callers to prove the
+boundary. Never print secrets, credential-bearing strings, full custom provider
+URLs, browsing data, or profile contents.
 
-If the change also touches a package manifest or lock, vendored third-party code, dependency-manager configuration, or a GitHub Action, use `$dependency-review` as well. Where dependency changes intersect runtime security, review newly introduced lifecycle scripts and non-registry sources plus the code that actually enters service-worker or page execution; do not duplicate the general dependency review here.
+If package/lock, vendored code, dependency configuration, or an Action changed,
+also use `$dependency-review`; do not repeat its generic supply-chain analysis.
 
-Review the affected boundary and any plausible adjacent effects. Use the following order for applicable items; do not add ceremonial `N/A` sections for unrelated categories:
+## Select the browser scope
 
-1. Permission or host-access expansion in `manifest.tmpl.json`, including whether `<all_urls>` use grew.
-2. CSP/script execution and the PAC trust boundary: downloaded PAC stays data until Chromium receives it; flag dynamic extension execution. Distinguish proving that extension code does not evaluate remote code from proving Chrome or Firefox store remote-code-policy compliance.
-3. URL scheme, redirect/final-URL, size, fallback, credential mode, referrer policy, and external-request validation for PAC and other fetches.
-4. Credential path from structured state to `onAuthRequired`; generated PAC, UI, event, error, log, diagnostic, health, and migration redaction.
-5. IndexedDB artifacts versus `mv3State`, service-worker restart recovery, alarm reconstruction, concurrent whole-state writes, and destructive cleanup. When content scripts or externally reachable contexts are introduced, verify `storage.local` and `storage.session` access levels.
-6. Routing fail-open/fail-closed effects, `DIRECT` or direct-IP leak paths, live proxy-control checks, proxy-error coverage, and custom-provider disable/delete behavior.
-7. Migration confirmation, field selection, idempotence, old-data retention, proxy-apply side effects, and active refresh-interval mapping.
-8. Packaged-code allowlists, unreferenced executable code, and source correspondence for vendored runtime code where relevant.
+- Chromium runtime only: review Chromium semantics and run `verify:mv3`.
+- Firefox runtime only: review Firefox semantics and run `verify:firefox`.
+- Browser-neutral runtime, shared packaged input, manifest template, or Gulp:
+  review both targets, run full `verify`, and compare both packages.
+- Documentation/tests with no executable or security-boundary effect: do not run
+  this skill ceremonially.
 
-Run:
+An isolated Firefox change does not require Chromium execution unless it changes
+a shared input. PAC execution is Chromium-specific; Firefox declarative dataset
+and fail-closed routing require their own tests.
 
-```powershell
-npm --prefix $Project run lint:mv3
-npm --prefix $Project run test:mv3
-npm --prefix $Project run build:mv3
-```
+## Review applicable boundaries
 
-Return concrete findings first, ordered by severity, with repository-relative file and line references. Then list verified invariants, checks run, and real-browser QA still required. Do not label generated PAC fully fail-closed while Chromium uses `mandatory: false` or malformed/empty results remain possible.
+1. Permission/host-access or CSP expansion and remote script execution.
+2. PAC/dataset trust: untrusted bytes stay data; exact hashing, signature/trust
+   assignment, schema/size limits, and package provenance occur before use.
+3. Fetch URL, credentials, redirects/final origin, streaming bounds, deadlines,
+   referrer policy, fallback, and disabled-by-default network paths.
+4. Credential flow to proxy auth and redaction from PAC/datasets, UI, DOM,
+   storage metadata, RPC, errors, health, notifications, and diagnostics.
+5. IndexedDB/storage atomicity, pointer/journal consistency, concurrent writes,
+   restart/alarm reconstruction, and safe destructive cleanup.
+6. Direct/fail-open paths, callback authorization, live proxy ownership, control
+   loss, private access, proxy/listener errors, and Clear behavior.
+7. Packaged-code allowlists, runtime/source correspondence, inactive production
+   paths, and unreferenced executable code.
+
+Use `test:pac` in addition to the selected gate only when Chromium PAC semantics
+changed. Add real-browser QA when platform behavior matters: proxy/auth,
+ownership, lifecycle/recovery, permissions, IndexedDB, alarms, or browser-level
+fallback.
+
+Report findings first by severity with repository-relative locations. Then list
+verified invariants, checks, package impact, and unresolved browser QA. Do not
+call Chromium PAC browser-level fail-closed while it uses `mandatory:false`.

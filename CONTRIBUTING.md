@@ -12,14 +12,12 @@ root. Полная настройка: [docs/development/DEVELOPMENT.md](docs/de
 $Project = '.\extensions\chromium\runet-censorship-bypass'
 node .\scripts\verify-docs.mjs
 npm ci --prefix $Project
-npm --prefix $Project run test:pac
-npm --prefix $Project run test:mv3
-npm --prefix $Project run lint:mv3
-npm --prefix $Project run build:mv3
-npm --prefix $Project run test:firefox
-npm --prefix $Project run lint:firefox
-npm --prefix $Project run build:firefox
+node .\scripts\required-checks.mjs
+npm --prefix $Project run verify
 ```
+
+Для узкого изменения используйте предложенный target gate; полный `verify`
+остаётся финальной локальной проверкой shared/release-sensitive изменений.
 
 ## Границы изменений
 

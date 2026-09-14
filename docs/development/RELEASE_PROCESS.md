@@ -9,8 +9,8 @@ signature. Выпуск любого target допустим только из �
 
 > Release останавливается, если в обязательном CI отсутствует любой release
 > gate, даже когда отдельные тесты зелёные. Нельзя заменять отсутствующий
-> aggregate `verify`, docs integrity или artifact-integrity gate набором похожих
-> локальных результатов.
+> итоговый `Verify MV3`, docs/supply-chain или target package-integrity gate
+> набором похожих локальных результатов.
 
 ## 1. Подготовить чистый main
 
@@ -37,22 +37,18 @@ node .\scripts\verify-supply-chain.mjs
 node --test .\scripts\verify-supply-chain.test.mjs
 npm ci --prefix $Project
 npm audit signatures --prefix $Project
-npm --prefix $Project run test:pac
-npm --prefix $Project run test:mv3
-npm --prefix $Project run lint:mv3
-npm --prefix $Project run build:mv3
-npm --prefix $Project run release:chromium
-npm --prefix $Project run test:firefox
-npm --prefix $Project run lint:firefox
-npm --prefix $Project run build:firefox
+npm --prefix $Project run audit:prod
 npm --prefix $Project run verify
+npm --prefix $Project run release:chromium
+npm --prefix $Project run release:firefox
 git diff --check
 ```
 
-Обе build-команды включают package-integrity verification; Chromium build также
-проверяет runtime icons. Aggregate `verify` включает maintained test suite,
-lint и сборку обоих MV3 targets. После всех команд tracked tree должен остаться
-чистым.
+Aggregate `verify` выполняет все deterministic tests, tooling и оба browser
+lint/build без повторного запуска suites/builds. Обе build-команды внутри него
+включают package-integrity; Chromium также проверяет runtime icons. Release-команды
+отдельно доказывают byte-identical rebuild и создают архивы. После всех команд
+tracked tree должен остаться чистым.
 
 ## 3. Подтвердить trusted-main CI
 
@@ -67,11 +63,10 @@ artifact этого run. Dispatch другой ветки не является 
 
 - documentation integrity;
 - static supply-chain policy, focused verifier tests и registry signatures;
-- PAC, Chromium MV3 и Firefox deterministic tests;
-- focused Chromium/Firefox lint и builds;
-- aggregate `verify`;
+- tooling, PAC, Chromium MV3 и Firefox deterministic tests без повторов;
+- focused Chromium/Firefox lint, builds и package integrity;
 - runtime icons и package integrity внутри build;
-- exact-output и tracked-worktree checks;
+- tracked-worktree checks;
 - trusted-main-only Chromium и Firefox artifact uploads, включая
   детерминированные Chromium ZIP/checksum и Firefox XPI/source/checksums.
 
@@ -91,10 +86,10 @@ run exact SHA. Не пересобирайте release независимо от
 - отсутствие docs, screenshots, tests, source maps, archives, profiles, logs,
   `.env`, `.local`, `.tmp`, credentials и приватных URL.
 
-Firefox artifact дополнительно содержит unpacked package, unsigned XPI,
-checksum и reviewer source archive. Проверьте XPI checksum, manifest Gecko ID,
-data-collection declaration и побайтовое совпадение XPI contents с unpacked
-package. Инструкции и AMO notes находятся в
+Firefox artifact содержит unsigned XPI, checksum и reviewer source archive.
+Проверьте XPI checksum, manifest Gecko ID, data-collection declaration и
+побайтовое совпадение XPI contents с локально воспроизведённым проверенным
+package tree. Инструкции и AMO notes находятся в
 [`FIREFOX_RELEASE_BUILD.md`](FIREFOX_RELEASE_BUILD.md) и
 [`FIREFOX_AMO_REVIEW.md`](FIREFOX_AMO_REVIEW.md). Подписание выполняется AMO
 после проверки exact unsigned XPI; signing credentials в репозитории и CI нет.

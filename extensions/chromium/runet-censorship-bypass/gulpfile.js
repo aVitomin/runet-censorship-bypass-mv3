@@ -2,49 +2,57 @@
 
 const gulp = require('gulp');
 const buildCleanup = require('./build-cleanup');
-const through = require('through2');
-const PluginError = require('plugin-error');
+const {Transform} = require('node:stream');
 
-const PluginName = 'Template literals';
+function renderTemplate(source, context) {
 
-const templatePlugin = (context) => through.obj(function(file, encoding, cb) {
+  if (typeof source !== 'string' || !context || typeof context !== 'object') {
+    throw new TypeError('Template source and context are required.');
+  }
+  const rendered = source.replace(/\r\n/gu, '\n')
+      .replace(/\$\{([A-Za-z][A-Za-z0-9]*)\}/gu,
+      (token, key) => {
+        if (!Object.prototype.hasOwnProperty.call(context, key)) {
+          throw new Error(`Unknown template value: ${key}`);
+        }
+        const value = context[key];
+        if (typeof value !== 'string' && typeof value !== 'number') {
+          throw new TypeError(`Template value must be scalar: ${key}`);
+        }
+        return String(value);
+      });
+  if (rendered.includes('${')) {
+    throw new Error('Malformed or unsupported template expression.');
+  }
+  return rendered;
 
-  const suffixes = ['.tmpl.json', 'tmpl.js'];
+}
+
+const templatePlugin = (context) => new Transform({
+  objectMode: true,
+  transform(file, encoding, cb) {
+
+  const suffixes = ['.tmpl.json', '.tmpl.js'];
   if ( suffixes.some( (suff) => file.path.endsWith(suff) ) ) {
 
     const originalPath = file.path;
-    file.path = file.path.replace(new RegExp(`tmpl.([^.]+)$`), '$1');
+    file.path = file.path.replace(/\.tmpl(?=\.[^.]+$)/u, '');
 
     if (file.isStream()) {
-      return cb(new PluginError(PluginName, 'Streams are not supported!'));
+      return cb(new Error('Template streams are not supported.'));
     } else if (file.isBuffer()) {
-
-      const {keys, values} = Object.keys(context).reduce( (acc, key) => {
-
-        const value = context[key];
-        acc.keys.push(key);
-        acc.values.push(value);
-        return acc;
-
-      }, { keys: [], values: [] });
       try {
-        const rendered =
-          (new Function(...keys, 'return `' + String(file.contents) + '`;'))(
-              ...values,
-          );
-        file.contents = Buffer.from(rendered.replace(
-            '__ANTICENSORITY_PAC_URLS__',
-            JSON.stringify(context.anticensorityPacUrls, null, 2),
-        ));
+        file.contents = Buffer.from(renderTemplate(String(file.contents), context));
       } catch(e) {
         e.message += '\nIN FILE: ' + originalPath;
-        return cb(new PluginError(PluginName, e));
+        return cb(e);
       }
     }
 
   }
   cb(null, file);
 
+  },
 });
 
 
@@ -96,7 +104,6 @@ const firefoxMv3CommonSrc = [
   './src/extension-mv3-common/provider-dataset.js',
   './src/extension-mv3-common/provider-dataset-state.js',
 ];
-const firefoxSrc = './src/extension-firefox/**/*';
 const chromiumMv3TldtsSrc = [
   './node_modules/tldts/dist/index.umd.min.js',
   './node_modules/tldts/LICENSE',
@@ -229,5 +236,5 @@ const buildFirefoxMv3 = gulp.series(
 module.exports = {
   buildChromiumMv3,
   buildFirefoxMv3,
-  buildMv3: buildChromiumMv3,
+  renderTemplate,
 };

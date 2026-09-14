@@ -120,7 +120,6 @@ const cleanup = createBuildCleanup(__dirname);
 module.exports = Object.freeze({
   paths: cleanup.paths,
   removeOutput: cleanup.removeOutput,
-  cleanBuild: cleanup.cleanBuild,
   cleanChromiumMv3: cleanup.cleanChromiumMv3,
   cleanFirefoxMv3: cleanup.cleanFirefoxMv3,
   createBuildCleanup,

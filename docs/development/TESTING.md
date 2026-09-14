@@ -82,6 +82,16 @@ npm --prefix $Project run test:mv3
 freshness, redaction, popup/options, action status и deterministic performance
 counters.
 
+### Tooling tests
+
+```powershell
+npm --prefix $Project run test:tooling
+```
+
+Эти тесты отдельно проверяют безопасное удаление build output, строгий renderer
+manifest template и детерминированный Firefox provider generator. Они входят в
+aggregate `npm test`/`verify`, но не дублируются внутри browser target gates.
+
 ### Lint
 
 ```powershell
@@ -192,8 +202,8 @@ browser session/extension reload. Тест не изменяет machine policy,
 npm --prefix $Project run verify:mv3
 ```
 
-CI дополнительно запускает `test:pac` явно и проверяет `git diff --exit-code`
-после сборки.
+`test:pac` уже входит в `test:mv3`; рядом с `verify:mv3` повторять его не нужно.
+CI проверяет `git diff --exit-code` после target gate.
 
 ### Aggregate maintained verification
 
@@ -201,12 +211,13 @@ CI дополнительно запускает `test:pac` явно и пров
 npm --prefix $Project run verify
 ```
 
-Aggregate gate запускает maintained test suite, Chromium и Firefox lint, затем
-собирает и проверяет оба MV3-пакета. MV2 в текущем `main` не строится и не
+Aggregate gate запускает tooling и оба browser source одним ESLint process,
+все deterministic suites одним Mocha process, затем оба build. Каждая suite,
+lint и build выполняется один раз без лишних npm-wrapper процессов. MV2 в
+текущем `main` не строится и не
 тестируется; историческая воспроизводимость принадлежит Git history/frozen
-development branch. Именно этот gate вместе с docs integrity обязан
-присутствовать и пройти в trusted-main release CI; набор отдельных зелёных
-команд не заменяет отсутствующий обязательный gate.
+development branch. CI исполняет эквивалентные policy/Chromium/Firefox части
+параллельно, а стабильный итоговый `Verify MV3` требует успеха каждой.
 
 ## Проверка release package
 

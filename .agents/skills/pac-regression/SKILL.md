@@ -5,17 +5,25 @@ description: Review and test this repository's PAC routing semantics when a task
 
 # PAC regression
 
-Work from the repository root. Set `$Project = '.\extensions\chromium\runet-censorship-bypass'`, read `AGENTS.md` and `$Project\src\extension-chromium-mv3\background\AGENTS.md`, then inspect the complete relevant working-tree and staged diff. Read relevant untracked files because `git diff` cannot show them. Never print credential values or private provider URLs.
+PAC execution is Chromium-specific. Read root and Chromium background
+instructions, inspect the complete relevant diff (including relevant untracked
+files), and never print credentials or private provider URLs.
 
-1. State the affected routing branch and expected result. Trace `background/pac-mods.js`, `pac-cook.js`, the relevant service-worker site-rule code, and changed callers only as needed.
-2. Build a compact matrix for the affected semantics and adjacent invariants. Include exact-host and `*.domain` base/subdomain scope; Auto, Proxy, and Direct; candidate counts and order; `noDirect`; safe defaults; and conflicting-rule precedence only where the change can affect them.
-3. Run from the root:
+1. Identify the affected routing branch and expected observable result. Trace
+   only the needed callers through `pac-mods.js`, `pac-cook.js`, site scope, and
+   the service worker.
+2. Test affected and adjacent semantics: exact host and `*.domain`, Auto/Proxy/
+   Direct, candidate order, `noDirect`, safe defaults, and precedence where
+   relevant.
+3. Run `test:pac` and `test:mv3`. Add executable cases to
+   `test/pac-regression.js` when semantics change; assert evaluated
+   `FindProxyForURL`, not string fragments.
+4. Explicit Proxy requires a usable ordered candidate list with no provider
+   fallback or unintended `DIRECT`. Auto removes its override; Direct remains
+   explicit.
 
-   ```powershell
-   npm --prefix $Project run test:pac
-   npm --prefix $Project run test:mv3
-   ```
-
-4. When semantics changed, add or update executable cases in `$Project\src\extension-chromium-mv3\test\pac-regression.js`. Assert evaluated `FindProxyForURL` results, not only generated string fragments.
-5. Reject an explicit Proxy rule without a usable candidate. Verify explicit Proxy results preserve candidate order and contain neither `DIRECT` nor a provider-PAC fallback. Check that Auto removes the intended override and Direct remains explicit.
-6. Report failures as `scope | mode | candidates | expected | actual`. Separate automated evidence from Chromium QA, especially `mandatory: false`, empty/malformed results, real proxy fallback, DNS/leak behavior, and popup domain-scope derivation.
+If browser-neutral routing changed, also run Firefox/shared tests and describe
+Firefox declarative behavior separately; never imply Firefox executes PAC.
+Report failures as `scope | mode | candidates | expected | actual`. Separate
+deterministic evidence from Chromium browser QA for `mandatory:false`, malformed
+results, real failover, DNS/leaks, and UI scope derivation.

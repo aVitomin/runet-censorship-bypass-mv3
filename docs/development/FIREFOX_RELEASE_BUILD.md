@@ -64,8 +64,8 @@ This command is an explicit release audit tool invocation; it is not a project
 dependency and does not change `package.json` or `package-lock.json`.
 
 Trusted-main CI builds the same deterministic release set for the exact main
-SHA. Pull requests run the build and reproducibility check but upload no
-artifacts. Only a successful trusted-main push or an explicitly dispatched
-workflow on exact `main` uploads the unpacked Firefox package, unsigned XPI,
-checksums and reviewer source archive. AMO submission and signing remain manual
-future release actions.
+SHA. Pull requests build and verify the package once but neither pay the
+release-only reproducibility cost nor upload artifacts. Only a successful
+trusted-main push or an explicitly dispatched workflow on exact `main` builds
+and uploads the unsigned XPI, checksums and reviewer source archive. AMO
+submission and signing remain manual future release actions.
